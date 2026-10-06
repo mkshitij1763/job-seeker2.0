@@ -23,9 +23,10 @@ def test_candidate_slugs():
 
 @respx.mock
 def test_finds_lever_board_by_title():
-    respx.get(LV.format("tracxn")).respond(json=[{"text": "Senior Associate Product Manager"}])
+    respx.get(LV.format("tracxn")).respond(json=[{"text": "Senior Associate Product Manager - Data Platform"}])
     respx.route().respond(404)
-    hit = find_board(httpx.Client(), "Tracxn", {"tracxn senior associate product manager"}, **NO_SLEEP)
+    hit = find_board(httpx.Client(), "Tracxn", {"tracxn senior associate product manager data platform"},
+                     **NO_SLEEP)
     assert hit == ("lever", "tracxn")
 
 
@@ -53,10 +54,10 @@ def test_ashby_board_found():
 
 @respx.mock
 def test_discover_records_active_and_none_and_respects_skip_and_limit():
-    respx.get(LV.format("tracxn")).respond(json=[{"text": "APM"}])
+    respx.get(LV.format("tracxn")).respond(json=[{"text": "APM, Payments"}])
     respx.route().respond(404)
     conn = connect(":memory:")
-    seen = {"tracxn": ("Tracxn", {"associate product manager"}), "acme": ("Acme", {"pm"}),
+    seen = {"tracxn": ("Tracxn", {"associate product manager payments"}), "acme": ("Acme", {"pm"}),
             "cred": ("CRED", {"pm"}), "later": ("Later", {"pm"})}
     found = discover(conn, httpx.Client(), seen, skip={"cred"}, now=NOW, limit=2, **NO_SLEEP)
     assert found == 1
@@ -80,3 +81,26 @@ def test_recently_checked_company_is_not_probed_again():
     record_company(conn, "acme", "Acme", "none", now=NOW - timedelta(days=5))
     discover(conn, httpx.Client(), {"acme": ("Acme", {"pm"})}, set(), NOW, **NO_SLEEP)
     assert route.call_count == 0
+
+
+@respx.mock
+def test_first_word_slug_needs_board_name():
+    respx.get(GH.format("zeta")).respond(json={"jobs": [{"title": "Product Manager Payments"}]})
+    respx.get("https://boards-api.greenhouse.io/v1/boards/zeta").respond(json={"name": "Zeta Global"})
+    respx.route().respond(404)
+    assert find_board(httpx.Client(), "Zeta Suite", {"product manager payments"}, **NO_SLEEP) is None
+
+
+@respx.mock
+def test_single_generic_title_match_is_not_enough():
+    respx.get(LV.format("acme")).respond(json=[{"text": "Product Manager II"}, {"text": "Line Cook"}])
+    respx.route().respond(404)
+    assert find_board(httpx.Client(), "Acme", {"senior product manager ii"}, **NO_SLEEP) is None
+
+
+@respx.mock
+def test_two_generic_title_matches_are_enough():
+    respx.get(LV.format("acme")).respond(json=[{"text": "Product Manager"}, {"text": "Product Analyst"}])
+    respx.route().respond(404)
+    assert find_board(httpx.Client(), "Acme", {"product manager", "senior product analyst"}, **NO_SLEEP) \
+        == ("lever", "acme")

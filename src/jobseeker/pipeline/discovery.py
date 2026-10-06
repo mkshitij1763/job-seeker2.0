@@ -18,6 +18,11 @@ BOARD_URLS = {
     "ashby": "https://api.ashbyhq.com/posting-api/job-board/{}",
 }
 GREENHOUSE_BOARD = "https://boards-api.greenhouse.io/v1/boards/{}"
+# Words that appear in almost any company's PM/analyst openings: a title made only of these is weak evidence.
+GENERIC_WORDS = frozenset(
+    "product products analyst analytics associate manager management senior sr junior jr lead principal staff "
+    "head i ii iii iv 1 2 3 founder founders s office chief of growth strategy business data pm apm and the a"
+    .split())
 
 
 def candidate_slugs(name: str) -> list[str]:
@@ -46,25 +51,36 @@ def _board_titles(ats: str, data) -> list[str]:
     return [j.get("title", "") for j in (data or {}).get("jobs", [])]
 
 
-def _titles_match(board_titles: list[str], seen_titles: set[str]) -> bool:
+def _common_titles(board_titles: list[str], seen_titles: set[str]) -> set[str]:
+    """The shared part of each board/job-site title pair that refers to the same opening."""
+    common: set[str] = set()
     for title in board_titles:
         board = normalize_title(title)
         for seen in seen_titles:
             short, long_ = sorted((board, seen), key=len)
             if short and (short == long_ or (len(short.split()) >= 2 and short in long_)):
-                return True
-    return False
+                common.add(short)
+    return common
+
+
+def _convincing(common: set[str], generic: frozenset[str]) -> bool:
+    # Two different matching openings, or one with a specific word ("payments", "data platform").
+    return len(common) >= 2 or any(set(c.split()) - generic for c in common)
 
 
 def find_board(client: httpx.Client, name: str, seen_titles: set[str],
-               sleep: Callable[[float], None] = time.sleep) -> tuple[str, str] | None:
+               sleep: Callable[[float], None] = time.sleep,
+               generic: frozenset[str] = GENERIC_WORDS) -> tuple[str, str] | None:
     norm = normalize_company(name)
-    for slug in candidate_slugs(name):
+    slugs = candidate_slugs(name)
+    full_name_slugs = set(slugs[:2])  # the bare first word ("zeta" for "Zeta Suite") needs the board's name
+    for slug in slugs:
         for ats, url in BOARD_URLS.items():
             data = _get(client, url.format(slug), sleep, {"mode": "json"} if ats == "lever" else None)
             if data is None:
                 continue
-            if _titles_match(_board_titles(ats, data), seen_titles):
+            if slug in full_name_slugs and _convincing(_common_titles(_board_titles(ats, data), seen_titles),
+                                                       generic):
                 return ats, slug
             if ats == "greenhouse":
                 meta = _get(client, GREENHOUSE_BOARD.format(slug), sleep)
@@ -75,7 +91,7 @@ def find_board(client: httpx.Client, name: str, seen_titles: set[str],
 
 def discover(conn: sqlite3.Connection, client: httpx.Client, seen: dict[str, tuple[str, set[str]]],
              skip: set[str], now: datetime, limit: int = MAX_PER_RUN,
-             sleep: Callable[[float], None] = time.sleep) -> int:
+             sleep: Callable[[float], None] = time.sleep, generic: frozenset[str] = GENERIC_WORDS) -> int:
     found = checked = 0
     for norm, (display, titles) in seen.items():
         if checked >= limit:
@@ -84,7 +100,7 @@ def discover(conn: sqlite3.Connection, client: httpx.Client, seen: dict[str, tup
             continue
         checked += 1
         try:
-            hit = find_board(client, display, titles, sleep)
+            hit = find_board(client, display, titles, sleep, generic)
         except (httpx.HTTPError, ValueError):
             continue  # transient failure: leave unrecorded so the next run retries
         if hit:

@@ -141,3 +141,15 @@ def test_expire_unscored_and_missing_prescore():
     assert [r["id"] for r in jobs_missing_prescore(conn)] == [fresh]
     set_prescore(conn, fresh, 50)
     assert jobs_missing_prescore(conn) == []
+
+
+def test_same_source_refresh_with_empty_jd_keeps_fetched_description():
+    from jobseeker.db.jobs import set_jd_text
+
+    conn = _conn()
+    li = make_job(source="linkedin", source_job_id="li-1", jd_text="")
+    job_id, _ = upsert_job(conn, li)
+    set_jd_text(conn, job_id, "fetched full description")
+    upsert_job(conn, li)
+    row = get_job(conn, job_id)
+    assert row["jd_text"] == "fetched full description" and row["jd_hash"] == jd_hash("fetched full description")

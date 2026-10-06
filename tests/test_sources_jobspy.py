@@ -101,3 +101,21 @@ def test_naukri_experience_salary_remote_and_date():
 
 def test_fetch_description_only_for_linkedin():
     assert fetch_description("naukri", "nk-1") == ""
+
+
+def test_empty_searches_are_reported():
+    row = {"id": "li-1", "title": "PM", "company": "X", "location": "Pune, India", "job_url": "https://l/1"}
+    seq = iter([[row], [], []])
+    src = JobSpySource("linkedin", SearchConfig(queries=["PM", "APM", "PA"]),
+                       scrape=fake_scrape(lambda kw: next(seq)), sleep=lambda s: None)
+    assert len(src.fetch(None)) == 1
+    assert src.warnings == ["2 of 3 searches returned no results (the site may be rate-limiting)"]
+
+
+def test_unknown_city_is_not_relabelled_as_searched_city():
+    job = to_raw_job("naukri", {"id": "nk-1", "title": "PA", "company": "C", "location": "Ahmedabad",
+                                "job_url": "https://n/1"}, "Bengaluru")
+    assert job.location == "Ahmedabad"
+    empty = to_raw_job("naukri", {"id": "nk-2", "title": "PA", "company": "C", "location": "",
+                                  "job_url": "https://n/2"}, "Pune")
+    assert empty.location == "Pune"

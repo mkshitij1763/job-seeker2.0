@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -9,11 +10,12 @@ import httpx
 
 from jobseeker.config import SearchConfig
 from jobseeker.models import RawJob
-from jobseeker.pipeline.normalize import canonical_city
 from jobseeker.sources.base import parse_iso
 
 Scrape = Callable[..., list[dict[str, Any]]]
 _PAUSE = {"linkedin": 3.0, "naukri": 1.0, "indeed": 1.0}  # seconds between searches, to stay polite
+DESCRIPTION_PAUSE = 2.0  # seconds before each LinkedIn description fetch
+_CODES_ONLY = re.compile(r"^[A-Za-z]{2}(\s*,\s*[A-Za-z]{2})?$")  # "KA, IN", "IN": no city
 
 
 def jobspy_scrape(**kwargs) -> list[dict[str, Any]]:
@@ -27,6 +29,7 @@ def fetch_description(source: str, source_job_id: str) -> str:
     """Full description of one job-site posting. Only LinkedIn search results lack one."""
     if source != "linkedin":
         return ""
+    time.sleep(DESCRIPTION_PAUSE)
     from jobspy.linkedin import LinkedIn
     from jobspy.model import DescriptionFormat, ScraperInput, Site
 
@@ -53,7 +56,7 @@ def to_raw_job(site: str, row: dict, search_location: str) -> RawJob | None:
     if not (job_id and title and company and url):
         return None
     location = _text(row.get("location"))
-    if canonical_city(location) is None and search_location != "India":
+    if search_location != "India" and (not location or _CODES_ONLY.match(location)):
         # Indeed India often reports only the state ("KA, IN"); the searched city is the better signal.
         location = f"{search_location}, {location}" if location else search_location
     description = _text(row.get("description"))
@@ -87,6 +90,7 @@ class JobSpySource:
         plan = self.searches()
         jobs: list[RawJob] = []
         seen: set[str] = set()
+        empty = 0
         for i, (query, location) in enumerate(plan):
             if i:
                 self.sleep(_PAUSE.get(self.site, 1.0))
@@ -100,9 +104,13 @@ class JobSpySource:
                     raise
                 self.warnings.append(f"stopped after {i} of {len(plan)} searches: {type(e).__name__}: {e}")
                 break
+            empty += not rows
             for row in rows:
                 job = to_raw_job(self.site, row, location)
                 if job and job.source_job_id not in seen:
                     seen.add(job.source_job_id)
                     jobs.append(job)
+        if empty and empty * 2 >= len(plan):
+            # Blocked scrapers return empty results instead of raising, so many empty searches is the signal.
+            self.warnings.append(f"{empty} of {len(plan)} searches returned no results (the site may be rate-limiting)")
         return jobs

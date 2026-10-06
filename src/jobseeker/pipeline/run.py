@@ -15,12 +15,12 @@ from jobseeker.db.applications import (
 from jobseeker.db.companies import bump_jobs_seen, mark_inactive
 from jobseeker.db.jobs import (
     expire_unscored, get_job, job_from_row, jobs_missing_prescore, jobs_needing_score, save_score, set_filter_reason,
-    set_jd_text, set_prescore, upsert_job,
+    record_jd_attempt, set_jd_text, set_prescore, upsert_job,
 )
 from jobseeker.db.runs import finish_run, start_run
 from jobseeker.llm import LLM, LLMError, LLMQuotaExceeded
 from jobseeker.outreach.drafter import draft_outreach
-from jobseeker.pipeline.discovery import discover
+from jobseeker.pipeline.discovery import GENERIC_WORDS, discover
 from jobseeker.pipeline.normalize import normalize, normalize_company, normalize_title
 from jobseeker.pipeline.prefilter import prefilter
 from jobseeker.pipeline.prescore import prescore
@@ -28,6 +28,8 @@ from jobseeker.profile.facts import Facts
 from jobseeker.scoring.scorer import score_job
 
 Describe = Callable[[str, str], str]
+MAX_JD_ATTEMPTS = 2  # a LinkedIn job whose description failed twice waits to expire
+MAX_CONSECUTIVE_FAILURES = 2  # stop fetching descriptions for the day after this many in a row
 
 
 @dataclass
@@ -113,7 +115,9 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
                 stats.duplicates += 1
             _rank(conn, stats, job_id, facts, prefs, cutoff=is_new)
     if client is not None and seen:
-        stats.discovered = discover(conn, client, seen, known | blocked, now)
+        query_words = {w for q in prefs.search.queries for w in normalize_title(q).split()}
+        stats.discovered = discover(conn, client, seen, known | blocked, now,
+                                    generic=GENERIC_WORDS | query_words)
 
 
 def _select(conn, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferences, now: datetime,
@@ -121,24 +125,35 @@ def _select(conn, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferen
     expire_unscored(conn, now, prefs.max_age_days)
     for row in jobs_missing_prescore(conn):  # jobs stored before pre-scores existed
         _rank(conn, stats, row["id"], facts, prefs, cutoff=True)
-    budget = prefs.budgets.score_per_run
+    candidates = jobs_needing_score(conn, rubric.version, -1, force=force)
+    stats.candidates = len(candidates)
+    _fill_linkedin_descriptions(conn, stats, candidates, facts, prefs, now, describe)
+    # Score the best-ranked jobs that have a description; jobs still waiting for one never block the rest.
+    return jobs_needing_score(conn, rubric.version, prefs.budgets.score_per_run, force=force, with_jd=True)
+
+
+def _fill_linkedin_descriptions(conn, stats: RunStats, candidates: list[dict], facts: Facts, prefs: Preferences,
+                                now: datetime, describe: Describe) -> None:
     cap = prefs.search.linkedin_descriptions_per_run
-    stats.candidates = len(jobs_needing_score(conn, rubric.version, -1, force=force))
     blocked = blocked_companies(conn)
-    fetched, failures, last_error = 0, 0, ""
-    for row in jobs_needing_score(conn, rubric.version, budget + cap, force=force):
-        if row["source"] != "linkedin" or row["jd_text"].strip():
+    attempts = failures = consecutive = 0
+    last_error = ""
+    for row in candidates:
+        if attempts >= cap or consecutive >= MAX_CONSECUTIVE_FAILURES:
+            break  # budget spent, or LinkedIn is probably blocking us today
+        if row["source"] != "linkedin" or row["jd_text"].strip() or row["jd_attempts"] >= MAX_JD_ATTEMPTS:
             continue
-        if fetched >= cap:
-            break
-        fetched += 1
+        attempts += 1
         try:
             text = describe(row["source"], row["source_job_id"])
+            error = "" if text else "empty description"
         except Exception as e:
-            failures, last_error = failures + 1, f"{type(e).__name__}: {e}"
-            continue
+            text, error = "", f"{type(e).__name__}: {e}"
         if not text:
+            record_jd_attempt(conn, row["id"])
+            failures, consecutive, last_error = failures + 1, consecutive + 1, error
             continue
+        consecutive = 0
         set_jd_text(conn, row["id"], text)
         job = job_from_row(get_job(conn, row["id"]))
         reason = prefilter(job, prefs, now, blocked)  # the description may reveal 8+ years etc.
@@ -149,8 +164,6 @@ def _select(conn, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferen
         _rank(conn, stats, row["id"], facts, prefs, cutoff=False)
     if failures:
         stats.errors.append(f"linkedin descriptions: {failures} failed (last: {last_error})")
-    rows = jobs_needing_score(conn, rubric.version, budget + cap, force=force)
-    return [r for r in rows if r["jd_text"].strip()][:budget]
 
 
 def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, prefs: Preferences, rubric: Rubric,

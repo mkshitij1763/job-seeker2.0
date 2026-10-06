@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 SCHEMA = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
+# Columns added after the MVP; connect() adds them to older databases.
+NEW_JOB_COLUMNS = {"prescore": "INTEGER", "jd_attempts": "INTEGER NOT NULL DEFAULT 0"}
 
 
 def connect(path: Path | str) -> sqlite3.Connection:
@@ -20,8 +22,11 @@ def connect(path: Path | str) -> sqlite3.Connection:
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'discovered_companies'"
     ).fetchone() is None:
         conn.executescript(SCHEMA)  # every statement is IF NOT EXISTS: creates a fresh DB or adds new tables
-    if "prescore" not in {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}:
-        conn.execute("ALTER TABLE jobs ADD COLUMN prescore INTEGER")
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
+    missing = [(name, ddl) for name, ddl in NEW_JOB_COLUMNS.items() if name not in columns]
+    for name, ddl in missing:
+        conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
+    if missing:
         conn.commit()
     return conn
 

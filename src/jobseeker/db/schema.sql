@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   alt_urls TEXT NOT NULL DEFAULT '[]',
   filter_reason TEXT,
   prescore INTEGER,
+  jd_attempts INTEGER NOT NULL DEFAULT 0,
   first_seen_at TEXT NOT NULL,
   UNIQUE (source, source_job_id)
 );

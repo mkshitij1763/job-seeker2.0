@@ -37,3 +37,13 @@ def test_reconnect_does_not_alter_again(tmp_path):
     connect(path).close()
     raw = sqlite3.connect(path)
     assert [r[1] for r in raw.execute("PRAGMA table_info(jobs)")].count("prescore") == 1
+
+
+def test_migration_adds_jd_attempts(tmp_path):
+    path = tmp_path / "db.sqlite"
+    conn = connect(path)
+    conn.execute("ALTER TABLE jobs DROP COLUMN jd_attempts") if "jd_attempts" in _columns(conn, "jobs") else None
+    conn.commit()
+    conn.close()
+    conn = connect(path)
+    assert "jd_attempts" in _columns(conn, "jobs")

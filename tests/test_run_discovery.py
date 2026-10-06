@@ -125,10 +125,11 @@ def test_unscored_jobs_expire(prefs, rubric, facts):
 
 @respx.mock
 def test_discovery_from_job_site_companies(prefs, rubric, facts):
-    respx.get("https://api.lever.co/v0/postings/tracxn").respond(json=[{"text": "Product Analyst"}])
+    respx.get("https://api.lever.co/v0/postings/tracxn").respond(json=[{"text": "Product Analyst, Payments"}])
     respx.route().respond(404)
     conn = connect(":memory:")
-    stats = run(conn, [Src("naukri", [raw()], discovers=True)], prefs, rubric, facts, client=httpx.Client())
+    job = raw(title="Product Analyst - Payments")
+    stats = run(conn, [Src("naukri", [job], discovers=True)], prefs, rubric, facts, client=httpx.Client())
     assert stats.discovered == 1
     assert [n for n, _ in active_companies(conn)] == ["tracxn"]
     assert get_company(conn, "tracxn")["jobs_seen"] == 0  # counted from the run after discovery
@@ -162,3 +163,34 @@ def test_unexpected_exception_still_finishes_run(prefs, rubric, facts):
     stats = run(conn, [Src("broken", [None])], prefs, rubric, facts)
     assert any(e.startswith("run aborted:") for e in stats.errors)
     assert last_run(conn)["finished_at"] is not None
+
+
+def test_jobs_without_description_do_not_block_scoring(prefs, rubric, facts):
+    conn = connect(":memory:")
+    prefs.budgets.score_per_run = 1
+    prefs.search.linkedin_descriptions_per_run = 0
+    li = [raw(source="linkedin", source_job_id=f"li-{i}", title=f"Product Analyst {i}", jd_text="")
+          for i in range(2)]
+    naukri = raw(source_job_id="nk", title="Strategy Manager", jd_text="Plan things.")
+    stats = run(conn, [Src("linkedin", li), Src("naukri", [naukri])], prefs, rubric, facts)
+    assert stats.scored == 1 and scored_titles(conn) == ["Strategy Manager"]
+
+
+def test_empty_description_counts_as_failure_and_stops_after_two(prefs, rubric, facts):
+    conn = connect(":memory:")
+    jobs = [raw(source="linkedin", source_job_id=f"li-{i}", title=f"Product Analyst {i}", jd_text="")
+            for i in range(4)]
+    calls = []
+    stats = run(conn, [Src("linkedin", jobs)], prefs, rubric, facts, describe=lambda s, j: calls.append(j) or "")
+    assert len(calls) == 2
+    assert any("linkedin descriptions: 2 failed" in e for e in stats.errors)
+
+
+def test_job_skipped_after_two_failed_description_attempts(prefs, rubric, facts):
+    conn = connect(":memory:")
+    prefs.search.linkedin_descriptions_per_run = 1
+    job = raw(source="linkedin", source_job_id="li-1", jd_text="")
+    calls = []
+    for _ in range(3):
+        run(conn, [Src("linkedin", [job])], prefs, rubric, facts, describe=lambda s, j: calls.append(j) or "")
+    assert len(calls) == 2

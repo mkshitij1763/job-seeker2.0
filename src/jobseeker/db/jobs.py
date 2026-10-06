@@ -24,6 +24,9 @@ def upsert_job(conn: sqlite3.Connection, job: Job, now: datetime | None = None) 
         # A merged cross-source duplicate keeps the longest JD seen, whichever source refreshes it.
         if json.loads(row["alt_urls"]) and len(row["jd_text"]) > len(jd_text):
             jd_text = row["jd_text"]
+        # Job sites list without descriptions; never wipe one fetched separately.
+        if not jd_text.strip() and row["jd_text"].strip():
+            jd_text = row["jd_text"]
         h = jd_hash(jd_text)
         conn.execute(
             """UPDATE jobs SET title=?, location=?, location_city=?, remote=?, posted_at=?,
@@ -87,6 +90,11 @@ def set_jd_text(conn: sqlite3.Connection, job_id: int, text: str) -> None:
         conn.commit()
 
 
+def record_jd_attempt(conn: sqlite3.Connection, job_id: int) -> None:
+    conn.execute("UPDATE jobs SET jd_attempts = jd_attempts + 1 WHERE id = ?", (job_id,))
+    conn.commit()
+
+
 def expire_unscored(conn: sqlite3.Connection, now: datetime, max_age_days: int) -> int:
     cutoff = iso(now - timedelta(days=max_age_days))
     cur = conn.execute(
@@ -116,15 +124,16 @@ def job_from_row(row: dict) -> Job:
 
 
 def jobs_needing_score(conn: sqlite3.Connection, rubric_version: str, limit: int,
-                       force: bool = False) -> list[dict]:
-    order = "ORDER BY COALESCE(j.prescore, -1) DESC, j.first_seen_at DESC, j.id DESC LIMIT ?"
+                       force: bool = False, with_jd: bool = False) -> list[dict]:
+    tail = ("AND TRIM(j.jd_text) != '' " if with_jd else "") + \
+        "ORDER BY COALESCE(j.prescore, -1) DESC, j.first_seen_at DESC, j.id DESC LIMIT ?"
     if force:
-        sql = f"SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL {order}"
+        sql = f"SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL {tail}"
         params: tuple = (limit,)
     else:
         sql = f"""SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL AND NOT EXISTS (
                     SELECT 1 FROM scores s WHERE s.job_id = j.id
-                    AND s.rubric_version = ? AND s.jd_hash = j.jd_hash) {order}"""
+                    AND s.rubric_version = ? AND s.jd_hash = j.jd_hash) {tail}"""
         params = (rubric_version, limit)
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
