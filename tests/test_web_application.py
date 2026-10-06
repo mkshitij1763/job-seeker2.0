@@ -159,3 +159,17 @@ def test_regenerate_refused_after_sent(ctx):
     r = client.post(f"/applications/{a}/draft")
     assert "err=" in r.headers["location"]
     assert get_drafts(db(settings), a)["email"]["body"] == "Email body citing 67%."
+
+
+def test_approve_adds_greeting_and_signature(ctx):
+    import base64
+    import email as email_lib
+
+    client, settings, (a, _), gmail = ctx
+    client.post(f"/applications/{a}/contact", data={"name": "Asha Rao", "role": "PM", "linkedin_url": "",
+                                                    "email": "a@x.com", "email_status": "verified"})
+    client.post(f"/applications/{a}/approve")
+    msg = email_lib.message_from_bytes(base64.urlsafe_b64decode(gmail.raws[0]))
+    body = next(p for p in msg.walk() if p.get_content_type() == "text/plain").get_payload(decode=True).decode()
+    assert body.startswith("Hi Asha,\n\nEmail body citing 67%.")
+    assert "Kshitij Meshram" in body

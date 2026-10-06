@@ -14,7 +14,7 @@ from jobseeker.db.applications import (
 from jobseeker.gmail.client import GmailUnavailable, create_draft
 from jobseeker.gmail.mime import build_raw_message
 from jobseeker.llm import LLMError
-from jobseeker.outreach.drafter import signature
+from jobseeker.outreach.drafter import greeting, signature
 from jobseeker.pipeline.run import draft_application
 from jobseeker.profile.facts import load_facts
 from jobseeker.status import InvalidTransition
@@ -130,7 +130,7 @@ def approve(request: Request, app_id: int, confirm_unverified: bool = Form(False
         return _back(app_id, err=f"Can't approve from status '{get_status(conn, app_id)}'")
     prefs = state.prefs
     raw = build_raw_message(
-        to=contact["email"], subject=email["subject"], body=email["body"] + signature(prefs),
+        to=contact["email"], subject=email["subject"], body=greeting(contact["name"], email["body"]) + signature(prefs),
         attachment=state.settings.resume_path if state.settings.resume_path.exists() else None,
         attachment_name=f"{prefs.name.replace(' ', '_')}_Resume.pdf")
     try:

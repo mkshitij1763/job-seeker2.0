@@ -1,4 +1,4 @@
-from jobseeker.outreach.drafter import DraftBundle, draft_outreach, linkedin_search_url, signature
+from jobseeker.outreach.drafter import DraftBundle, draft_outreach, greeting, linkedin_search_url, signature
 from tests.factories import make_job
 from tests.fakes import FakeLLM
 
@@ -35,3 +35,13 @@ def test_gives_up_with_warnings(prefs, facts):
 def test_signature_and_search_url(prefs):
     assert signature(prefs).endswith("https://www.linkedin.com/in/kshitijmeshram1763/")
     assert "keywords=Groww+Founder%27s+Office" in linkedin_search_url("Groww", "Founder's Office")
+
+
+def test_greeting_uses_first_name():
+    assert greeting("Asha Rao", "Body") == "Hi Asha,\n\nBody"
+    assert greeting("", "Body") == "Hi,\n\nBody"
+
+
+def test_greeting_skipped_when_body_already_greets():
+    assert greeting("Asha", "Hello Asha, quick note") == "Hello Asha, quick note"
+    assert greeting("Asha", "  hi there") == "  hi there"

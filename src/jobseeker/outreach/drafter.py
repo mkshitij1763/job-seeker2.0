@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from urllib.parse import quote_plus
 
@@ -37,6 +38,17 @@ def signature(prefs: Preferences) -> str:
     return f"\n\n{prefs.name}\n{prefs.linkedin}"
 
 
+_GREETED = re.compile(r"\s*(hi|hello|hey|dear)\b", re.I)
+
+
+def greeting(contact_name: str, body: str) -> str:
+    """Prefix "Hi <first name>," unless the body already opens with a greeting."""
+    if _GREETED.match(body):
+        return body
+    first = contact_name.split()[0] if contact_name.strip() else ""
+    return f"Hi {first},\n\n{body}" if first else f"Hi,\n\n{body}"
+
+
 def _system(facts: Facts, prefs: Preferences) -> str:
     return f"""You write cold outreach for {prefs.name}, who is applying for a specific job.
 
@@ -52,7 +64,7 @@ Write:
 3. email_body: at most {EMAIL_MAX_WORDS} words. Open with one specific hook from the job posting or company.
    Then 2-3 achievements from the facts most relevant to this job, with their exact numbers.
    End with one clear ask (a 15-minute call or a referral) and mention the attached resume.
-   No greeting fluff, no signature (it is added automatically).
+   No greeting line and no signature (both are added automatically).
 4. li_note: LinkedIn connection note, at most {LI_NOTE_MAX_CHARS} characters, one concrete reason to connect.
 5. li_dm: follow-up message after connecting, at most {LI_DM_MAX_CHARS} characters.
 
