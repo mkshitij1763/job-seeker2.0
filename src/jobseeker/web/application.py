@@ -22,6 +22,7 @@ from jobseeker.web.deps import get_conn, render
 
 router = APIRouter(prefix="/applications")
 KINDS = {"email", "li_note", "li_dm"}
+REGENERATABLE = {"new", "shortlisted", "drafted", "approved"}
 
 
 def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err: str | None = None):
@@ -86,13 +87,16 @@ def edit_draft(app_id: int, kind: str, subject: str = Form(""), body: str = Form
     save_draft(conn, app_id, kind, subject, body, edited=True)
     if kind == "email" and get_status(conn, app_id) == "approved":
         transition(conn, app_id, "drafted", {"reason": "edited after approval"})
-        return _back(app_id, msg="Saved. Approve again to update the Gmail draft")
+        return _back(app_id, msg="Saved. Approving again creates a new Gmail draft; delete the older one in Gmail")
     return _back(app_id, msg="Draft saved")
 
 
 @router.post("/{app_id}/draft")
 def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
     state = request.app.state
+    status = get_status(conn, app_id)
+    if status not in REGENERATABLE:
+        return _back(app_id, err=f"Can't regenerate drafts once {status.replace('_', ' ')}; edit them instead")
     try:
         facts = load_facts(state.settings.facts_path)
         draft_application(conn, app_id, state.llm_factory(), facts, state.prefs)
@@ -100,6 +104,10 @@ def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
         return _back(app_id, err="No resume facts yet. Run `jobseeker init`")
     except LLMError as e:
         return _back(app_id, err=f"Drafting failed: {e}")
+    if status == "approved":
+        transition(conn, app_id, "drafted", {"reason": "regenerated after approval"})
+        return _back(app_id, msg="Drafts regenerated. Approving again creates a new Gmail draft; "
+                                 "delete the older one in Gmail")
     return _back(app_id, msg="Drafts generated")
 
 
@@ -129,8 +137,12 @@ def approve(request: Request, app_id: int, confirm_unverified: bool = Form(False
         draft_id = create_draft(state.gmail_factory(), raw)
     except GmailUnavailable as e:
         return _back(app_id, err=f"Reconnect Gmail: {e}")
+    previous = email["gmail_draft_id"]
     set_gmail_draft_id(conn, app_id, draft_id)
     transition(conn, app_id, "approved", {"gmail_draft_id": draft_id})
+    if previous:
+        return _back(app_id, msg="New Gmail draft created. Delete the older draft for this contact in Gmail, "
+                                 "then review and press Send")
     return _back(app_id, msg="Gmail draft created. Review and press Send in Gmail")
 
 

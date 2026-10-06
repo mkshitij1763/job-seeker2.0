@@ -47,3 +47,12 @@ def test_experience_and_age_and_block(prefs):
     assert prefilter(make_job(jd_text="10+ years of experience"), prefs, NOW, set()) == "experience: 10+ years"
     assert prefilter(make_job(posted_at=NOW - timedelta(days=8)), prefs, NOW, set()) == "stale: posted 8 days ago"
     assert prefilter(make_job(company="CRED Pvt Ltd"), prefs, NOW, {"cred"}) == "blocked company"
+
+
+@pytest.mark.parametrize("text", [
+    "Founded 10 years ago, we have deep experience in fintech.",
+    "We have served customers for over 12 years. Experience with SQL is a must.",
+    "10 years ago we gained experience in lending.",
+])
+def test_min_years_ignores_non_requirement_phrases(text):
+    assert min_years_required(text) is None

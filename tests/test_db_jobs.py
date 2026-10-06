@@ -81,3 +81,20 @@ def test_concurrent_reader_during_write(tmp_path):
     t.join(10)
     writer.commit()
     assert errors == []
+
+
+def test_same_source_refresh_keeps_longer_cross_source_jd():
+    conn = _conn()
+    gh = make_job(source="greenhouse", source_job_id="gh-1", jd_text="short")
+    job_id, _ = upsert_job(conn, gh)
+    upsert_job(conn, make_job(source="lever", source_job_id="lv-1", apply_url="https://lv/a",
+                              jd_text="a much longer job description text"))
+    upsert_job(conn, gh)
+    assert get_job(conn, job_id)["jd_text"] == "a much longer job description text"
+
+
+def test_same_source_refresh_without_alternates_takes_new_jd():
+    conn = _conn()
+    job_id, _ = upsert_job(conn, make_job(jd_text="a long original description"))
+    upsert_job(conn, make_job(jd_text="edited"))
+    assert get_job(conn, job_id)["jd_text"] == "edited"

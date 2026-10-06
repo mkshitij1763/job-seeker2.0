@@ -9,14 +9,16 @@ from jobseeker.pipeline.normalize import normalize_company
 
 _YEARS = re.compile(
     r"(\d{1,2})\s*(?:\+|plus)?\s*(?:(?:-|–|—|to)\s*\d{1,2}\s*\+?)?\s*(?:years?|yrs?)\b", re.I)
-_EXP = re.compile(r"\bexp(?:erience)?\b", re.I)
+# A number counts only when experience follows it ("3+ years of product experience") or a requirement
+# label precedes it ("Experience: 5 years", "at least 4 years"); "10 years ago" never counts.
+_EXP_AFTER = re.compile(r"(?!\s+(?:ago|old)\b)\s+(?:of\s+)?(?:[\w/&-]+\s+){0,3}?exp(?:erience)?\b", re.I)
+_LABEL_BEFORE = re.compile(r"(?:\bexp(?:erience)?\s*[:\-–]?|\bminimum(?:\s+of)?|\bat\s+least)\s*$", re.I)
 
 
 def min_years_required(text: str) -> int | None:
     found = []
     for m in _YEARS.finditer(text):
-        window = text[max(0, m.start() - 40): m.end() + 40]
-        if _EXP.search(window):
+        if _EXP_AFTER.match(text, m.end()) or _LABEL_BEFORE.search(text[max(0, m.start() - 30): m.start()]):
             found.append(int(m.group(1)))
     return min(found) if found else None
 

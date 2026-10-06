@@ -16,15 +16,20 @@ def upsert_job(conn: sqlite3.Connection, job: Job, now: datetime | None = None) 
     seen_at = iso(now) if now else utcnow()
     h = jd_hash(job.jd_text)
     row = conn.execute(
-        "SELECT id FROM jobs WHERE source = ? AND source_job_id = ?",
+        "SELECT id, jd_text, alt_urls FROM jobs WHERE source = ? AND source_job_id = ?",
         (job.source, job.source_job_id),
     ).fetchone()
     if row:
+        jd_text = job.jd_text
+        # A merged cross-source duplicate keeps the longest JD seen, whichever source refreshes it.
+        if json.loads(row["alt_urls"]) and len(row["jd_text"]) > len(jd_text):
+            jd_text = row["jd_text"]
+        h = jd_hash(jd_text)
         conn.execute(
             """UPDATE jobs SET title=?, location=?, location_city=?, remote=?, posted_at=?,
                salary_text=?, jd_text=?, jd_hash=?, apply_url=? WHERE id=?""",
             (job.title, job.location, job.location_city, int(job.is_remote), _dt(job.posted_at),
-             job.salary_text, job.jd_text, h, job.apply_url, row["id"]),
+             job.salary_text, jd_text, h, job.apply_url, row["id"]),
         )
         conn.commit()
         return row["id"], False

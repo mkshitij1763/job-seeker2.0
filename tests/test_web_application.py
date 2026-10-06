@@ -128,3 +128,34 @@ def test_status_snooze_notes_followup_not_interested(ctx):
     assert "err=" in r.headers["location"]
     client.post(f"/applications/{a}/not-interested", data={"block_company": "true"})
     assert get_status(db(settings), a) == "not_interested"
+
+
+def _approve(client, a):
+    client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",
+                                                    "email": "a@x.com", "email_status": "verified"})
+    return client.post(f"/applications/{a}/approve")
+
+
+def test_reapprove_warns_about_older_gmail_draft(ctx):
+    client, settings, (a, _), gmail = ctx
+    _approve(client, a)
+    r = client.post(f"/applications/{a}/drafts/email", data={"subject": "S2", "body": "Edited"})
+    assert "update" not in r.headers["location"].lower()
+    r = client.post(f"/applications/{a}/approve")
+    assert len(gmail.raws) == 2 and "delete" in r.headers["location"].lower()
+
+
+def test_regenerate_after_approve_reopens_draft(ctx):
+    client, settings, (a, _), _ = ctx
+    _approve(client, a)
+    client.post(f"/applications/{a}/draft")
+    assert get_status(db(settings), a) == "drafted"
+
+
+def test_regenerate_refused_after_sent(ctx):
+    client, settings, (a, _), _ = ctx
+    _approve(client, a)
+    client.post(f"/applications/{a}/status", data={"status": "sent"})
+    r = client.post(f"/applications/{a}/draft")
+    assert "err=" in r.headers["location"]
+    assert get_drafts(db(settings), a)["email"]["body"] == "Email body citing 67%."
