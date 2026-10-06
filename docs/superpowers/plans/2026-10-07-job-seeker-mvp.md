@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A local tool that runs daily: it pulls fresh jobs from Greenhouse, Lever, Ashby and JSearch, removes duplicates, filters and scores them against Kshitij's resume with Claude, drafts outreach for jobs scoring 70 or more, and serves a dashboard where one click turns an approved application into a Gmail draft with the resume attached.
+**Goal:** A local tool that runs daily: it pulls fresh jobs from Greenhouse, Lever and Ashby company boards, removes duplicates, filters and scores them against Kshitij's resume with a free Groq-hosted model, drafts outreach for jobs scoring 70 or more, and serves a dashboard where one click turns an approved application into a Gmail draft with the resume attached.
 
 **Architecture:** One Python package (`src/jobseeker`) of small modules with a single job each: config, sources, pipeline, LLM, profile, scoring, outreach, gmail, db, web, cli. They communicate through Pydantic models and a SQLite database. A daily `jobseeker run` (launchd) fills the database; `jobseeker serve` (FastAPI + Jinja2 + HTMX, bound to 127.0.0.1) is the review UI. All LLM calls go through one wrapper (`llm.py`) that tests replace with a fake.
 
-**Tech Stack:** Python 3.13, uv, FastAPI, Jinja2, HTMX 2, SQLite (stdlib `sqlite3`), httpx, Pydantic v2 + pydantic-settings, PyYAML, PyMuPDF, Anthropic Python SDK, google-api-python-client + google-auth-oauthlib, Typer, pytest + respx + pytest-socket.
+**Tech Stack:** Python 3.13, uv, FastAPI, Jinja2, HTMX 2, SQLite (stdlib `sqlite3`), httpx, Pydantic v2 + pydantic-settings, PyYAML, PyMuPDF, Groq Python SDK (free tier), google-api-python-client + google-auth-oauthlib, Typer, pytest + respx + pytest-socket.
 
 **Spec:** `docs/superpowers/specs/2026-10-07-job-seeker-mvp-design.md`
 
@@ -17,14 +17,16 @@
 - The dashboard binds to **127.0.0.1** only.
 - Thresholds: **apply ≥ 70**, **review 50–69**, **hide < 50**.
 - Draft limits: email body **≤ 150 words** (signature excluded), LinkedIn note **≤ 300 characters**, LinkedIn DM **≤ 600 characters**.
-- Models (configurable in `preferences.yaml`): scoring and fact extraction use `claude-sonnet-5-5`, drafting uses `claude-opus-5-5`. Every call sends server-side refusal fallback (`betas=["server-side-fallback-2026-07-01"]`, `fallbacks: "default"`) and uses structured output (`output_config.format` json_schema). No `temperature` or `budget_tokens` (both are rejected by these models).
-- Pricing as of 2026-09: Sonnet 5.5 $2 / $10 and Opus 5.5 $4 / $20 per million input/output tokens.
-- Per-run budgets (defaults): score ≤ **80** jobs, draft ≤ **15** jobs, JSearch ≤ **8** requests.
-- Prefilter drops a job when its JD requires a minimum of **8 or more years**, or when it was posted more than **7 days** ago.
+- **LLM: Groq free tier only, no paid API.** Models (configurable in `preferences.yaml`): scoring uses `openai/gpt-oss-20b`; drafting and fact extraction use `openai/gpt-oss-120b`. Every call uses strict structured output (`response_format` json_schema, `strict: true`) and `reasoning_effort`.
+- Groq free-tier limits per model: 30 requests/min, 1K requests/day, **8K tokens/min**, **200K tokens/day**. Rate-limit (429) responses are waited out using `retry-after` (capped at 65 s). A wait longer than 120 s means the daily quota is used up: raise `LLMQuotaExceeded` and stop LLM work for that run.
+- Per-run budgets (defaults): score ≤ **35** jobs, draft ≤ **10** jobs. The JD sent to the model is capped at **8,000 characters**.
+- No JSearch or RapidAPI in the MVP. JobSpy and Apify sources are phase 2.
+- Prefilter drops a job when its title doesn't contain any `title_allow` keyword, when its JD requires a minimum of **8 or more years**, or when it was posted more than **7 days** ago.
 - Follow-up badge: **5 days** after `sent` with no newer event; at most **2** follow-ups.
 - Secrets (`.env`, `secrets/`), `data/` and `profile/resume.pdf` / `profile/facts.json` are git-ignored (already in `.gitignore`).
 - Timestamps are stored as ISO-8601 UTC strings (`datetime.now(UTC).isoformat(timespec="seconds")`).
 - Tests never touch the network (`pytest-socket`, `--disable-socket`). HTTP is mocked with `respx` and the LLM with `tests/fakes.py::FakeLLM`.
+- `profile/resume.pdf` is `winter_arc.pdf` as-is for now (already moved into place). The header-link fixes come later.
 - **Spec refinements adopted by this plan:**
   - The MVP has one application per job (`UNIQUE(job_id)`), which satisfies the spec's (job, contact) uniqueness.
   - Extra columns: `jobs.jd_hash`, `scores.role_family` (for the inbox role filter), and `applications.snoozed_from`, `applications.suggested_contact_role`, `applications.suggested_contact_reason`, `applications.linkedin_search_url`, `applications.draft_warnings`.
@@ -32,10 +34,11 @@
 ## Review Focus
 
 1. **Greenhouse JD content is double-escaped HTML** (`&lt;p&gt;…&amp;amp;…`). Expected: readable plain text with no tags or entities, both in the dashboard and in what Claude reads. Test: Task 4 `test_html_to_text_double_escaped`, Task 5 `test_greenhouse_parses_escaped_content`.
-2. **The same role appears on Lever and JSearch** (different IDs, "Sr." vs "Senior", "Bangalore" vs "Bengaluru"). Expected: one job, one application, the longer JD kept, the other URL stored as an alternate. Test: Task 2 `test_upsert_cross_source_duplicate`, Task 12 `test_run_dedups_across_sources`.
+2. **The same role appears on two boards** (for example a company's Lever board and a re-post elsewhere, with different IDs, "Sr." vs "Senior", "Bangalore" vs "Bengaluru"). Expected: one job, one application, the longer JD kept, the other URL stored as an alternate. Test: Task 2 `test_upsert_cross_source_duplicate`, Task 12 `test_run_dedups_across_sources`.
 3. **Experience phrases that aren't requirements**, such as "2–8 years", "founded 10 years ago" or "8+ years of experience". Expected: only an explicit minimum of 8+ years of experience drops the job; ranges use their lower bound. Test: Task 7 `test_min_years_*`.
 4. **The Gmail token expires or is revoked at the moment of Approve.** Expected: a "Reconnect Gmail" message, status unchanged, draft text intact. Test: Task 15 `test_approve_gmail_unavailable_keeps_state`.
-5. **The 07:30 run writes while the dashboard is reading.** Expected: no `database is locked` error (WAL + busy_timeout). Test: Task 2 `test_concurrent_reader_during_write`.
+5. **Groq free-tier limits are hit mid-run** (per-minute 429 with a short `retry-after`, or the daily quota exhausted). Expected: short waits are absorbed. When the quota is gone, the run stops LLM work, records one clear error, keeps everything already scored, and resumes the next day. Test: Task 8 `test_rate_limit_waits_then_succeeds` / `test_quota_exhausted_raises`, Task 12 `test_quota_exhausted_stops_llm_work`.
+6. **The 07:30 run writes while the dashboard is reading.** Expected: no `database is locked` error (WAL + busy_timeout). Test: Task 2 `test_concurrent_reader_during_write`.
 
 ---
 
@@ -43,7 +46,7 @@
 
 ```
 pyproject.toml                         uv project; scripts entry `jobseeker`
-.env.example                           ANTHROPIC_API_KEY, RAPIDAPI_KEY
+.env.example                           GROQ_API_KEY
 profile/preferences.yaml               candidate profile + knobs (committed)
 rubric.yaml                            scoring rubric, versioned (committed)
 companies.yaml                         ATS watchlist (committed)
@@ -51,7 +54,7 @@ src/jobseeker/
   config.py                            Settings (.env), Preferences, Company, Rubric loaders
   models.py                            RawJob, Job, ScoreResult, jd_hash()
   status.py                            status machine: STATUSES, can_transition, allowed_next
-  llm.py                               LLM protocol, AnthropicLLM, strict_schema, LLMError/LLMRefusal
+  llm.py                               LLM protocol, GroqLLM, strict_schema, LLMError/LLMQuotaExceeded
   db/schema.sql                        all tables
   db/core.py                           connect(), utcnow()
   db/jobs.py                           upsert_job, set_filter_reason, job_from_row, scoring queries
@@ -60,7 +63,7 @@ src/jobseeker/
   db/queries.py                        read models for the web: inbox, detail, pipeline, stats
   sources/base.py                      Source protocol, parse_iso, from_epoch_ms
   sources/http.py                      make_client, get_json (retry/backoff)
-  sources/greenhouse.py | lever.py | ashby.py | jsearch.py
+  sources/greenhouse.py | lever.py | ashby.py
   sources/registry.py                  build_sources()
   pipeline/normalize.py                html_to_text, canonical_city, fingerprint, normalize()
   pipeline/prefilter.py                min_years_required, prefilter()
@@ -94,7 +97,7 @@ tests/conftest.py, tests/fakes.py, tests/factories.py, tests/fixtures/*.json, te
 
 **Interfaces:**
 - Produces:
-  - `Settings(jobseeker_home: Path, anthropic_api_key: str, rapidapi_key: str)`, with properties `db_path`, `resume_path`, `facts_path`, `preferences_path`, `companies_path`, `rubric_path`, `secrets_dir`, `logs_dir`
+  - `Settings(jobseeker_home: Path, groq_api_key: str)`, with properties `db_path`, `resume_path`, `facts_path`, `preferences_path`, `companies_path`, `rubric_path`, `secrets_dir`, `logs_dir`
   - `Preferences` (fields below)
   - `Company(name, ats, slug, tier)`
   - `Rubric(version, dimensions: list[Dimension(key, max, guidance)])`
@@ -106,7 +109,7 @@ tests/conftest.py, tests/fakes.py, tests/factories.py, tests/fixtures/*.json, te
 ```bash
 cd "/Users/user/Desktop/untitled folder/job-seeker2.0"
 uv init --package --name jobseeker --python 3.13 .
-uv add anthropic fastapi "uvicorn[standard]" jinja2 python-multipart httpx pydantic pydantic-settings pyyaml pymupdf google-api-python-client google-auth-oauthlib typer
+uv add groq fastapi "uvicorn[standard]" jinja2 python-multipart httpx pydantic pydantic-settings pyyaml pymupdf google-api-python-client google-auth-oauthlib typer
 uv add --dev pytest respx pytest-socket
 rm -f main.py hello.py
 ```
@@ -125,8 +128,7 @@ Ensure `[project.scripts]` contains `jobseeker = "jobseeker.cli:app"` (replace w
 
 `.env.example`:
 ```
-ANTHROPIC_API_KEY=
-RAPIDAPI_KEY=
+GROQ_API_KEY=
 ```
 
 `profile/preferences.yaml`:
@@ -153,20 +155,13 @@ target_base_lpa: 25
 must_haves: []
 deal_breakers: []
 title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president, account executive, recruiter]
+# a title must contain at least one of these (cheap gate before any LLM call)
+title_allow: [product, analyst, analytics, founder, chief of staff, growth, strategy, insights, business intelligence]
 drop_if_min_years_at_least: 8
 max_age_days: 7
-jsearch_queries:
-  - senior product analyst in Bengaluru
-  - product analyst in Gurgaon
-  - associate product manager in Bengaluru
-  - AI product manager in India
-  - founder's office in Bengaluru
-  - product analyst in Pune
-  - product manager in Noida
-  - growth analyst in Bengaluru
 thresholds: {apply: 70, review: 50}
-budgets: {score_per_run: 80, draft_per_run: 15, jsearch_requests_per_run: 8}
-models: {scoring: claude-sonnet-5-5, drafting: claude-opus-5-5, facts: claude-sonnet-5-5}
+budgets: {score_per_run: 35, draft_per_run: 10}
+models: {scoring: openai/gpt-oss-20b, drafting: openai/gpt-oss-120b, facts: openai/gpt-oss-120b}
 ```
 
 `rubric.yaml`:
@@ -245,7 +240,7 @@ def home(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def settings(home: Path) -> Settings:
-    return Settings(jobseeker_home=home, anthropic_api_key="test", rapidapi_key="test")
+    return Settings(jobseeker_home=home, groq_api_key="test")
 
 
 @pytest.fixture
@@ -268,8 +263,8 @@ from jobseeker.config import load_companies, load_rubric
 def test_preferences_load(prefs):
     assert prefs.cities == ["Bengaluru", "Gurgaon", "Noida", "Pune"]
     assert prefs.thresholds.apply == 70
-    assert prefs.models.drafting == "claude-opus-5-5"
-    assert "intern" in prefs.title_deny
+    assert prefs.models.drafting == "openai/gpt-oss-120b"
+    assert "intern" in prefs.title_deny and "product" in prefs.title_allow
 
 
 def test_rubric_sums_to_100(rubric):
@@ -317,8 +312,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     jobseeker_home: Path = Path(".")
-    anthropic_api_key: str = ""
-    rapidapi_key: str = ""
+    groq_api_key: str = ""
 
     @property
     def data_dir(self) -> Path:
@@ -367,15 +361,14 @@ class Thresholds(BaseModel):
 
 
 class Budgets(BaseModel):
-    score_per_run: int = 80
-    draft_per_run: int = 15
-    jsearch_requests_per_run: int = 8
+    score_per_run: int = 35
+    draft_per_run: int = 10
 
 
 class Models(BaseModel):
-    scoring: str = "claude-sonnet-5-5"
-    drafting: str = "claude-opus-5-5"
-    facts: str = "claude-sonnet-5-5"
+    scoring: str = "openai/gpt-oss-20b"
+    drafting: str = "openai/gpt-oss-120b"
+    facts: str = "openai/gpt-oss-120b"
 
 
 class Preferences(BaseModel):
@@ -392,9 +385,9 @@ class Preferences(BaseModel):
     must_haves: list[str] = []
     deal_breakers: list[str] = []
     title_deny: list[str] = []
+    title_allow: list[str] = []
     drop_if_min_years_at_least: int = 8
     max_age_days: int = 7
-    jsearch_queries: list[str] = []
     thresholds: Thresholds = Thresholds()
     budgets: Budgets = Budgets()
     models: Models = Models()
@@ -723,7 +716,7 @@ def test_upsert_new_then_exact_repeat():
 def test_upsert_cross_source_duplicate():
     conn = _conn()
     first_id, _ = upsert_job(conn, make_job(jd_text="short"))
-    dup = make_job(source="jsearch", source_job_id="js-9", apply_url="https://x.example/9",
+    dup = make_job(source="greenhouse", source_job_id="gh-9", apply_url="https://x.example/9",
                    jd_text="a much longer job description text")
     dup_id, is_new = upsert_job(conn, dup)
     assert (dup_id, is_new) == (first_id, False)
@@ -749,7 +742,7 @@ def test_jobs_needing_score_respects_filter_hash_and_version():
     assert [r["id"] for r in jobs_needing_score(conn, "v1", 10)] == [a]
     result = ScoreResult(score=80, breakdown={"role_fit": 30}, matches=["SQL"], gaps=[],
                          recommendation="apply", role_family="senior_product_analyst")
-    save_score(conn, a, result, "claude-sonnet-5-5", "v1", get_job(conn, a)["jd_hash"])
+    save_score(conn, a, result, "openai/gpt-oss-20b", "v1", get_job(conn, a)["jd_hash"])
     assert jobs_needing_score(conn, "v1", 10) == []
     assert [r["id"] for r in jobs_needing_score(conn, "v2", 10)] == [a]
     assert [r["id"] for r in jobs_needing_score(conn, "v1", 10, force=True)] == [a]
@@ -1859,169 +1852,64 @@ git commit -m "feat: Greenhouse, Lever and Ashby source adapters with retrying H
 
 ---
 
-### Task 6: JSearch aggregator source and source registry
+### Task 6: Source registry
 
 **Files:**
-- Create: `src/jobseeker/sources/jsearch.py`, `src/jobseeker/sources/registry.py`, `tests/fixtures/jsearch_min.json`
-- Test: `tests/test_sources_jsearch.py`
+- Create: `src/jobseeker/sources/registry.py`
+- Test: `tests/test_sources_registry.py`
 
 **Interfaces:**
-- Consumes: `get_json`, `parse_iso` (Task 5), `Preferences`, `Company`, `Settings` (Task 1)
-- Produces: `JSearchSource(queries: list[str], api_key: str, max_requests: int)`, `build_sources(companies, prefs, settings) -> list[Source]`
+- Consumes: `GreenhouseSource`, `LeverSource`, `AshbySource` (Task 5), `Company` (Task 1)
+- Produces: `build_sources(companies: list[Company]) -> list[Source]`. Phase 2 adds JobSpy and Apify adapters here.
 
-- [ ] **Step 1: Confirm JSearch parameters**
-
-Open the JSearch `/search` endpoint docs on RapidAPI (https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch). Confirm that `query`, `page`, `num_pages`, `country`, `date_posted=3days`, and the response fields `data[].job_id`, `employer_name`, `job_title`, `job_city`, `job_state`, `job_country`, `job_is_remote`, `job_posted_at_datetime_utc`, `job_apply_link`, `job_description`, `job_min_salary`, `job_max_salary`, `job_salary_period` all exist. If any name differs, use the documented name in both the fixture and the code below.
-
-- [ ] **Step 2: Write fixture `tests/fixtures/jsearch_min.json`**
-
-```json
-{"status": "OK", "data": [
-  {"job_id": "js-1", "employer_name": "Cred", "job_title": "Sr. Product Analyst", "job_city": "Bangalore",
-   "job_state": "Karnataka", "job_country": "IN", "job_is_remote": false,
-   "job_posted_at_datetime_utc": "2026-10-06T10:00:00.000Z", "job_apply_link": "https://www.linkedin.com/jobs/view/1",
-   "job_description": "Longer description of the senior product analyst role with SQL and experimentation.",
-   "job_min_salary": null, "job_max_salary": null, "job_salary_period": null},
-  {"job_id": "js-2", "employer_name": "Acme", "job_title": "Growth Analyst", "job_city": null, "job_state": null,
-   "job_country": "IN", "job_is_remote": true, "job_posted_at_datetime_utc": null, "job_apply_link": "",
-   "job_description": "No apply link, must be skipped", "job_min_salary": 2000000, "job_max_salary": 2600000,
-   "job_salary_period": "YEAR"}]}
-```
-
-- [ ] **Step 3: Write the failing tests `tests/test_sources_jsearch.py`**
+- [ ] **Step 1: Write the failing test `tests/test_sources_registry.py`**
 
 ```python
-import json
-from pathlib import Path
-
-import httpx
-import pytest
-import respx
-
 from jobseeker.config import load_companies
-from jobseeker.sources.jsearch import JSearchSource
 from jobseeker.sources.registry import build_sources
 
-FIX = Path(__file__).parent / "fixtures"
 
-
-@respx.mock
-def test_jsearch_maps_fields_and_skips_missing_link():
-    route = respx.get("https://jsearch.p.rapidapi.com/search").respond(
-        json=json.loads((FIX / "jsearch_min.json").read_text()))
-    jobs = JSearchSource(["product analyst in Bengaluru"], "key", 8).fetch(httpx.Client())
-    assert [j.source_job_id for j in jobs] == ["js-1"]
-    assert jobs[0].location == "Bangalore, Karnataka, IN" and jobs[0].company == "Cred"
-    req = route.calls[0].request
-    assert req.headers["X-RapidAPI-Key"] == "key"
-    assert req.url.params["date_posted"] == "3days" and req.url.params["country"] == "in"
-
-
-@respx.mock
-def test_jsearch_respects_request_budget():
-    route = respx.get("https://jsearch.p.rapidapi.com/search").respond(json={"status": "OK", "data": []})
-    JSearchSource(["a", "b", "c"], "key", 2).fetch(httpx.Client())
-    assert route.call_count == 2
-
-
-def test_jsearch_without_key_raises():
-    with pytest.raises(RuntimeError, match="RAPIDAPI_KEY"):
-        JSearchSource(["a"], "", 8).fetch(httpx.Client())
-
-
-def test_build_sources(settings, prefs):
-    sources = build_sources(load_companies(settings.companies_path), prefs, settings)
+def test_build_sources(settings):
+    sources = build_sources(load_companies(settings.companies_path))
     names = [s.name for s in sources]
-    assert "lever:cred" in names and "ashby:sarvam" in names and names[-1] == "jsearch"
+    assert "lever:cred" in names and "ashby:sarvam" in names and "greenhouse:groww" in names
+    assert len(names) == len(set(names)) == 13
 ```
 
-- [ ] **Step 4: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/test_sources_jsearch.py`
-Expected: FAIL (`ModuleNotFoundError: jobseeker.sources.jsearch`)
+Run: `uv run pytest tests/test_sources_registry.py`
+Expected: FAIL (`ModuleNotFoundError: jobseeker.sources.registry`)
 
-- [ ] **Step 5: Implement**
+- [ ] **Step 3: Implement `src/jobseeker/sources/registry.py`**
 
-`src/jobseeker/sources/jsearch.py`:
 ```python
 from __future__ import annotations
 
-import httpx
-
-from jobseeker.models import RawJob
-from jobseeker.sources.base import parse_iso
-from jobseeker.sources.http import get_json
-
-URL = "https://jsearch.p.rapidapi.com/search"
-HOST = "jsearch.p.rapidapi.com"
-
-
-def _salary(d: dict) -> str | None:
-    lo, hi = d.get("job_min_salary"), d.get("job_max_salary")
-    if lo is None and hi is None:
-        return None
-    return f"{lo or ''}–{hi or ''} {d.get('job_salary_period') or ''}".strip()
-
-
-class JSearchSource:
-    name = "jsearch"
-
-    def __init__(self, queries: list[str], api_key: str, max_requests: int):
-        self.queries, self.api_key, self.max_requests = queries, api_key, max_requests
-
-    def fetch(self, client: httpx.Client) -> list[RawJob]:
-        if not self.api_key:
-            raise RuntimeError("RAPIDAPI_KEY is not set")
-        headers = {"X-RapidAPI-Key": self.api_key, "X-RapidAPI-Host": HOST}
-        jobs: list[RawJob] = []
-        for q in self.queries[: self.max_requests]:
-            data = get_json(client, URL, headers=headers, params={
-                "query": q, "page": "1", "num_pages": "1", "country": "in", "date_posted": "3days"})
-            for d in data.get("data", []):
-                if not d.get("job_apply_link"):
-                    continue
-                jobs.append(RawJob(
-                    source="jsearch", source_job_id=d["job_id"], company=d.get("employer_name") or "Unknown",
-                    title=d["job_title"],
-                    location=", ".join(x for x in (d.get("job_city"), d.get("job_state"), d.get("job_country")) if x),
-                    remote=d.get("job_is_remote"), posted_at=parse_iso(d.get("job_posted_at_datetime_utc")),
-                    salary_text=_salary(d), jd_text=d.get("job_description") or "", apply_url=d["job_apply_link"],
-                ))
-        return jobs
-```
-
-`src/jobseeker/sources/registry.py`:
-```python
-from __future__ import annotations
-
-from jobseeker.config import Company, Preferences, Settings
+from jobseeker.config import Company
 from jobseeker.sources.ashby import AshbySource
 from jobseeker.sources.base import Source
 from jobseeker.sources.greenhouse import GreenhouseSource
-from jobseeker.sources.jsearch import JSearchSource
 from jobseeker.sources.lever import LeverSource
 
 _ATS = {"greenhouse": GreenhouseSource, "lever": LeverSource, "ashby": AshbySource}
 
 
-def build_sources(companies: list[Company], prefs: Preferences, settings: Settings) -> list[Source]:
-    sources: list[Source] = [_ATS[c.ats](c) for c in companies]
-    if prefs.jsearch_queries:
-        sources.append(JSearchSource(prefs.jsearch_queries, settings.rapidapi_key,
-                                     prefs.budgets.jsearch_requests_per_run))
-    return sources
+def build_sources(companies: list[Company]) -> list[Source]:
+    # Phase 2: append JobSpy / Apify sources here.
+    return [_ATS[c.ats](c) for c in companies]
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/test_sources_jsearch.py`
-Expected: 4 passed
+Run: `uv run pytest tests/test_sources_registry.py`
+Expected: 1 passed
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/jobseeker/sources tests/fixtures/jsearch_min.json tests/test_sources_jsearch.py
-git commit -m "feat: JSearch aggregator source and source registry"
+git add src/jobseeker/sources/registry.py tests/test_sources_registry.py
+git commit -m "feat: source registry"
 ```
 
 ---
@@ -2069,6 +1957,12 @@ def test_keeps_good_job(prefs):
 def test_drops_title_deny_word_boundary(prefs):
     assert prefilter(make_job(title="Product Analyst Intern"), prefs, NOW, set()) == "title: intern"
     assert prefilter(make_job(title="Internal Tools Product Analyst"), prefs, NOW, set()) is None
+
+
+def test_drops_titles_outside_allow_list(prefs):
+    assert prefilter(make_job(title="Data Engineer"), prefs, NOW, set()) == "title: not a target role"
+    assert prefilter(make_job(title="Chief of Staff to CEO"), prefs, NOW, set()) is None
+    assert prefilter(make_job(title="Founder's Office Associate"), prefs, NOW, set()) is None
 
 
 def test_location_rules(prefs):
@@ -2122,6 +2016,8 @@ def prefilter(job: Job, prefs: Preferences, now: datetime, blocked: set[str]) ->
     for term in prefs.title_deny:
         if re.search(rf"\b{re.escape(term.lower())}\b", title):
             return f"title: {term}"
+    if prefs.title_allow and not any(term.lower() in title for term in prefs.title_allow):
+        return "title: not a target role"
     cities = {c.lower() for c in prefs.cities}
     loc = job.location.strip().lower()
     if job.location_city not in cities and loc:
@@ -2147,12 +2043,12 @@ Expected: all passed
 
 ```bash
 git add src/jobseeker/pipeline/prefilter.py tests/test_prefilter.py
-git commit -m "feat: rule-based prefilter for title, location, experience, age, blocklist"
+git commit -m "feat: rule-based prefilter for title allow/deny, location, experience, age, blocklist"
 ```
 
 ---
 
-### Task 8: LLM wrapper with structured output and refusal fallback
+### Task 8: LLM wrapper (Groq free tier) with structured output and rate-limit handling
 
 **Files:**
 - Create: `src/jobseeker/llm.py`, `tests/fakes.py`
@@ -2160,21 +2056,32 @@ git commit -m "feat: rule-based prefilter for title, location, experience, age, 
 
 **Interfaces:**
 - Produces:
-  - Errors: `LLMError(Exception)`, `LLMRefusal(LLMError)`
+  - Errors: `LLMError(Exception)`, `LLMQuotaExceeded(LLMError)`
   - `strict_schema(model_cls) -> dict`
-  - `LLM` protocol: `json(*, model, system, prompt, schema: type[T], effort="medium", max_tokens=16000) -> T`
-  - `AnthropicLLM(api_key: str = "", client=None)`
+  - `LLM` protocol: `json(*, model, system, prompt, schema: type[T], effort="low", max_tokens=8000) -> T`. `effort` is passed to Groq as `reasoning_effort`: "low", "medium" or "high".
+  - `GroqLLM(api_key: str = "", client=None, sleep=time.sleep)`
   - Test double: `tests/fakes.FakeLLM(responses=None, handler=None)` with `.calls`
 
-- [ ] **Step 1: Write the failing tests `tests/test_llm.py`**
+- [ ] **Step 1: Confirm the current Groq API details**
+
+Check https://console.groq.com/docs/structured-outputs and https://console.groq.com/docs/rate-limits. As of 2026-10-07:
+- `openai/gpt-oss-20b` and `openai/gpt-oss-120b` support `response_format={"type": "json_schema", "json_schema": {"name", "strict": True, "schema"}}`, with every property required and `additionalProperties: false`.
+- The free tier allows 8K tokens/min and 200K tokens/day per model.
+- 429 responses carry a `retry-after` header.
+
+If any model name or parameter has changed, use the documented one everywhere this plan names it (`preferences.yaml`, `config.py` defaults, and this task).
+
+- [ ] **Step 2: Write the failing tests `tests/test_llm.py`**
 
 ```python
 from types import SimpleNamespace
 
+import groq
+import httpx
 import pytest
 from pydantic import BaseModel
 
-from jobseeker.llm import AnthropicLLM, LLMError, LLMRefusal, strict_schema
+from jobseeker.llm import GroqLLM, LLMError, LLMQuotaExceeded, strict_schema
 
 
 class Inner(BaseModel):
@@ -2193,76 +2100,100 @@ def test_strict_schema_closes_all_objects():
     assert inner["additionalProperties"] is False and inner["required"] == ["a"]
 
 
-class FakeMessages:
-    def __init__(self, response):
-        self.response, self.kwargs = response, None
+def _ok(text='{"a": 3}', finish="stop"):
+    return SimpleNamespace(choices=[SimpleNamespace(finish_reason=finish, message=SimpleNamespace(content=text))])
+
+
+def _rate_limited(retry_after: str):
+    resp = httpx.Response(429, headers={"retry-after": retry_after},
+                          request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions"))
+    return groq.RateLimitError("rate limited", response=resp, body=None)
+
+
+class FakeCompletions:
+    def __init__(self, outcomes):
+        self.outcomes, self.kwargs = list(outcomes), []
 
     def create(self, **kwargs):
-        self.kwargs = kwargs
-        return self.response
+        self.kwargs.append(kwargs)
+        out = self.outcomes.pop(0)
+        if isinstance(out, Exception):
+            raise out
+        return out
 
 
-def _client(response):
-    msgs = FakeMessages(response)
-    return SimpleNamespace(beta=SimpleNamespace(messages=msgs)), msgs
+def _llm(outcomes, sleeps=None):
+    comp = FakeCompletions(outcomes)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=comp))
+    return GroqLLM(client=client, sleep=(sleeps.append if sleeps is not None else (lambda s: None))), comp
 
 
-def test_json_parses_and_sends_expected_request():
-    resp = SimpleNamespace(stop_reason="end_turn",
-                           content=[SimpleNamespace(type="thinking"), SimpleNamespace(type="text", text='{"a": 3}')])
-    client, msgs = _client(resp)
-    out = AnthropicLLM(client=client).json(model="claude-sonnet-5-5", system="sys", prompt="p", schema=Inner)
-    assert out == Inner(a=3)
-    k = msgs.kwargs
-    assert k["betas"] == ["server-side-fallback-2026-07-01"]
-    assert k["extra_body"] == {"fallbacks": "default"}
-    assert k["output_config"]["format"]["type"] == "json_schema"
-    assert k["output_config"]["effort"] == "medium"
-    assert "temperature" not in k and "thinking" not in k
+def test_json_parses_and_sends_strict_schema():
+    llm, comp = _llm([_ok()])
+    assert llm.json(model="openai/gpt-oss-20b", system="sys", prompt="p", schema=Inner) == Inner(a=3)
+    k = comp.kwargs[0]
+    assert k["model"] == "openai/gpt-oss-20b" and k["reasoning_effort"] == "low"
+    rf = k["response_format"]
+    assert rf["type"] == "json_schema" and rf["json_schema"]["strict"] is True
+    assert rf["json_schema"]["name"] == "Inner"
+    assert k["messages"][0] == {"role": "system", "content": "sys"}
 
 
-def test_refusal_raises():
-    client, _ = _client(SimpleNamespace(stop_reason="refusal", content=[]))
-    with pytest.raises(LLMRefusal):
-        AnthropicLLM(client=client).json(model="m", system="s", prompt="p", schema=Inner)
+def test_rate_limit_waits_then_succeeds():
+    sleeps: list[float] = []
+    llm, comp = _llm([_rate_limited("3"), _ok()], sleeps)
+    assert llm.json(model="m", system="s", prompt="p", schema=Inner) == Inner(a=3)
+    assert sleeps == [3.0] and len(comp.kwargs) == 2
 
 
-def test_invalid_json_raises_llm_error():
-    resp = SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text='{"a": "x"}')])
-    client, _ = _client(resp)
+def test_quota_exhausted_raises():
+    llm, _ = _llm([_rate_limited("3600")])
+    with pytest.raises(LLMQuotaExceeded):
+        llm.json(model="m", system="s", prompt="p", schema=Inner)
+
+
+def test_truncated_and_invalid_raise_llm_error():
+    llm, _ = _llm([_ok(finish="length")])
+    with pytest.raises(LLMError, match="truncated"):
+        llm.json(model="m", system="s", prompt="p", schema=Inner)
+    llm, _ = _llm([_ok('{"a": "x"}')])
     with pytest.raises(LLMError):
-        AnthropicLLM(client=client).json(model="m", system="s", prompt="p", schema=Inner)
+        llm.json(model="m", system="s", prompt="p", schema=Inner)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 3: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_llm.py`
 Expected: FAIL (`ModuleNotFoundError: jobseeker.llm`)
 
-- [ ] **Step 3: Implement `src/jobseeker/llm.py`**
+- [ ] **Step 4: Implement `src/jobseeker/llm.py`**
 
 ```python
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Protocol, TypeVar
 
-import anthropic
+import groq
 from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
+MAX_WAITS = 4            # per call, for short per-minute 429s
+MAX_WAIT_SECONDS = 65.0  # one token-per-minute window
+QUOTA_THRESHOLD = 120.0  # a longer retry-after means the daily quota is gone
 
 
 class LLMError(Exception):
     pass
 
 
-class LLMRefusal(LLMError):
+class LLMQuotaExceeded(LLMError):
     pass
 
 
 def strict_schema(model_cls: type[BaseModel]) -> dict:
-    """JSON schema with every object closed and every property required (structured-output rules).
+    """JSON schema with every object closed and every property required (Groq strict mode).
     Keep Pydantic models free of Field constraints (min/max etc.); validate those in code."""
     schema = model_cls.model_json_schema()
 
@@ -2283,42 +2214,58 @@ def strict_schema(model_cls: type[BaseModel]) -> dict:
 
 class LLM(Protocol):
     def json(self, *, model: str, system: str, prompt: str, schema: type[T],
-             effort: str = "medium", max_tokens: int = 16000) -> T: ...
+             effort: str = "low", max_tokens: int = 8000) -> T: ...
 
 
-class AnthropicLLM:
-    def __init__(self, api_key: str = "", client=None):
-        self._client = client or anthropic.Anthropic(api_key=api_key or None)
+def _retry_after(e: groq.RateLimitError) -> float:
+    try:
+        return float(e.response.headers.get("retry-after", "20"))
+    except (AttributeError, TypeError, ValueError):
+        return 20.0
+
+
+class GroqLLM:
+    def __init__(self, api_key: str = "", client=None, sleep: Callable[[float], None] = time.sleep):
+        self._client = client or groq.Groq(api_key=api_key or None, max_retries=0)
+        self._sleep = sleep
 
     def json(self, *, model: str, system: str, prompt: str, schema: type[T],
-             effort: str = "medium", max_tokens: int = 16000) -> T:
-        try:
-            resp = self._client.beta.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                betas=[FALLBACK_BETA],
-                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-                messages=[{"role": "user", "content": prompt}],
-                output_config={"effort": effort,
-                               "format": {"type": "json_schema", "schema": strict_schema(schema)}},
-                extra_body={"fallbacks": "default"},
-            )
-        except anthropic.APIError as e:
-            raise LLMError(f"{type(e).__name__}: {e}") from e
-        if resp.stop_reason == "refusal":
-            raise LLMRefusal("model declined the request")
-        if resp.stop_reason == "max_tokens":
-            raise LLMError("response truncated at max_tokens")
-        text = next((b.text for b in resp.content if b.type == "text"), None)
-        if text is None:
-            raise LLMError("no text block in response")
+             effort: str = "low", max_tokens: int = 8000) -> T:
+        request = dict(
+            model=model,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": schema.__name__, "strict": True,
+                                             "schema": strict_schema(schema)}},
+            reasoning_effort=effort,
+            max_completion_tokens=max_tokens,
+        )
+        for attempt in range(MAX_WAITS + 1):
+            try:
+                resp = self._client.chat.completions.create(**request)
+                break
+            except groq.RateLimitError as e:
+                wait = _retry_after(e)
+                if wait > QUOTA_THRESHOLD:
+                    raise LLMQuotaExceeded(f"Groq daily quota used up for {model}; retry in {wait:.0f}s") from e
+                if attempt == MAX_WAITS:
+                    raise LLMError(f"still rate limited after {MAX_WAITS} waits") from e
+                self._sleep(min(wait, MAX_WAIT_SECONDS))
+            except groq.APIError as e:
+                raise LLMError(f"{type(e).__name__}: {e}") from e
+        choice = resp.choices[0]
+        if choice.finish_reason == "length":
+            raise LLMError("response truncated at max tokens")
+        text = choice.message.content
+        if not text:
+            raise LLMError("empty response")
         try:
             return schema.model_validate_json(text)
         except ValidationError as e:
             raise LLMError(f"invalid structured output: {e}") from e
 ```
 
-- [ ] **Step 4: Write `tests/fakes.py`**
+- [ ] **Step 5: Write `tests/fakes.py`**
 
 ```python
 from __future__ import annotations
@@ -2332,7 +2279,7 @@ class FakeLLM:
         self.handler = handler
         self.calls: list[dict] = []
 
-    def json(self, *, model, system, prompt, schema, effort="medium", max_tokens=16000):
+    def json(self, *, model, system, prompt, schema, effort="low", max_tokens=8000):
         self.calls.append({"model": model, "system": system, "prompt": prompt, "schema": schema, "effort": effort})
         out = self.handler(schema, prompt) if self.handler else self.responses.pop(0)
         if isinstance(out, Exception):
@@ -2340,30 +2287,30 @@ class FakeLLM:
         return out if isinstance(out, schema) else schema.model_validate(out)
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `uv run pytest tests/test_llm.py`
-Expected: 4 passed
+Expected: 5 passed
 
-- [ ] **Step 6: Live smoke check (needs `ANTHROPIC_API_KEY` in `.env`; skip if not set yet)**
+- [ ] **Step 7: Live smoke check (needs `GROQ_API_KEY` in `.env`; skip if not set yet)**
 
 ```bash
 uv run python -c "
 from pydantic import BaseModel
 from jobseeker.config import Settings
-from jobseeker.llm import AnthropicLLM
+from jobseeker.llm import GroqLLM
 class Ping(BaseModel):
     ok: bool
-print(AnthropicLLM(Settings().anthropic_api_key).json(model='claude-sonnet-5-5', system='Reply with ok=true.', prompt='ping', schema=Ping, effort='low'))
+print(GroqLLM(Settings().groq_api_key).json(model='openai/gpt-oss-20b', system='Reply with ok=true.', prompt='ping', schema=Ping))
 "
 ```
-Expected: `ok=True`. If the API rejects `fallbacks` or the beta header, remove `extra_body` and `betas` and record the reason in the commit message.
+Expected: `ok=True`. If Groq rejects `reasoning_effort` or `max_completion_tokens`, remove that argument and note why in the commit message.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/jobseeker/llm.py tests/fakes.py tests/test_llm.py
-git commit -m "feat: Claude wrapper with structured output, refusal fallback and fake for tests"
+git commit -m "feat: Groq free-tier LLM wrapper with strict structured output and quota handling"
 ```
 
 ---
@@ -2436,8 +2383,8 @@ def test_facts_cached_by_resume_hash(tmp_path, facts):
     pdf, out = tmp_path / "r.pdf", tmp_path / "facts.json"
     _pdf(pdf)
     llm = FakeLLM([facts])
-    assert load_or_build_facts(llm, pdf, out, "claude-sonnet-5-5") == facts
-    assert load_or_build_facts(llm, pdf, out, "claude-sonnet-5-5") == facts
+    assert load_or_build_facts(llm, pdf, out, "openai/gpt-oss-120b") == facts
+    assert load_or_build_facts(llm, pdf, out, "openai/gpt-oss-120b") == facts
     assert len(llm.calls) == 1
     assert "Cut errors by 67%" in llm.calls[0]["prompt"]
     assert json.loads(out.read_text())["resume_sha256"]
@@ -2549,7 +2496,7 @@ Expected: 3 passed
 
 ```bash
 git add src/jobseeker/profile tests/test_profile.py tests/conftest.py
-git commit -m "feat: resume text extraction and cached facts via Claude"
+git commit -m "feat: resume text extraction and cached facts via the LLM"
 ```
 
 ---
@@ -2562,7 +2509,7 @@ git commit -m "feat: resume text extraction and cached facts via Claude"
 
 **Interfaces:**
 - Consumes: `LLM` (Task 8), `Job`, `ScoreResult` (Task 2), `Facts` (Task 9), `Preferences`, `Rubric` (Task 1)
-- Produces: `score_job(llm, job, facts, prefs, rubric, model) -> ScoreResult`, `LLMScore` (structured output model), `MAX_JD_CHARS = 20000`
+- Produces: `score_job(llm, job, facts, prefs, rubric, model) -> ScoreResult`, `LLMScore` (structured output model), `MAX_JD_CHARS = 8000`
 
 - [ ] **Step 1: Write the failing tests `tests/test_scorer.py`**
 
@@ -2578,11 +2525,11 @@ OUT = dict(role_family="senior_product_analyst", required_years=3, role_fit=30, 
 
 def test_score_sums_and_recommends(prefs, rubric, facts):
     llm = FakeLLM([OUT])
-    r = score_job(llm, make_job(), facts, prefs, rubric, "claude-sonnet-5-5")
+    r = score_job(llm, make_job(), facts, prefs, rubric, "openai/gpt-oss-20b")
     assert r.score == 92 and r.recommendation == "apply"
     assert r.breakdown == {"role_fit": 30, "experience_fit": 22, "skills_match": 18, "company": 15, "location_pay": 7}
     assert r.matches == ["A/B testing", "SQL", "churn"] and r.gaps == ["Tableau", "B2B"]
-    assert llm.calls[0]["model"] == "claude-sonnet-5-5"
+    assert llm.calls[0]["model"] == "openai/gpt-oss-20b" and llm.calls[0]["effort"] == "low"
 
 
 def test_score_clamps_out_of_range(prefs, rubric, facts):
@@ -2627,7 +2574,7 @@ from jobseeker.llm import LLM
 from jobseeker.models import Job, ScoreResult
 from jobseeker.profile.facts import Facts
 
-MAX_JD_CHARS = 20000
+MAX_JD_CHARS = 8000  # keeps one scoring call well under Groq's 8K tokens/min
 
 
 class LLMScore(BaseModel):
@@ -2675,7 +2622,7 @@ def _job_block(job: Job) -> str:
 
 def score_job(llm: LLM, job: Job, facts: Facts, prefs: Preferences, rubric: Rubric, model: str) -> ScoreResult:
     out = llm.json(model=model, system=_system(facts, prefs, rubric), prompt=_job_block(job),
-                   schema=LLMScore, effort="medium")
+                   schema=LLMScore, effort="low")
     raw = out.model_dump()
     breakdown = {d.key: max(0, min(int(raw[d.key]), d.max)) for d in rubric.dimensions}
     total = sum(breakdown.values())
@@ -2698,7 +2645,7 @@ Expected: 4 passed
 
 ```bash
 git add src/jobseeker/scoring tests/test_scorer.py
-git commit -m "feat: Claude fit scorer with clamped rubric breakdown and thresholds"
+git commit -m "feat: LLM fit scorer with clamped rubric breakdown and thresholds"
 ```
 
 ---
@@ -2777,10 +2724,10 @@ GOOD = dict(contact_role="Product Analytics Lead", contact_reason="Owns the anal
 
 def test_first_draft_accepted(prefs, facts):
     llm = FakeLLM([GOOD])
-    r = draft_outreach(llm, make_job(jd_text="15-minute chats welcome"), facts, prefs, "claude-opus-5-5")
+    r = draft_outreach(llm, make_job(jd_text="15-minute chats welcome"), facts, prefs, "openai/gpt-oss-120b")
     assert r.warnings == [] and r.bundle == DraftBundle(**GOOD)
     assert r.linkedin_search_url == "https://www.linkedin.com/search/results/people/?keywords=CRED+Product+Analytics+Lead"
-    assert llm.calls[0]["model"] == "claude-opus-5-5" and llm.calls[0]["effort"] == "high"
+    assert llm.calls[0]["model"] == "openai/gpt-oss-120b" and llm.calls[0]["effort"] == "medium"
 
 
 def test_regenerates_with_feedback_then_accepts(prefs, facts):
@@ -2951,7 +2898,7 @@ def draft_outreach(llm: LLM, job: Job, facts: Facts, prefs: Preferences, model: 
         prompt = base
         if feedback:
             prompt += "\n\nYour previous draft had these problems. Fix every one:\n- " + "\n- ".join(feedback)
-        bundle = llm.json(model=model, system=system, prompt=prompt, schema=DraftBundle, effort="high")
+        bundle = llm.json(model=model, system=system, prompt=prompt, schema=DraftBundle, effort="medium")
         feedback = check_bundle(bundle, sources)
         if not feedback:
             break
@@ -2996,7 +2943,7 @@ from datetime import UTC, datetime
 from jobseeker.db.applications import get_drafts, get_status
 from jobseeker.db.core import connect
 from jobseeker.db.runs import last_run
-from jobseeker.llm import LLMError
+from jobseeker.llm import LLMError, LLMQuotaExceeded
 from jobseeker.models import RawJob
 from jobseeker.outreach.drafter import DraftBundle
 from jobseeker.pipeline.run import run_daily
@@ -3050,9 +2997,9 @@ def test_full_run_scores_shortlists_and_drafts(prefs, rubric, facts):
 
 def test_run_dedups_across_sources(prefs, rubric, facts):
     conn = connect(":memory:")
-    dup = raw(source="jsearch", source_job_id="js-1", company="Cred", title="Sr. Product Analyst",
+    dup = raw(source="greenhouse", source_job_id="gh-1", company="Cred", title="Sr. Product Analyst",
               location="Bangalore, Karnataka, IN", apply_url="https://linkedin.com/jobs/view/1")
-    stats = _run(conn, [StaticSource("lever:cred", [raw()]), StaticSource("jsearch", [dup])],
+    stats = _run(conn, [StaticSource("lever:cred", [raw()]), StaticSource("greenhouse:cred", [dup])],
                  FakeLLM(handler=handler), prefs, rubric, facts)
     assert (stats.new, stats.duplicates, stats.scored) == (1, 1, 1)
     assert conn.execute("SELECT COUNT(*) FROM applications").fetchone()[0] == 1
@@ -3075,6 +3022,15 @@ def test_filtered_jobs_are_not_scored(prefs, rubric, facts):
     stats = _run(conn, [StaticSource("lever:cred", [raw(title="Sales Manager")])], FakeLLM(handler=handler),
                  prefs, rubric, facts)
     assert (stats.filtered, stats.scored) == (1, 0)
+
+
+def test_quota_exhausted_stops_llm_work(prefs, rubric, facts):
+    conn = connect(":memory:")
+    llm = FakeLLM(handler=lambda schema, prompt: LLMQuotaExceeded("daily quota used up"))
+    jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
+    stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
+    assert len(llm.calls) == 1 and stats.scored == 0 and stats.new == 3
+    assert any("quota" in e for e in stats.errors)
 
 
 def test_budget_limits_scoring(prefs, rubric, facts):
@@ -3135,7 +3091,7 @@ from jobseeker.db.applications import (
 )
 from jobseeker.db.jobs import get_job, job_from_row, jobs_needing_score, save_score, set_filter_reason, upsert_job
 from jobseeker.db.runs import finish_run, start_run
-from jobseeker.llm import LLM, LLMError
+from jobseeker.llm import LLM, LLMError, LLMQuotaExceeded
 from jobseeker.outreach.drafter import draft_outreach
 from jobseeker.pipeline.normalize import normalize
 from jobseeker.pipeline.prefilter import prefilter
@@ -3206,9 +3162,14 @@ def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Fac
                     set_filter_reason(conn, job_id, reason)
                     stats.filtered += 1
 
+    quota_hit = False
     for row in jobs_needing_score(conn, rubric.version, prefs.budgets.score_per_run, force=force_rescore):
         try:
             result = score_job(llm, job_from_row(row), facts, prefs, rubric, prefs.models.scoring)
+        except LLMQuotaExceeded as e:
+            stats.errors.append(f"scoring stopped: {e}")
+            quota_hit = True
+            break
         except LLMError as e:
             stats.errors.append(f"score job {row['id']}: {e}")
             continue
@@ -3219,10 +3180,16 @@ def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Fac
             transition(conn, app_id, "shortlisted", {"score": result.score}, now)
             stats.shortlisted += 1
 
-    for app_id in _apps_needing_drafts(conn, prefs.budgets.draft_per_run):
+    # Scoring and drafting use different models (separate daily quotas); skip drafting only if they share one.
+    same_model = prefs.models.drafting == prefs.models.scoring
+    drafting_apps = [] if (quota_hit and same_model) else _apps_needing_drafts(conn, prefs.budgets.draft_per_run)
+    for app_id in drafting_apps:
         try:
             draft_application(conn, app_id, llm, facts, prefs, now)
             stats.drafted += 1
+        except LLMQuotaExceeded as e:
+            stats.errors.append(f"drafting stopped: {e}")
+            break
         except LLMError as e:
             stats.errors.append(f"draft application {app_id}: {e}")
 
@@ -3235,7 +3202,7 @@ def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Fac
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `uv run pytest tests/test_run.py`
-Expected: 5 passed
+Expected: 6 passed
 
 - [ ] **Step 6: Implement `src/jobseeker/cli.py`**
 
@@ -3250,7 +3217,7 @@ import typer
 
 from jobseeker.config import Settings, load_companies, load_preferences, load_rubric
 from jobseeker.db.core import connect
-from jobseeker.llm import AnthropicLLM
+from jobseeker.llm import GroqLLM
 
 app = typer.Typer(no_args_is_help=True, help="Personal job search and outreach assistant.")
 
@@ -3272,7 +3239,7 @@ def init() -> None:
     if not settings.resume_path.exists():
         typer.echo(f"Put your resume at {settings.resume_path} and run `jobseeker init` again.")
         raise typer.Exit(1)
-    facts = load_or_build_facts(AnthropicLLM(settings.anthropic_api_key), settings.resume_path,
+    facts = load_or_build_facts(GroqLLM(settings.groq_api_key), settings.resume_path,
                                 settings.facts_path, prefs.models.facts)
     typer.echo(f"Facts written to {settings.facts_path}: {len(facts.achievements)} achievements, "
                f"{len(facts.skills)} skills. Review and edit that file if anything is wrong.")
@@ -3287,9 +3254,9 @@ def _run(fetch: bool, force: bool) -> None:
     settings, prefs, rubric = _load()
     conn = connect(settings.db_path)
     facts = load_facts(settings.facts_path)
-    sources = build_sources(load_companies(settings.companies_path), prefs, settings)
+    sources = build_sources(load_companies(settings.companies_path))
     with make_client() as client:
-        stats = run_daily(conn, sources=sources, client=client, llm=AnthropicLLM(settings.anthropic_api_key),
+        stats = run_daily(conn, sources=sources, client=client, llm=GroqLLM(settings.groq_api_key),
                           facts=facts, prefs=prefs, rubric=rubric, fetch=fetch, force_rescore=force)
     typer.echo(json.dumps(stats.__dict__, indent=2))
 
@@ -3809,7 +3776,7 @@ HERE = Path(__file__).parent
 
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
-    from jobseeker.llm import AnthropicLLM
+    from jobseeker.llm import GroqLLM
     from jobseeker.web import application, inbox, pipeline
 
     app = FastAPI(title="Job Seeker", docs_url=None, redoc_url=None)
@@ -3819,7 +3786,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None) -> Fast
     app.state.settings = settings
     app.state.prefs = load_preferences(settings.preferences_path)
     app.state.templates = templates
-    app.state.llm_factory = llm_factory or (lambda: AnthropicLLM(settings.anthropic_api_key))
+    app.state.llm_factory = llm_factory or (lambda: GroqLLM(settings.groq_api_key))
     app.state.gmail_factory = gmail_factory or (lambda: load_service(settings.secrets_dir / "token.json"))
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     app.include_router(inbox.router)
@@ -4725,7 +4692,7 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
 
 ## Setup (once)
 1. `uv sync`
-2. `cp .env.example .env` and fill in `ANTHROPIC_API_KEY` and `RAPIDAPI_KEY`. For the RapidAPI key, subscribe to the JSearch free tier.
+2. `cp .env.example .env` and fill in `GROQ_API_KEY` (free, from https://console.groq.com/keys; no card needed).
 3. Put your resume at `profile/resume.pdf`.
 4. `uv run jobseeker init`. This extracts `profile/facts.json`. **Read it and fix any mistakes**, because every draft is checked against it.
 5. Gmail:
@@ -4754,19 +4721,20 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
 - **Pipeline:** every application at a glance, with a **follow up** badge after 5 days without a reply.
 
 ## Tuning
-- `profile/preferences.yaml`: cities, title deny-list, budgets, models, JSearch queries.
+- `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models.
 - `rubric.yaml`: scoring weights. Bump `version`, then run `uv run jobseeker rescore`.
 - `companies.yaml`: the watchlist. Check a new slug with `uv run python scripts/verify_companies.py <slug>` before adding it.
 
-## Cost
-- Scoring uses Sonnet 5.5 (about $0.02 per job); drafting uses Opus 5.5 (about $0.08 per job).
-- With the default caps (80 scored, 15 drafted per run), a run costs at most about $3. A typical day costs well under $1.
+## Cost and limits
+- Free. Groq's free tier allows about 200K tokens/day per model, which covers about 35 scored and 10 drafted jobs a day (the default caps).
+- If a run hits the daily quota it stops cleanly, and the remaining jobs are picked up the next morning.
+- The scheduled run may take 30–60 minutes because it waits out per-minute limits. That's fine, since it runs before you're up.
 ````
 
 - [ ] **Step 5: Manual end-to-end check (needs real keys, resume and Gmail credentials)**
 
 1. `uv run jobseeker init`: facts are written. Open `profile/facts.json` and confirm the 67% / 480K+ / 84% ROC-AUC / 7.84% → 6.33% MAPE metrics appear verbatim.
-2. `uv run jobseeker run`: the JSON stats show fetched > 0 and scored > 0. Any source errors are listed and didn't stop the run.
+2. `uv run jobseeker run`: the JSON stats show fetched > 0 and scored > 0. Any source or quota errors are listed and didn't stop the run.
 3. `uv run jobseeker serve`, then open the inbox:
    1. Jobs scoring 70+ appear, with drafts.
    2. Open one, add your own email address as a **verified** contact, and approve.
