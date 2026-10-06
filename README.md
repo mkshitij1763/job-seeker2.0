@@ -1,0 +1,43 @@
+# job-seeker2.0
+
+A personal job-search assistant that runs locally. Every morning it finds new jobs, scores them against your resume, and drafts an email and a LinkedIn message for each strong match. **It never sends anything.** Approving a job creates a Gmail draft, and you press Send yourself.
+
+## Setup (once)
+1. `uv sync`
+2. `cp .env.example .env` and fill in `GROQ_API_KEY` (free, from https://console.groq.com/keys; no card needed).
+3. Put your resume at `profile/resume.pdf`.
+4. `uv run jobseeker init`. This extracts `profile/facts.json`. **Read it and fix any mistakes**, because every draft is checked against it.
+5. Gmail:
+   1. In Google Cloud Console, create an OAuth client of type **Desktop app** with the Gmail API enabled.
+   2. Save it as `secrets/credentials.json`.
+   3. Run `uv run jobseeker auth-gmail`. This asks only for permission to create drafts.
+6. `scripts/install_launchd.sh` schedules the daily 07:30 run.
+
+## Daily use
+- `uv run jobseeker serve` → open http://127.0.0.1:8000
+- **Inbox** keyboard shortcuts:
+
+  | Key | Action |
+  |---|---|
+  | `j` / `k` | Move down / up |
+  | `enter` | Open the job |
+  | `s` | Skip |
+  | `z` | Snooze for 3 days |
+
+- **Job page:**
+  1. Read the score and the job description.
+  2. Use **Search LinkedIn** to find the contact, then paste their name and email.
+  3. Edit the drafts if needed.
+  4. Click **Approve → Gmail draft**.
+  5. Send it from Gmail, then click **Mark sent**.
+- **Pipeline:** every application at a glance, with a **follow up** badge after 5 days without a reply.
+
+## Tuning
+- `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models.
+- `rubric.yaml`: scoring weights. Bump `version`, then run `uv run jobseeker rescore`.
+- `companies.yaml`: the watchlist. Check a new slug with `uv run python scripts/verify_companies.py <slug>` before adding it.
+
+## Cost and limits
+- Free. Groq's free tier allows about 200K tokens/day per model, which covers about 35 scored and 10 drafted jobs a day (the default caps).
+- If a run hits the daily quota it stops cleanly, and the remaining jobs are picked up the next morning.
+- The scheduled run may take 30–60 minutes because it waits out per-minute limits. That's fine, since it runs before you're up.
