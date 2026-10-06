@@ -1,0 +1,14 @@
+companies:
+  - {name: CRED, ats: lever, slug: cred, tier: 1}
+  - {name: Meesho, ats: lever, slug: meesho, tier: 1}
+  - {name: Groww, ats: greenhouse, slug: groww, tier: 1}
+  - {name: Paytm, ats: lever, slug: paytm, tier: 1}
+  - {name: Sarvam AI, ats: ashby, slug: sarvam, tier: 1}
+  - {name: Glean, ats: greenhouse, slug: gleanwork, tier: 1}
+  - {name: Databricks, ats: greenhouse, slug: databricks, tier: 1}
+  - {name: InMobi, ats: greenhouse, slug: inmobi, tier: 2}
+  - {name: Mindtickle, ats: lever, slug: mindtickle, tier: 2}
+  - {name: Druva, ats: greenhouse, slug: druva, tier: 2}
+  - {name: Observe.AI, ats: greenhouse, slug: observeai, tier: 2}
+  - {name: Pocket FM, ats: lever, slug: pocketfm, tier: 2}
+  - {name: Zeta, ats: lever, slug: zeta, tier: 2}

@@ -1,0 +1,29 @@
+name: Kshitij Meshram
+email: mkshitij1763@gmail.com
+linkedin: https://www.linkedin.com/in/kshitijmeshram1763/
+github: https://github.com/mkshitij1763
+experience_summary: >-
+  ~1.3 years full-time as Product Analyst at Inito (since July 2025) plus a
+  3-month Technology Consultant internship at PwC (May-July 2024). B.Tech EE, IIT Roorkee (2025).
+target_roles:
+  - Senior Product Analyst
+  - Product Analyst
+  - Associate Product Manager
+  - Product Manager
+  - AI Product Manager
+  - Founder's Office
+  - Analytics roles with a product focus
+cities: [Bengaluru, Gurgaon, Noida, Pune]
+remote_india_ok: true
+current_ctc_lpa: 20.7
+target_base_lpa: 25
+must_haves: []
+deal_breakers: []
+title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president, account executive, recruiter]
+# a title must contain at least one of these (cheap gate before any LLM call)
+title_allow: [product, analyst, analytics, founder, chief of staff, growth, strategy, insights, business intelligence]
+drop_if_min_years_at_least: 8
+max_age_days: 7
+thresholds: {apply: 70, review: 50}
+budgets: {score_per_run: 35, draft_per_run: 10}
+models: {scoring: openai/gpt-oss-20b, drafting: openai/gpt-oss-120b, facts: openai/gpt-oss-120b}

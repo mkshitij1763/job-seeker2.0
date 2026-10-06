@@ -1,0 +1,29 @@
+version: "2026-10-07.1"
+dimensions:
+  - key: role_fit
+    max: 30
+    guidance: >-
+      30 for Senior Product Analyst, Product Analyst, APM, PM, AI PM or Founder's Office roles.
+      15-20 for analytics/BI roles with a clear product focus. 0-8 for generic data or unrelated roles.
+  - key: experience_fit
+    max: 25
+    guidance: >-
+      Based on the minimum years the JD requires. 0-3 years: 25. 3-5 years: 22. 5-6 years: 12.
+      7+ years: 4. Not stated: 20. The candidate has ~1.5 years and treats Senior PA roles as in reach.
+  - key: skills_match
+    max: 20
+    guidance: >-
+      Overlap between JD requirements and the candidate's resume facts (A/B testing, experimentation,
+      SQL/BigQuery, Amplitude, dashboards/alerting, ML churn modelling, product discovery, growth and
+      notification work). Only count skills that are actually in the facts.
+  - key: company
+    max: 15
+    guidance: >-
+      15 for strong product companies, AI-first or well-funded startups; 10 for known brands;
+      3-5 for agencies, staffing firms or unknown companies.
+  - key: location_pay
+    max: 10
+    guidance: >-
+      Start at 7 if the job is in Bengaluru, Gurgaon, Noida or Pune or remote within India, else 2.
+      +3 if a disclosed salary is at least 25 LPA base. -4 if a disclosed salary is clearly below
+      20.7 LPA. Undisclosed salary is neutral. Clamp to 0-10.
