@@ -35,9 +35,11 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
 ## Tuning
 - `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models.
 - `rubric.yaml`: scoring weights. Bump `version`, then run `uv run jobseeker rescore`.
-- `companies.yaml`: the watchlist. Check a new slug with `uv run python scripts/verify_companies.py <slug>` before adding it.
+- `profile/preferences.yaml` → `search:` the roles and cities searched every morning on LinkedIn, Naukri and Indeed India. Companies found there that use Greenhouse, Lever or Ashby are discovered automatically and fetched from their own boards afterwards; see them with `uv run jobseeker companies`.
+- `companies.yaml`: optional favourites that are always fetched. Check a slug with `uv run python scripts/verify_companies.py <slug>`.
 
 ## Cost and limits
 - Free. Groq's free tier allows about 200K tokens/day per model, which covers about 35 scored and 10 drafted jobs a day (the default caps).
 - If a run hits the daily quota it stops cleanly, and the remaining jobs are picked up the next morning.
 - The scheduled run may take 30–60 minutes because it waits out per-minute limits. That's fine, since it runs before you're up.
+- Job-site scraping is free but unofficial: LinkedIn may rate-limit after a few searches. A blocked site is skipped for the day and listed in the run's errors; everything else continues.

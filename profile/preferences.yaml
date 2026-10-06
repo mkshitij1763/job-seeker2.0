@@ -28,3 +28,13 @@ max_age_days: 7
 thresholds: {apply: 70, review: 50}
 budgets: {score_per_run: 35, draft_per_run: 10}
 models: {scoring: openai/gpt-oss-20b, drafting: openai/gpt-oss-120b, facts: openai/gpt-oss-120b}
+min_prescore: 30
+# Job-site searches (LinkedIn once per query across India; Naukri/Indeed per query x location)
+search:
+  queries: [Product Analyst, Associate Product Manager, Product Manager, Founder's Office, Growth Analyst]
+  locations: [Bengaluru, Gurgaon, Noida, Pune]
+  remote_query: true
+  hours_old: 72
+  results_per_search: 25
+  sites: [linkedin, naukri, indeed]
+  linkedin_descriptions_per_run: 15
