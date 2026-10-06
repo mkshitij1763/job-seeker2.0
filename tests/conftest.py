@@ -5,6 +5,10 @@ import pytest
 
 from jobseeker.config import Settings, load_preferences, load_rubric
 from jobseeker.profile.facts import Achievement, Facts, Role
+from jobseeker.db.applications import ensure_application, save_draft, set_suggestion, transition
+from jobseeker.db.core import connect
+from jobseeker.db.jobs import save_score, upsert_job
+from jobseeker.models import ScoreResult
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,3 +54,29 @@ def facts() -> Facts:
         skills=["SQL", "BigQuery", "Amplitude", "A/B Testing", "Python", "Product Discovery"],
         education=["B.Tech Electrical Engineering, IIT Roorkee, 2021-2025"],
     )
+
+
+@pytest.fixture
+def seeded(settings):
+    from tests.factories import make_job
+
+    conn = connect(settings.db_path)
+    ids = []
+    for i, (score, rec) in enumerate([(88, "apply"), (60, "review")]):
+        job_id, _ = upsert_job(conn, make_job(source_job_id=f"s{i}", fingerprint=f"fp{i}",
+                                              title=f"Senior Product Analyst {i}",
+                                              jd_text="We want SQL and A/B Testing skills."))
+        save_score(conn, job_id, ScoreResult(score=score, breakdown={"role_fit": 30}, matches=["SQL", "A/B"],
+                                             gaps=["Tableau"], recommendation=rec, role_family="senior_product_analyst"),
+                   "m", "v1", "h")
+        app_id = ensure_application(conn, job_id)
+        if rec == "apply":
+            transition(conn, app_id, "shortlisted")
+            save_draft(conn, app_id, "email", "Subject", "Email body citing 67%.")
+            save_draft(conn, app_id, "li_note", "", "Note")
+            save_draft(conn, app_id, "li_dm", "", "DM")
+            set_suggestion(conn, app_id, "Analytics Lead", "Owns hire", "https://www.linkedin.com/search/x", [])
+            transition(conn, app_id, "drafted")
+        ids.append(app_id)
+    conn.close()
+    return tuple(ids)

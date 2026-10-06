@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="filters" method="get" action="/">
+  <select name="band">{% for b in ["apply", "review", "hide", "all"] %}<option value="{{ b }}" {% if b == f.band %}selected{% endif %}>{{ b }}</option>{% endfor %}</select>
+  <select name="family"><option value="">all roles</option>{% for x in families %}<option {% if x == f.family %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+  <select name="city"><option value="">all cities</option>{% for x in cities %}<option {% if x == f.city %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+  <select name="source"><option value="">all sources</option>{% for x in sources %}<option {% if x == f.source %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+  <button>Filter</button>
+  <span class="hint">j/k move · enter open · s skip · z snooze</span>
+</form>
+<table class="inbox" data-keys="rows">
+  <thead><tr><th>Score</th><th>Role</th><th>Company</th><th>City</th><th>Age</th><th>Source</th><th>Why</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr data-href="/applications/{{ r.app_id }}">
+      <td class="score {% if r.score >= 70 %}hi{% elif r.score >= 50 %}mid{% else %}lo{% endif %}">{{ r.score }}</td>
+      <td><a href="/applications/{{ r.app_id }}">{{ r.title }}</a> <span class="tag">{{ r.role_family|replace("_", " ") }}</span> <span class="tag muted">{{ r.status }}</span></td>
+      <td>{{ r.company }}</td>
+      <td>{{ r.location_city or ("remote" if r.remote else (r.location or "?")) }}</td>
+      <td>{{ (r.posted_at or r.first_seen_at)|age }}</td>
+      <td>{{ r.source }}</td>
+      <td class="why">{% for m in (r.matches|fromjson)[:2] %}<span class="m">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %}<span class="g">✗ {{ g }}</span>{% endfor %}</td>
+      <td class="acts">
+        <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="/"><button data-key="s" title="Skip (s)">Skip</button></form>
+        <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="/"><button data-key="z" title="Snooze 3 days (z)">Snooze</button></form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="empty">Nothing here yet. Run <code>jobseeker run</code> or change the filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

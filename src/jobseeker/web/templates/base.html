@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Job Seeker{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/keys.js" defer></script>
+</head>
+<body hx-boost="true">
+  <header class="top">
+    <a class="brand" href="/">Job Seeker</a>
+    <nav><a href="/">Inbox</a><a href="/pipeline">Pipeline</a></nav>
+    {% if run_errors %}<span class="warn" title="{{ run_errors|join('\n') }}">Last run: {{ run_errors|length }} error(s)</span>{% endif %}
+  </header>
+  {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timedelta
+
+from jobseeker.db.applications import get_application, get_drafts, get_events
+from jobseeker.db.core import iso
+from jobseeker.db.jobs import get_job, latest_score
+
+_LATEST_SCORE = "s.id = (SELECT id FROM scores WHERE job_id = j.id ORDER BY id DESC LIMIT 1)"
+_INBOX_STATUSES = ("new", "shortlisted", "drafted")
+PIPELINE_COLUMNS = ["shortlisted", "drafted", "approved", "sent", "replied", "interview",
+                    "applied_via_portal", "offer", "rejected"]
+
+
+def inbox(conn: sqlite3.Connection, band: str = "apply", family: str | None = None, city: str | None = None,
+          source: str | None = None, status: str | None = None) -> list[dict]:
+    sql = f"""SELECT a.id AS app_id, a.status, j.id AS job_id, j.title, j.company, j.location, j.location_city,
+                     j.remote, j.posted_at, j.first_seen_at, j.source, s.score, s.matches, s.gaps,
+                     s.role_family, s.recommendation
+              FROM applications a JOIN jobs j ON j.id = a.job_id JOIN scores s ON {_LATEST_SCORE}
+              WHERE 1 = 1"""
+    params: list = []
+    if band in ("apply", "review", "hide"):
+        sql += " AND s.recommendation = ?"
+        params.append(band)
+    if status:
+        sql += " AND a.status = ?"
+        params.append(status)
+    else:
+        sql += f" AND a.status IN ({','.join('?' * len(_INBOX_STATUSES))})"
+        params += list(_INBOX_STATUSES)
+    for col, val in (("s.role_family", family), ("j.location_city", city), ("j.source", source)):
+        if val:
+            sql += f" AND {col} = ?"
+            params.append(val)
+    sql += " ORDER BY s.score DESC, j.first_seen_at DESC LIMIT 300"
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def inbox_facets(conn: sqlite3.Connection) -> dict:
+    def distinct(sql):
+        return [r[0] for r in conn.execute(sql).fetchall() if r[0]]
+    return {
+        "families": distinct("SELECT DISTINCT role_family FROM scores ORDER BY 1"),
+        "cities": distinct("SELECT DISTINCT location_city FROM jobs ORDER BY 1"),
+        "sources": distinct("SELECT DISTINCT source FROM jobs ORDER BY 1"),
+    }
+
+
+def application_detail(conn: sqlite3.Connection, app_id: int) -> dict | None:
+    app = get_application(conn, app_id)
+    if not app:
+        return None
+    contact = None
+    if app["contact_id"]:
+        row = conn.execute("SELECT * FROM contacts WHERE id = ?", (app["contact_id"],)).fetchone()
+        contact = dict(row) if row else None
+    return {
+        "app": app, "job": get_job(conn, app["job_id"]), "score": latest_score(conn, app["job_id"]),
+        "contact": contact, "drafts": get_drafts(conn, app_id), "events": get_events(conn, app_id),
+        "warnings": json.loads(app["draft_warnings"]),
+    }
+
+
+def pipeline(conn: sqlite3.Connection, now: datetime) -> dict[str, list[dict]]:
+    rows = conn.execute(
+        f"""SELECT a.id AS app_id, a.status, a.followups_sent, j.title, j.company, s.score,
+                   (SELECT at FROM events e WHERE e.application_id = a.id ORDER BY e.id DESC LIMIT 1) AS last_at
+            FROM applications a JOIN jobs j ON j.id = a.job_id JOIN scores s ON {_LATEST_SCORE}
+            WHERE a.status IN ({','.join('?' * len(PIPELINE_COLUMNS))})
+            ORDER BY s.score DESC""", PIPELINE_COLUMNS).fetchall()
+    board: dict[str, list[dict]] = {c: [] for c in PIPELINE_COLUMNS}
+    for r in rows:
+        card = dict(r)
+        last = datetime.fromisoformat(card["last_at"]) if card["last_at"] else now
+        card["days_since"] = max(0, (now - last).days)
+        card["needs_followup"] = card["status"] == "sent" and card["days_since"] >= 5 and card["followups_sent"] < 2
+        board[card["status"]].append(card)
+    return board
+
+
+def stats(conn: sqlite3.Connection, now: datetime, days: int = 30) -> dict:
+    since = iso(now - timedelta(days=days))
+
+    def moved_to(status: str) -> int:
+        return conn.execute(
+            """SELECT COUNT(DISTINCT application_id) FROM events
+               WHERE type = 'status' AND json_extract(payload, '$.to') = ? AND at >= ?""",
+            (status, since)).fetchone()[0]
+
+    sent, replied = moved_to("sent"), moved_to("replied")
+    per_source = {r["source"]: r["n"] for r in conn.execute(
+        "SELECT source, COUNT(*) AS n FROM jobs WHERE first_seen_at >= ? GROUP BY source ORDER BY n DESC",
+        (since,)).fetchall()}
+    return {"drafted": moved_to("drafted"), "sent": sent, "replied": replied,
+            "reply_rate": (replied / sent) if sent else 0.0, "interviews": moved_to("interview"),
+            "jobs_per_source": per_source}
