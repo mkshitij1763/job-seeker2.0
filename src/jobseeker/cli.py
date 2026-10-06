@@ -43,7 +43,9 @@ def _run(fetch: bool, force: bool) -> None:
     settings, prefs, rubric = _load()
     conn = connect(settings.db_path)
     facts = load_facts(settings.facts_path)
-    sources = build_sources(load_companies(settings.companies_path))
+    from jobseeker.db.companies import active_companies
+
+    sources = build_sources(load_companies(settings.companies_path), active_companies(conn), prefs.search)
     with make_client() as client:
         stats = run_daily(conn, sources=sources, client=client, llm=GroqLLM(settings.groq_api_key),
                           facts=facts, prefs=prefs, rubric=rubric, fetch=fetch, force_rescore=force)
@@ -60,6 +62,28 @@ def run() -> None:
 def rescore() -> None:
     """Re-score existing jobs (after editing rubric.yaml or preferences)."""
     _run(fetch=False, force=True)
+
+
+@app.command()
+def companies() -> None:
+    """List companies discovered automatically from job-site results."""
+    from jobseeker.db.companies import list_companies
+
+    settings, _, _ = _load()
+    rows = list_companies(connect(settings.db_path))
+    if not rows:
+        typer.echo("No companies discovered yet. They appear after `jobseeker run`.")
+        return
+    labels = {"active": "Boards found", "none": "No board", "inactive": "Board gone"}
+    for status, label in labels.items():
+        group = [r for r in rows if r["status"] == status]
+        if not group:
+            continue
+        typer.echo(f"\n{label} ({len(group)})")
+        for r in group:
+            board = f"{r['ats']}:{r['slug']}" if r["ats"] else "-"
+            typer.echo(f"  {r['display_name'][:34]:<35}{board:<30}jobs seen {r['jobs_seen']:<5}"
+                       f"checked {r['checked_at'][:10]}")
 
 
 @app.command()
