@@ -1,0 +1,10 @@
+.env
+secrets/
+data/
+profile/resume.pdf
+profile/facts.json
+*.pdf
+__pycache__/
+.venv/
+.pytest_cache/
+.DS_Store
