@@ -1,0 +1,130 @@
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+from jobseeker.db.applications import get_application, get_drafts, get_status
+from jobseeker.db.core import connect
+from jobseeker.gmail.client import GmailUnavailable
+from jobseeker.outreach.drafter import DraftBundle
+from jobseeker.web.app import create_app
+from tests.fakes import FakeLLM
+
+
+class FakeGmail:
+    def __init__(self, fail=False):
+        self.fail, self.raws = fail, []
+
+    def users(self):
+        outer = self
+
+        class Drafts:
+            def create(self, userId, body):
+                if outer.fail:
+                    raise GmailUnavailable("expired")
+                outer.raws.append(body["message"]["raw"])
+
+                class R:
+                    def execute(self):
+                        return {"id": "draft-1"}
+                return R()
+
+        class U:
+            def drafts(self):
+                return Drafts()
+        return U()
+
+
+@pytest.fixture
+def ctx(settings, seeded, facts):
+    settings.resume_path.write_bytes(b"%PDF-1.5 fake")
+    settings.facts_path.write_text(json.dumps({"resume_sha256": "x", "facts": facts.model_dump()}))
+    gmail = FakeGmail()
+    llm = FakeLLM(handler=lambda schema, prompt: DraftBundle(
+        contact_role="Founder", contact_reason="r", email_subject="New subject",
+        email_body="Fresh body citing 67%.", li_note="n", li_dm="d"))
+    client = TestClient(create_app(settings, llm_factory=lambda: llm, gmail_factory=lambda: gmail),
+                        follow_redirects=False)
+    return client, settings, seeded, gmail
+
+
+def db(settings):
+    return connect(settings.db_path)
+
+
+def test_detail_renders(ctx):
+    client, _, (a, _), _ = ctx
+    r = client.get(f"/applications/{a}")
+    assert r.status_code == 200
+    assert "Email body citing 67%." in r.text and "<mark>SQL</mark>" in r.text
+    assert "Analytics Lead" in r.text
+
+
+def test_detail_404(ctx):
+    client, *_ = ctx
+    assert client.get("/applications/999").status_code == 404
+
+
+def test_approve_requires_contact_email(ctx):
+    client, settings, (a, _), _ = ctx
+    r = client.post(f"/applications/{a}/approve")
+    assert r.status_code == 303 and "err=" in r.headers["location"]
+    assert get_status(db(settings), a) == "drafted"
+
+
+def test_approve_unverified_needs_confirmation_then_creates_draft(ctx):
+    client, settings, (a, _), gmail = ctx
+    client.post(f"/applications/{a}/contact", data={"name": "Asha", "role": "PM", "linkedin_url": "",
+                                                    "email": "asha@cred.club", "email_status": "unverified"})
+    r = client.post(f"/applications/{a}/approve")
+    assert "err=" in r.headers["location"] and gmail.raws == []
+    r = client.post(f"/applications/{a}/approve", data={"confirm_unverified": "true"})
+    assert "msg=" in r.headers["location"]
+    conn = db(settings)
+    assert get_status(conn, a) == "approved"
+    assert get_drafts(conn, a)["email"]["gmail_draft_id"] == "draft-1"
+    assert len(gmail.raws) == 1
+
+
+def test_approve_gmail_unavailable_keeps_state(settings, seeded, facts):
+    settings.resume_path.write_bytes(b"%PDF fake")
+    a = seeded[0]
+    client = TestClient(create_app(settings, gmail_factory=lambda: FakeGmail(fail=True)), follow_redirects=False)
+    client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",
+                                                    "email": "a@x.com", "email_status": "verified"})
+    r = client.post(f"/applications/{a}/approve")
+    assert "Reconnect" in r.headers["location"] or "auth-gmail" in r.headers["location"]
+    conn = db(settings)
+    assert get_status(conn, a) == "drafted"
+    assert get_drafts(conn, a)["email"]["body"] == "Email body citing 67%."
+
+
+def test_edit_draft_marks_edited_and_reopens_approved(ctx):
+    client, settings, (a, _), _ = ctx
+    client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",
+                                                    "email": "a@x.com", "email_status": "verified"})
+    client.post(f"/applications/{a}/approve")
+    client.post(f"/applications/{a}/drafts/email", data={"subject": "S2", "body": "Edited"})
+    conn = db(settings)
+    assert get_drafts(conn, a)["email"]["edited"] == 1 and get_status(conn, a) == "drafted"
+
+
+def test_regenerate_and_draft_now(ctx):
+    client, settings, (a, review_app), _ = ctx
+    client.post(f"/applications/{review_app}/draft")
+    conn = db(settings)
+    assert get_status(conn, review_app) == "drafted"
+    assert get_drafts(conn, review_app)["email"]["subject"] == "New subject"
+
+
+def test_status_snooze_notes_followup_not_interested(ctx):
+    client, settings, (a, review_app), _ = ctx
+    client.post(f"/applications/{a}/notes", data={"notes": "Ping Rohan for referral"})
+    client.post(f"/applications/{review_app}/snooze", data={"next": "/"})
+    conn = db(settings)
+    assert get_application(conn, a)["notes"] == "Ping Rohan for referral"
+    assert get_status(conn, review_app) == "snoozed"
+    r = client.post(f"/applications/{a}/status", data={"status": "interview"})
+    assert "err=" in r.headers["location"]
+    client.post(f"/applications/{a}/not-interested", data={"block_company": "true"})
+    assert get_status(db(settings), a) == "not_interested"

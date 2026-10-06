@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
+{% block content %}
+<div class="detail">
+  <section>
+    <h1>{{ job.title }}</h1>
+    <p class="meta">{{ job.company }} · {{ job.location or "location not stated" }}{% if job.remote %} · remote{% endif %} · {{ job.source }} · posted {{ (job.posted_at or job.first_seen_at)|age }}{% if job.salary_text %} · {{ job.salary_text }}{% endif %}</p>
+    <p><a href="{{ job.apply_url }}" target="_blank" rel="noopener">Open posting ↗</a> · status <span class="tag">{{ app.status|replace("_", " ") }}</span></p>
+    {% if score %}
+    <div class="scorebox">
+      <span class="big">{{ score.score }}</span>
+      <div>
+        <ul>{% for k, v in (score.breakdown|fromjson).items() %}<li>{{ k|replace("_", " ") }}: {{ v }}</li>{% endfor %}</ul>
+        <p>{% for m in score.matches|fromjson %}<span class="m">✓ {{ m }}</span> {% endfor %}{% for g in score.gaps|fromjson %}<span class="g">✗ {{ g }}</span> {% endfor %}</p>
+      </div>
+    </div>
+    {% endif %}
+    <article class="jd">{{ job.jd_text|highlight(terms) }}</article>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>Contact</h2>
+      {% if app.suggested_contact_role %}
+      <p>Suggested: <strong>{{ app.suggested_contact_role }}</strong>. {{ app.suggested_contact_reason }}
+        <a href="{{ app.linkedin_search_url }}" target="_blank" rel="noopener">Search LinkedIn ↗</a></p>
+      {% endif %}
+      <form method="post" action="/applications/{{ app.id }}/contact" class="grid">
+        <input name="name" placeholder="Name" value="{{ contact.name if contact else '' }}">
+        <input name="role" placeholder="Role" value="{{ contact.role if contact else app.suggested_contact_role }}">
+        <input name="linkedin_url" placeholder="LinkedIn URL" value="{{ contact.linkedin_url if contact else '' }}">
+        <input name="email" type="email" placeholder="Email" value="{{ contact.email if contact else '' }}">
+        <select name="email_status">{% for s in ["unverified", "verified", "bounced"] %}<option {% if contact and contact.email_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+        <button>Save contact</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Drafts</h2>
+      {% if warnings %}<p class="warn">Check before sending: {{ warnings|join("; ") }}</p>{% endif %}
+      {% if not drafts %}
+        <form method="post" action="/applications/{{ app.id }}/draft"><button>Draft now</button></form>
+      {% else %}
+        <details open><summary>Email</summary>
+          <form method="post" action="/applications/{{ app.id }}/drafts/email">
+            <input name="subject" value="{{ drafts.email.subject }}" style="width:100%">
+            <textarea name="body" rows="11" data-limit="150" data-unit="words" data-counter="#c_email">{{ drafts.email.body }}</textarea>
+            <small id="c_email"></small> <button>Save</button>
+          </form>
+        </details>
+        <details><summary>LinkedIn note</summary>
+          <form method="post" action="/applications/{{ app.id }}/drafts/li_note">
+            <textarea id="li_note" name="body" rows="4" data-limit="300" data-unit="chars" data-counter="#c_note">{{ drafts.li_note.body }}</textarea>
+            <small id="c_note"></small> <button>Save</button>
+            <button type="button" data-copy="#li_note" data-open="{{ contact.linkedin_url if contact and contact.linkedin_url else app.linkedin_search_url }}">Copy &amp; open LinkedIn</button>
+          </form>
+        </details>
+        <details><summary>LinkedIn DM</summary>
+          <form method="post" action="/applications/{{ app.id }}/drafts/li_dm">
+            <textarea id="li_dm" name="body" rows="5" data-limit="600" data-unit="chars" data-counter="#c_dm">{{ drafts.li_dm.body }}</textarea>
+            <small id="c_dm"></small> <button>Save</button>
+            <button type="button" data-copy="#li_dm">Copy</button>
+          </form>
+        </details>
+        <form method="post" action="/applications/{{ app.id }}/draft"><button>Regenerate all</button></form>
+      {% endif %}
+    </div>
+
+    <div class="card actions">
+      <form method="post" action="/applications/{{ app.id }}/approve">
+        {% if contact and contact.email and contact.email_status != "verified" %}
+        <label><input type="checkbox" name="confirm_unverified" value="true"> Email is unverified, draft anyway</label><br>
+        {% endif %}
+        <button class="primary">Approve → Gmail draft</button>
+      </form>
+      {% if drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
+      {% for s, label in [("sent", "Mark sent"), ("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
+      <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button>{{ label }}</button></form>
+      {% endfor %}
+      <form method="post" action="/applications/{{ app.id }}/snooze"><button>Snooze 3d</button></form>
+      {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button>Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
+      <form method="post" action="/applications/{{ app.id }}/not-interested">
+        <label><input type="checkbox" name="block_company" value="true"> also block company</label>
+        <button>Not interested</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Notes</h2>
+      <form method="post" action="/applications/{{ app.id }}/notes">
+        <textarea name="notes" rows="4" placeholder="Referral source, call notes…">{{ app.notes }}</textarea>
+        <button>Save notes</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <ul class="events">{% for e in events %}<li>{{ e.at[:16]|replace("T", " ") }} · {{ e.type }} {{ e.payload }}</li>{% endfor %}</ul>
+    </div>
+  </section>
+</div>
+{% endblock %}
