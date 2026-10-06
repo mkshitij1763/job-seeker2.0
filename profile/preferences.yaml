@@ -19,7 +19,8 @@ current_ctc_lpa: 20.7
 target_base_lpa: 25
 must_haves: []
 deal_breakers: []
-title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president, account executive, recruiter]
+title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president, account executive, recruiter,
+  designer, design lead, engineer, engineering, developer, architect, product marketing]
 # a title must contain at least one of these (cheap gate before any LLM call)
 title_allow: [product, analyst, analytics, founder, chief of staff, growth, strategy, insights, business intelligence]
 drop_if_min_years_at_least: 8

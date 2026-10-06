@@ -31,7 +31,7 @@ def test_drops_title_deny_word_boundary(prefs):
 
 
 def test_drops_titles_outside_allow_list(prefs):
-    assert prefilter(make_job(title="Data Engineer"), prefs, NOW, set()) == "title: not a target role"
+    assert prefilter(make_job(title="Customer Support Lead"), prefs, NOW, set()) == "title: not a target role"
     assert prefilter(make_job(title="Chief of Staff to CEO"), prefs, NOW, set()) is None
     assert prefilter(make_job(title="Founder's Office Associate"), prefs, NOW, set()) is None
 
@@ -56,3 +56,19 @@ def test_experience_and_age_and_block(prefs):
 ])
 def test_min_years_ignores_non_requirement_phrases(text):
     assert min_years_required(text) is None
+
+
+@pytest.mark.parametrize("title", [
+    "Senior Product Designer", "Lead Product Designer", "Senior Staff Engineer, Product Security",
+    "Product Engineering Manager", "Senior Manager - Product Marketing",
+])
+def test_drops_non_pm_product_titles(prefs, title):
+    assert prefilter(make_job(title=title), prefs, NOW, set()).startswith("title: ")
+
+
+@pytest.mark.parametrize("title", [
+    "Product Management - Associate Product Manager - Travel.", "Product Manager II",
+    "Associate - User Growth (Market intelligence)", "Senior Product Analyst",
+])
+def test_keeps_target_titles(prefs, title):
+    assert prefilter(make_job(title=title), prefs, NOW, set()) is None
