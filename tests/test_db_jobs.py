@@ -98,3 +98,46 @@ def test_same_source_refresh_without_alternates_takes_new_jd():
     job_id, _ = upsert_job(conn, make_job(jd_text="a long original description"))
     upsert_job(conn, make_job(jd_text="edited"))
     assert get_job(conn, job_id)["jd_text"] == "edited"
+
+
+def test_jobs_needing_score_orders_by_prescore():
+    from jobseeker.db.jobs import set_prescore
+
+    conn = _conn()
+    a, _ = upsert_job(conn, make_job(source_job_id="a", fingerprint="fa"))
+    b, _ = upsert_job(conn, make_job(source_job_id="b", fingerprint="fb"))
+    c, _ = upsert_job(conn, make_job(source_job_id="c", fingerprint="fc"))
+    set_prescore(conn, a, 40)
+    set_prescore(conn, b, 90)
+    assert [r["id"] for r in jobs_needing_score(conn, "v1", -1)] == [b, a, c]
+
+
+def test_set_jd_text_keeps_longer_and_rehashes():
+    from jobseeker.db.jobs import set_jd_text
+
+    conn = _conn()
+    job_id, _ = upsert_job(conn, make_job(jd_text=""))
+    set_jd_text(conn, job_id, "full description")
+    set_jd_text(conn, job_id, "short")
+    row = get_job(conn, job_id)
+    assert row["jd_text"] == "full description" and row["jd_hash"] == jd_hash("full description")
+
+
+def test_expire_unscored_and_missing_prescore():
+    from datetime import UTC, datetime, timedelta
+
+    from jobseeker.db.jobs import expire_unscored, jobs_missing_prescore, set_prescore
+
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    conn = _conn()
+    old, _ = upsert_job(conn, make_job(source_job_id="old", fingerprint="fo", posted_at=now - timedelta(days=9)))
+    fresh, _ = upsert_job(conn, make_job(source_job_id="new", fingerprint="fn", posted_at=now - timedelta(days=1)))
+    scored, _ = upsert_job(conn, make_job(source_job_id="s", fingerprint="fs", posted_at=now - timedelta(days=9)))
+    save_score(conn, scored, ScoreResult(score=80, breakdown={}, matches=[], gaps=[], recommendation="apply",
+                                         role_family="other"), "m", "v1", "h")
+    assert expire_unscored(conn, now, 7) == 1
+    assert get_job(conn, old)["filter_reason"] == "stale: never scored"
+    assert get_job(conn, scored)["filter_reason"] is None
+    assert [r["id"] for r in jobs_missing_prescore(conn)] == [fresh]
+    set_prescore(conn, fresh, 50)
+    assert jobs_missing_prescore(conn) == []

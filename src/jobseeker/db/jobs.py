@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from jobseeker.db.core import iso, utcnow
 from jobseeker.models import Job, ScoreResult, jd_hash
@@ -74,6 +74,36 @@ def get_job(conn: sqlite3.Connection, job_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def set_prescore(conn: sqlite3.Connection, job_id: int, score: int) -> None:
+    conn.execute("UPDATE jobs SET prescore = ? WHERE id = ?", (score, job_id))
+    conn.commit()
+
+
+def set_jd_text(conn: sqlite3.Connection, job_id: int, text: str) -> None:
+    """Store a fetched description, keeping whichever text is longer."""
+    row = conn.execute("SELECT jd_text FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if row and len(text) > len(row["jd_text"]):
+        conn.execute("UPDATE jobs SET jd_text = ?, jd_hash = ? WHERE id = ?", (text, jd_hash(text), job_id))
+        conn.commit()
+
+
+def expire_unscored(conn: sqlite3.Connection, now: datetime, max_age_days: int) -> int:
+    cutoff = iso(now - timedelta(days=max_age_days))
+    cur = conn.execute(
+        """UPDATE jobs SET filter_reason = 'stale: never scored'
+           WHERE filter_reason IS NULL AND COALESCE(posted_at, first_seen_at) < ?
+           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.job_id = jobs.id)""", (cutoff,))
+    conn.commit()
+    return cur.rowcount
+
+
+def jobs_missing_prescore(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL AND j.prescore IS NULL
+           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.job_id = j.id) ORDER BY j.id""").fetchall()
+    return [dict(r) for r in rows]
+
+
 def job_from_row(row: dict) -> Job:
     return Job(
         source=row["source"], source_job_id=row["source_job_id"], company=row["company"],
@@ -87,14 +117,14 @@ def job_from_row(row: dict) -> Job:
 
 def jobs_needing_score(conn: sqlite3.Connection, rubric_version: str, limit: int,
                        force: bool = False) -> list[dict]:
+    order = "ORDER BY COALESCE(j.prescore, -1) DESC, j.first_seen_at DESC, j.id DESC LIMIT ?"
     if force:
-        sql = "SELECT * FROM jobs WHERE filter_reason IS NULL ORDER BY first_seen_at DESC, id DESC LIMIT ?"
+        sql = f"SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL {order}"
         params: tuple = (limit,)
     else:
-        sql = """SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL AND NOT EXISTS (
-                   SELECT 1 FROM scores s WHERE s.job_id = j.id
-                   AND s.rubric_version = ? AND s.jd_hash = j.jd_hash)
-                 ORDER BY j.first_seen_at DESC, j.id DESC LIMIT ?"""
+        sql = f"""SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL AND NOT EXISTS (
+                    SELECT 1 FROM scores s WHERE s.job_id = j.id
+                    AND s.rubric_version = ? AND s.jd_hash = j.jd_hash) {order}"""
         params = (rubric_version, limit)
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
