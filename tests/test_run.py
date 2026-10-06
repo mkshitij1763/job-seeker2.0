@@ -99,3 +99,15 @@ def test_budget_limits_scoring(prefs, rubric, facts):
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(5)]
     stats = _run(conn, [StaticSource("lever:cred", jobs)], FakeLLM(handler=handler), prefs, rubric, facts)
     assert stats.scored == 2
+
+
+def test_run_records_actual_finish_time(prefs, rubric, facts):
+    from datetime import timedelta
+
+    conn = connect(":memory:")
+    times = iter([NOW, NOW + timedelta(minutes=5)])
+    run_daily(conn, sources=[], client=None, llm=FakeLLM(handler=handler), facts=facts, prefs=prefs,
+              rubric=rubric, clock=lambda: next(times))
+    run = last_run(conn)
+    assert run["started_at"] == "2026-10-07T02:00:00+00:00"
+    assert run["finished_at"] == "2026-10-07T02:05:00+00:00"

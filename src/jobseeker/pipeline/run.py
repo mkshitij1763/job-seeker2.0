@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
@@ -55,8 +56,9 @@ def _apps_needing_drafts(conn: sqlite3.Connection, limit: int) -> list[int]:
 
 def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Facts, prefs: Preferences,
               rubric: Rubric, now: datetime | None = None, fetch: bool = True,
-              force_rescore: bool = False) -> RunStats:
-    now = now or datetime.now(UTC)
+              force_rescore: bool = False,
+              clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> RunStats:
+    now = now or clock()
     stats = RunStats()
     run_id = start_run(conn, now)
     wake_snoozed(conn, now)
@@ -115,5 +117,5 @@ def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Fac
 
     data = asdict(stats)
     errors = data.pop("errors")
-    finish_run(conn, run_id, data, errors, now)
+    finish_run(conn, run_id, data, errors, clock())
     return stats
