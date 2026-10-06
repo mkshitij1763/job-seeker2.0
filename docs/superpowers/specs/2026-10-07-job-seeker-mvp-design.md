@@ -1,7 +1,7 @@
 # job-seeker2.0 — MVP Design
 
 **Date:** 2026-10-07
-**Status:** Approved in brainstorming (sections 1–4 by user; section 5 and this document self-reviewed at user's request)
+**Status:** Approved in brainstorming (sections 1–4 by user; section 5 and this document self-reviewed at user's request). Revised 2026-10-07: free Groq LLM instead of the Claude API, JSearch deferred, resume used as-is.
 **Scope:** Sub-project A (discovery → scoring → tracker → dashboard) plus the drafting slice of sub-project B (outreach drafts + Gmail drafts, manual contacts).
 
 ---
@@ -35,11 +35,11 @@ Stored in `profile/preferences.yaml` (user-editable). Initial values:
 | LinkedIn | https://www.linkedin.com/in/kshitijmeshram1763/ |
 | GitHub | https://github.com/mkshitij1763 |
 
-**Pre-requisite (user action, outside the app):** the resume PDF header has wrong display text for LinkedIn/GitHub and a broken `mailto:` link. Fix in the Overleaf source (`heading.tex`), recompile, and save as `profile/resume.pdf`. Until then the current `winter_arc.pdf` is used.
+**Resume for now:** `winter_arc.pdf` is used as-is (moved to `profile/resume.pdf`). Known issue to fix later in Overleaf (`heading.tex`): the LinkedIn/GitHub display text is wrong and the `mailto:` link is broken. Once fixed, replace `profile/resume.pdf`; facts are re-extracted automatically because the file hash changes.
 
 ## 3. Out of scope for MVP (planned later phases)
 
-- **Phase 2 sources:** JobSpy and Apify adapters (LinkedIn, Naukri, Instahyre, Indeed, Glassdoor), with per-source rate limits.
+- **Phase 2 sources:** JobSpy and Apify adapters (LinkedIn, Naukri, Instahyre, Indeed, Glassdoor), with per-source rate limits. Aggregator APIs that need a RapidAPI key (e.g. JSearch) are deferred too.
 - Contact discovery via Hunter/Apollo and email verification.
 - LinkedIn assist mode and "we're hiring" post monitoring.
 - Reply detection (Gmail read scope), automated follow-up drafting.
@@ -54,18 +54,17 @@ Python 3.13, managed with `uv`. One package, `jobseeker`, of small single-purpos
 ```
 jobseeker/
   config.py        load preferences.yaml, companies.yaml, rubric.yaml, .env (pydantic-settings)
-  profile/         resume.pdf → text (PyMuPDF) → facts.json via Claude (cached by resume hash)
+  profile/         resume.pdf → text (PyMuPDF) → facts.json via the LLM (cached by resume hash)
   sources/
     base.py        Source protocol: name, fetch(since) -> list[RawJob]
     greenhouse.py  boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true
     lever.py       api.lever.co/v0/postings/{slug}?mode=json
     ashby.py       api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true
-    jsearch.py     RapidAPI JSearch: query per (role × city), country=in, date_posted=3days
   pipeline/
     normalize.py   RawJob → Job (common schema), city/title canonicalisation
     dedup.py       exact (source, source_job_id) + cross-source fingerprint
     prefilter.py   rule-based drops (no LLM)
-  scoring/         Claude structured-output scorer + rubric.yaml
+  scoring/         LLM structured-output scorer + rubric.yaml
   outreach/        contact suggestion, email, LinkedIn note, LinkedIn DM; fact & style guards
   gmail/           OAuth (gmail.compose) + create draft with resume attachment
   db/              SQLite schema, migrations, repository functions
@@ -79,7 +78,7 @@ Each source adapter is independent: adding JobSpy/Apify in phase 2 means adding 
 
 ```
 sources (in parallel, each isolated) → normalize → dedup (vs DB) → prefilter
-  → score (Claude, only new or changed JD/rubric) → for score ≥ 70: draft outreach (Claude)
+  → score (LLM, only new or changed JD/rubric) → for score ≥ 70: draft outreach (LLM)
   → persist to SQLite → write run summary (counts per stage, errors)
 ```
 
@@ -133,13 +132,13 @@ A score is reused if `jd_hash` and `rubric_version` both match. `jobseeker resco
 
 A job is dropped (kept in `jobs` with `filter_reason` set, never deleted, and never scored) if:
 - its location is not one of the four cities and it is not remote-within-India;
-- its title matches the deny-list in `preferences.yaml` (initial: sales, SDE/software engineer, intern, director, head of, VP);
+- its title matches the deny-list in `preferences.yaml` (initial: sales, SDE/software engineer, intern, director, head of, VP), or contains none of the `title_allow` keywords (product, analyst, analytics, founder, chief of staff, growth, strategy, insights, business intelligence);
 - its JD explicitly requires **8+ years** of experience (regex over "N+ years" patterns);
 - it was posted more than 7 days ago.
 
 ## 7. Scoring
 
-Claude (default `claude-sonnet-5-5`, configurable) with structured JSON output. The JD is passed as clearly delimited untrusted data; the system prompt instructs the model to ignore any instructions inside it.
+Groq free tier, default `openai/gpt-oss-20b` (configurable), with strict structured JSON output (`response_format` json_schema, `strict: true`) and `reasoning_effort: low`. The JD is capped at 8,000 characters, passed as clearly delimited untrusted data, and the system prompt instructs the model to ignore any instructions inside it.
 
 ### Rubric (`rubric.yaml`, versioned)
 
@@ -158,7 +157,7 @@ Output: `score`, `breakdown`, `matches` (≤ 3), `gaps` (≤ 2), `recommendation
 
 ## 8. Outreach drafting
 
-Generated only for `apply` jobs (or on demand). Default model `claude-opus-5-5`, configurable.
+Generated only for `apply` jobs (or on demand). Default model `openai/gpt-oss-120b` on Groq (configurable), `reasoning_effort: medium`.
 
 1. **Contact suggestion:** the target role to contact (Founder's Office → founder / chief of staff; APM/PM → hiring PM or product lead; analyst → analytics lead or recruiter), reasoning in one line, and a LinkedIn people-search URL (`linkedin.com/search/results/people/?keywords=<company> <role>`). The user pastes the actual name/email; email defaults to `unverified`.
 2. **Cold email:** ≤ 150 words, subject line, a specific hook from the JD/company, 2–3 achievements selected from `facts.json`, one clear ask, mentions the attached resume.
@@ -172,7 +171,7 @@ Generated only for `apply` jobs (or on demand). Default model `claude-opus-5-5`,
 - **Untrusted input:** JD text is data; outputs are plain text, and HTML is escaped when rendered.
 
 ### Resume facts
-`jobseeker init` extracts resume text with PyMuPDF, asks Claude to produce `profile/facts.json` (a list of achievements with their exact metrics, skills, roles, dates), and writes it to disk for the user to review/edit. Re-extracted only when the resume file hash changes.
+`jobseeker init` extracts resume text with PyMuPDF, asks the LLM (`openai/gpt-oss-120b`) to produce `profile/facts.json` (a list of achievements with their exact metrics, skills, roles, dates), and writes it to disk for the user to review/edit. Re-extracted only when the resume file hash changes.
 
 ## 9. Dashboard (FastAPI + Jinja2 + HTMX)
 
@@ -199,19 +198,20 @@ Server-rendered, keyboard-friendly, light/dark mode, dense "inbox" styling (guid
 - **Schedule:** a macOS `launchd` agent (`~/Library/LaunchAgents/com.kshitij.jobseeker.plist`) runs `jobseeker run` daily at 07:30; if the Mac was asleep it runs on wake. Logs go to `data/logs/`.
 - **Source isolation:** each source runs in its own try block with a timeout (20 s per request, 3 retries with backoff on 429/5xx). One failing source never fails the run; its error is recorded in `runs.errors` and shown as a banner in the dashboard.
 - **LLM failures:** a job whose scoring fails stays `new` and is retried on the next run; failed drafts can be regenerated from the UI.
-- **Budgets:** per-run caps in config (default: score ≤ 80 jobs, draft ≤ 15 jobs, JSearch ≤ 8 requests/day to fit the free tier).
-- **Secrets:** `ANTHROPIC_API_KEY`, `RAPIDAPI_KEY` in `.env`; `.env`, `secrets/`, `data/` (DB, logs) and `profile/resume.pdf` are git-ignored. `.env.example` is committed.
+- **LLM provider and limits:** Groq free tier only (no paid API). Free limits per model: 30 req/min, 1K req/day, 8K tokens/min, 200K tokens/day. Scoring and drafting use different models so each gets its own daily quota. 429s are waited out via `retry-after` (≤ 65 s per wait); a `retry-after` > 120 s means the daily quota is used up, so LLM work stops for that run and resumes the next day.
+- **Budgets:** per-run caps in config (default: score ≤ 35 jobs, draft ≤ 10 jobs), sized to fit the Groq free tier.
+- **Secrets:** `GROQ_API_KEY` in `.env`; `.env`, `secrets/`, `data/` (DB, logs) and `profile/resume.pdf` are git-ignored. `.env.example` is committed.
 
 ## 12. Configuration files
 
-- `profile/preferences.yaml`: profile values from §2, title deny-list, cities, salary numbers, thresholds.
+- `profile/preferences.yaml`: profile values from §2, title deny/allow lists, cities, salary numbers, thresholds, budgets, models.
 - `companies.yaml`: watchlist entries `{name, ats: greenhouse|lever|ashby, slug, tier}`. Seeded during implementation with Indian product/AI companies whose public board endpoints are **verified to respond**; unverifiable entries are left out. The user extends it over time.
 - `rubric.yaml`: weights and rules from §7, plus `version`.
 
 ## 13. Testing
 
 - `pytest`, with network disabled by default.
-- **Source adapters:** tested against recorded JSON fixtures of real Greenhouse/Lever/Ashby/JSearch responses.
+- **Source adapters:** tested against recorded JSON fixtures of real Greenhouse/Lever/Ashby responses.
 - **Pipeline:** unit tests for normalisation (city/title aliases), fingerprint collisions, prefilter rules (including "8+ years" regex edge cases).
 - **LLM components:** tested through a fake client returning canned structured output. Guard tests cover a draft with an invented metric (rejected), a banned phrase (regenerated) and an over-length note (regenerated).
 - **Status machine:** tests for allowed and disallowed transitions, event logging, the unique (job, contact) constraint and the blocklist.
