@@ -15,9 +15,14 @@ def connect(path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
-    # Only create the schema when missing, so a reader never needs a write lock while the daily run writes.
-    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'runs'").fetchone() is None:
-        conn.executescript(SCHEMA)
+    # Only touch the schema when something is missing, so a reader never needs a write lock while the daily run writes.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'discovered_companies'"
+    ).fetchone() is None:
+        conn.executescript(SCHEMA)  # every statement is IF NOT EXISTS: creates a fresh DB or adds new tables
+    if "prescore" not in {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}:
+        conn.execute("ALTER TABLE jobs ADD COLUMN prescore INTEGER")
+        conn.commit()
     return conn
 
 

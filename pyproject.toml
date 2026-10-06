@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "pymupdf>=1.28.2",
+    "python-jobspy==1.2.0",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0.3",
     "typer>=0.27.3",

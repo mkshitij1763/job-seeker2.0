@@ -31,3 +31,32 @@ def test_companies_load(settings):
 def test_settings_paths(settings, home):
     assert settings.db_path == home / "data" / "jobseeker.db"
     assert settings.resume_path == home / "profile" / "resume.pdf"
+
+
+def test_search_defaults_when_block_missing(prefs):
+    assert prefs.search.sites == ["linkedin", "naukri", "indeed"]
+    assert prefs.search.queries[0] == "Product Analyst"
+    assert prefs.search.linkedin_descriptions_per_run == 15
+    assert prefs.min_prescore == 30
+
+
+def test_search_block_parsed(tmp_path):
+    from jobseeker.config import load_preferences
+
+    p = tmp_path / "p.yaml"
+    p.write_text("""name: A
+email: a@x.com
+linkedin: https://l
+experience_summary: x
+target_roles: [PM]
+cities: [Pune]
+current_ctc_lpa: 1
+target_base_lpa: 2
+min_prescore: 45
+search:
+  queries: [APM]
+  sites: [naukri]
+""")
+    prefs = load_preferences(p)
+    assert prefs.search.queries == ["APM"] and prefs.search.sites == ["naukri"]
+    assert prefs.search.hours_old == 72 and prefs.min_prescore == 45

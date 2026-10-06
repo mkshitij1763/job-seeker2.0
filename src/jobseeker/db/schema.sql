@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   fingerprint TEXT NOT NULL,
   alt_urls TEXT NOT NULL DEFAULT '[]',
   filter_reason TEXT,
+  prescore INTEGER,
   first_seen_at TEXT NOT NULL,
   UNIQUE (source, source_job_id)
 );
@@ -102,4 +103,15 @@ CREATE TABLE IF NOT EXISTS runs (
   finished_at TEXT,
   stats TEXT NOT NULL DEFAULT '{}',
   errors TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS discovered_companies (
+  id INTEGER PRIMARY KEY,
+  name_norm TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  ats TEXT,
+  slug TEXT,
+  status TEXT NOT NULL CHECK (status IN ('active', 'none', 'inactive')),
+  checked_at TEXT NOT NULL,
+  jobs_seen INTEGER NOT NULL DEFAULT 0
 );

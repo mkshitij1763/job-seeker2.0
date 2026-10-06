@@ -71,6 +71,17 @@ class Models(BaseModel):
     facts: str = "openai/gpt-oss-120b"
 
 
+class SearchConfig(BaseModel):
+    queries: list[str] = ["Product Analyst", "Associate Product Manager", "Product Manager",
+                          "Founder's Office", "Growth Analyst"]
+    locations: list[str] = ["Bengaluru", "Gurgaon", "Noida", "Pune"]
+    remote_query: bool = True
+    hours_old: int = 72
+    results_per_search: int = 25
+    sites: list[Literal["linkedin", "naukri", "indeed"]] = ["linkedin", "naukri", "indeed"]
+    linkedin_descriptions_per_run: int = 15
+
+
 class Preferences(BaseModel):
     name: str
     email: str
@@ -91,6 +102,8 @@ class Preferences(BaseModel):
     thresholds: Thresholds = Thresholds()
     budgets: Budgets = Budgets()
     models: Models = Models()
+    search: SearchConfig = SearchConfig()
+    min_prescore: int = 30
 
 
 class Company(BaseModel):
