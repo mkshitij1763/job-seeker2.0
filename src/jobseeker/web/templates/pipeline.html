@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Pipeline · Job Seeker{% endblock %}
+{% block content %}
+<div class="stats">
+  <div><b>{{ st.drafted }}</b><span>Drafted (30d)</span></div>
+  <div><b>{{ st.sent }}</b><span>Sent</span></div>
+  <div><b>{{ st.replied }}</b><span>Replies</span></div>
+  <div><b>{{ (st.reply_rate * 100)|round|int }}%</b><span>Reply rate</span></div>
+  <div><b>{{ st.interviews }}</b><span>Interviews</span></div>
+  <p class="src">{% for s, n in st.jobs_per_source.items() %}<span>{{ s }}: {{ n }}</span>{% endfor %}</p>
+</div>
+<div class="kanban">
+  {% for status in columns %}
+  <section>
+    <h3>{{ status|replace("_", " ") }} <small class="muted">{{ board[status]|length }}</small></h3>
+    {% for c in board[status] %}
+    <article class="kcard{% if c.needs_followup %} due{% endif %}">
+      <a href="/applications/{{ c.app_id }}">{{ c.title }}</a>
+      <p>{{ c.company }} · {{ c.score }}</p>
+      <p class="muted">{{ c.days_since }}d since last action{% if c.needs_followup %} · <b>follow up</b>{% endif %}</p>
+      {% set nexts = allowed_next(c.status) %}
+      {% if nexts %}
+      <form method="post" action="/applications/{{ c.app_id }}/status">
+        <input type="hidden" name="next" value="/pipeline">
+        <select name="status">{% for s in nexts %}<option value="{{ s }}">{{ s|replace("_", " ") }}</option>{% endfor %}</select>
+        <button>Move</button>
+      </form>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}
