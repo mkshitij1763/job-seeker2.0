@@ -1,0 +1,8 @@
+[{"id": "aa98a938", "text": "Product Analyst", "createdAt": 1790573982021,
+  "categories": {"commitment": "full time", "location": "bangalore", "allLocations": ["bangalore", "pune"], "team": "product"},
+  "hostedUrl": "https://jobs.lever.co/cred/aa98a938", "applyUrl": "https://jobs.lever.co/cred/aa98a938/apply",
+  "workplaceType": "hybrid", "country": "IN",
+  "descriptionPlain": "Drive product decisions with data.",
+  "lists": [{"text": "Requirements", "content": "<li>SQL</li><li>2-4 years of experience</li>"}],
+  "additionalPlain": "We value curiosity.",
+  "salaryRange": {"min": 2500000, "max": 3200000, "currency": "INR", "interval": "per-year-salary"}}]

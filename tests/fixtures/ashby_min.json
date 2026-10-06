@@ -1,0 +1,7 @@
+{"jobs": [
+  {"id": "f337", "title": "AI Product Manager", "location": "Bengaluru", "secondaryLocations": [{"location": "Remote - India"}],
+   "isRemote": true, "isListed": true, "workplaceType": "Hybrid", "publishedAt": "2026-10-03T08:44:45.357+00:00",
+   "jobUrl": "https://jobs.ashbyhq.com/sarvam/f337", "applyUrl": "https://jobs.ashbyhq.com/sarvam/f337/application",
+   "descriptionPlain": "Build LLM products.", "compensation": {"compensationTierSummary": "₹30L – ₹45L"}},
+  {"id": "hidden", "title": "Unlisted", "location": "Bengaluru", "isListed": false, "jobUrl": "https://x/h",
+   "descriptionPlain": "", "compensation": null}]}
