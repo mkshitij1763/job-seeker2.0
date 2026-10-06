@@ -35,6 +35,7 @@ def init() -> None:
 
 
 def _run(fetch: bool, force: bool) -> None:
+    from jobseeker.db.companies import active_companies
     from jobseeker.pipeline.run import run_daily
     from jobseeker.profile.facts import load_facts
     from jobseeker.sources.http import make_client
@@ -43,8 +44,6 @@ def _run(fetch: bool, force: bool) -> None:
     settings, prefs, rubric = _load()
     conn = connect(settings.db_path)
     facts = load_facts(settings.facts_path)
-    from jobseeker.db.companies import active_companies
-
     sources = build_sources(load_companies(settings.companies_path), active_companies(conn), prefs.search)
     with make_client() as client:
         stats = run_daily(conn, sources=sources, client=client, llm=GroqLLM(settings.groq_api_key),
