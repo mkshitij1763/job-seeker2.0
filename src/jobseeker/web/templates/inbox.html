@@ -1,51 +1,70 @@
 {% extends "base.html" %}
+{% block title %}Jobs · Job Seeker{% endblock %}
 {% block content %}
-<details class="filters-box" open data-phone-closed>
-  <summary class="phone-only-summary">Filters</summary>
-  <form class="filters" method="get" action="/">
-    <select name="band">{% for b in ["apply", "review", "hide", "all"] %}<option value="{{ b }}" {% if b == f.band %}selected{% endif %}>{{ b }}</option>{% endfor %}</select>
-    <select name="family"><option value="">all roles</option>{% for x in families %}<option {% if x == f.family %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-    <select name="city"><option value="">all cities</option>{% for x in cities %}<option {% if x == f.city %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-    <select name="source"><option value="">all sources</option>{% for x in sources %}<option {% if x == f.source %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-    <button>Filter</button>
-    <span class="hint">j/k move · enter open · s skip · z snooze</span>
-  </form>
-</details>
+{% macro q(band=f.band, family=f.family, city=f.city, source=f.source) -%}
+  {%- set parts = [] -%}
+  {%- for k, v in [("band", band), ("family", family), ("city", city), ("source", source)] if v -%}
+    {%- set _ = parts.append(k ~ "=" ~ (v|urlencode)) -%}
+  {%- endfor -%}
+  /?{{ parts|join("&") }}
+{%- endmacro %}
+{% macro city_of(r) %}{{ (r.location_city|title) if r.location_city else ("Remote" if r.remote else (r.location or "?")) }}{% endmacro %}
+<header class="page-head">
+  <h1>Jobs</h1>
+  <p class="inbox-count">{{ rows|length }} job{{ "s" if rows|length != 1 }}{% if rows %}<span class="phone-only"> · swipe ← skip, → snooze</span>{% endif %}</p>
+</header>
+<div class="chips filter-chips">
+  {% for b, label in [("apply", "Apply"), ("review", "Review"), ("all", "All")] %}
+  <a class="chip{{ ' is-active' if f.band == b }}" href="{{ q(band=b) }}">{{ label }}</a>
+  {% endfor %}
+  <details class="chip-menu">
+    <summary class="chip{{ ' is-active' if f.family }}">{{ f.family|replace("_", " ") if f.family else "Role" }} ▾</summary>
+    <div class="menu"><a href="{{ q(family='') }}">All roles</a>{% for x in families %}<a href="{{ q(family=x) }}">{{ x|replace("_", " ") }}</a>{% endfor %}</div>
+  </details>
+  <details class="chip-menu">
+    <summary class="chip{{ ' is-active' if f.city }}">{{ f.city|title if f.city else "City" }} ▾</summary>
+    <div class="menu"><a href="{{ q(city='') }}">All cities</a>{% for x in cities %}<a href="{{ q(city=x) }}">{{ x|title }}</a>{% endfor %}</div>
+  </details>
+  <details class="chip-menu">
+    <summary class="chip{{ ' is-active' if f.source }}">{{ f.source or "Source" }} ▾</summary>
+    <div class="menu"><a href="{{ q(source='') }}">All sources</a>{% for x in sources %}<a href="{{ q(source=x) }}">{{ x }}</a>{% endfor %}</div>
+  </details>
+</div>
+<div class="card table-card">
 <table class="inbox" data-keys="rows">
-  <thead><tr><th>Score</th><th>Role</th><th>Company</th><th>City</th><th>Age</th><th>Source</th><th>Why</th><th></th></tr></thead>
+  <thead><tr><th>Match</th><th>Role</th><th>Company</th><th>City</th><th>Age</th><th>Why</th><th></th></tr></thead>
   <tbody>
   {% for r in rows %}
     <tr data-href="/applications/{{ r.app_id }}">
-      <td class="score {% if r.score >= 70 %}hi{% elif r.score >= 50 %}mid{% else %}lo{% endif %}">{{ r.score }}</td>
-      <td><a href="/applications/{{ r.app_id }}">{{ r.title }}</a> <span class="tag">{{ r.role_family|replace("_", " ") }}</span> <span class="tag muted">{{ r.status }}</span></td>
+      <td><span class="pill tier-{{ tier(r.score) }}">{{ r.score }}</span></td>
+      <td class="role"><a class="row-title" href="/applications/{{ r.app_id }}">{{ r.title }}</a><small class="muted">{{ r.role_family|replace("_", " ") }} · {{ r.source }}{% if r.status == "drafted" %} · {{ "ready to approve" if r.people else "needs contacts" }}{% endif %}</small></td>
       <td>{{ r.company }}</td>
-      <td>{{ r.location_city or ("remote" if r.remote else (r.location or "?")) }}</td>
-      <td>{{ (r.posted_at or r.first_seen_at)|age }}</td>
-      <td>{{ r.source }}</td>
-      <td class="why">{% for m in (r.matches|fromjson)[:2] %}<span class="m">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %}<span class="g">✗ {{ g }}</span>{% endfor %}</td>
+      <td>{{ city_of(r) }}</td>
+      <td class="mono muted">{{ (r.posted_at or r.first_seen_at)|age }}</td>
+      <td class="why">{% for m in (r.matches|fromjson)[:1] %}<span class="ok">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %}<span class="warnc">⚠ {{ g }}</span>{% endfor %}</td>
       <td class="acts">
-        <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="/"><button data-key="s" title="Skip (s)">Skip</button></form>
-        <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="/"><button data-key="z" title="Snooze 3 days (z)">Snooze</button></form>
+        <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="/"><button class="btn-ghost" data-key="s" title="Skip (s)">Skip</button></form>
+        <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="/"><button class="btn-ghost" data-key="z" title="Snooze 3 days (z)">Snooze</button></form>
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="empty">Nothing here yet. Run <code>jobseeker run</code> or change the filters.</td></tr>
+    <tr><td colspan="7" class="empty">We're still looking. New jobs arrive after the 11:15 run, or change the filters.</td></tr>
   {% endfor %}
   </tbody>
 </table>
-{# Phone: the same rows as swipeable cards (a table row can't slide over a fixed coloured panel). #}
-<p class="inbox-count">{{ rows|length }} job{{ "s" if rows|length != 1 }}{% if rows %} · swipe ← skip, → snooze{% endif %}</p>
+<p class="hint muted">j/k move · enter open · s skip · z snooze</p>
+</div>
 <ul class="cards">
   {% for r in rows %}
   <li class="swipe-card" data-app-id="{{ r.app_id }}" data-swipe>
     <div class="swipe-bg" aria-hidden="true"><span class="bg-snooze">Snooze</span><span class="bg-skip">Skip</span></div>
     <div class="card-body">
       <div class="card-top">
-        <span class="score {% if r.score >= 70 %}hi{% elif r.score >= 50 %}mid{% else %}lo{% endif %}">{{ r.score }}</span>
         <a class="card-link" href="/applications/{{ r.app_id }}">{{ r.title }}</a>
+        <span class="pill tier-{{ tier(r.score) }}">{{ r.score }}</span>
       </div>
-      <p class="card-meta">{{ r.company }} · {{ (r.location_city|title) if r.location_city else ("Remote" if r.remote else (r.location or "?")) }} · {{ (r.posted_at or r.first_seen_at)|age }} · {{ r.source }}</p>
-      <p class="card-why">{% for m in (r.matches|fromjson)[:1] %}<span class="m">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %}<span class="g">✗ {{ g }}</span>{% endfor %}</p>
+      <p class="card-meta">{{ r.company }} · {{ city_of(r) }} · {{ (r.posted_at or r.first_seen_at)|age }} · {{ r.source }}</p>
+      <p class="card-why">{% for m in (r.matches|fromjson)[:1] %}<span class="ok">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %}<span class="warnc">⚠ {{ g }}</span>{% endfor %}</p>
       <div class="card-foot">
         {% if r.status == "drafted" and r.people %}<span class="next-step ready">Ready to approve →</span>
         {% elif r.status == "drafted" %}<span class="next-step find">Find contacts →</span>
@@ -58,7 +77,7 @@
     </div>
   </li>
   {% else %}
-  <li class="empty">Nothing here yet. Run <code>jobseeker run</code> or change the filters.</li>
+  <li class="empty">We're still looking. New jobs arrive after the 11:15 run, or change the filters.</li>
   {% endfor %}
 </ul>
 {% endblock %}

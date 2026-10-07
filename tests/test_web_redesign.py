@@ -71,3 +71,21 @@ def test_today_greeting_follows_local_hour(settings, seeded, monkeypatch):
     for hour, word in ((8, "morning"), (14, "afternoon"), (21, "evening")):
         monkeypatch.setattr(pipeline_routes, "_local_hour", lambda h=hour: h)
         assert f"Good {word}, Kshitij." in client(settings).get("/today").text
+
+
+def test_jobs_page_chip_filters_and_tier_pills(settings, seeded):
+    html = client(settings).get("/?band=all").text
+    assert '<a class="chip is-active" href="/?band=all' in html
+    assert '<a class="chip" href="/?band=apply' in html and '<a class="chip" href="/?band=review' in html
+    a = seeded[0]
+    card = html.split(f'<li class="swipe-card" data-app-id="{a}" data-swipe>', 1)[1].split("</li>", 1)[0]
+    assert 'class="pill tier-good"' in card  # 88
+    assert '<div class="swipe-bg" aria-hidden="true">' in card and '<div class="card-body">' in card
+    assert ">Skip</button>" in card and ">Snooze</button>" in card
+    assert 'data-keys="rows"' in html  # desktop table keeps j/k navigation
+
+
+def test_jobs_chip_links_keep_other_filters(settings, seeded):
+    html = client(settings).get("/?band=review&city=bengaluru").text
+    assert '<a class="chip" href="/?band=apply&amp;city=bengaluru">' in html  # switching band keeps the city
+    assert 'href="/?band=review">All cities</a>' in html  # clearing city keeps the band

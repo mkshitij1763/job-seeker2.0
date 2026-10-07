@@ -54,8 +54,7 @@ def test_swipe_script_loaded(settings, seeded):
 
 def test_inbox_filters_fold_and_cards_render(settings, seeded):
     html = client(settings).get("/").text
-    assert '<details class="filters-box" open data-phone-closed>' in html
-    assert '<summary class="phone-only-summary">Filters</summary>' in html
+    assert 'class="chips filter-chips"' in html
     a = seeded[0]
     assert f'<li class="swipe-card" data-app-id="{a}" data-swipe>' in html
     card = html.split(f'<li class="swipe-card" data-app-id="{a}" data-swipe>', 1)[1].split("</li>", 1)[0]

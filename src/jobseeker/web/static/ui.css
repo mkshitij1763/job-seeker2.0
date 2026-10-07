@@ -168,3 +168,62 @@ a.stat:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
   .stat { padding: 12px 14px; }
   .stat b { font-size: 22px; line-height: 28px; }
 }
+
+/* ---- Jobs ---- */
+.phone-only { display: none; }
+.inbox-count { margin: 0; color: var(--text-2); }
+.filter-chips { margin: 0 0 16px; overflow: visible; flex-wrap: wrap; }
+.chip-menu { position: relative; }
+.chip-menu > summary { list-style: none; }
+.chip-menu > summary::-webkit-details-marker { display: none; }
+.chip-menu .menu { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 200px; max-height: 320px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-3); padding: 6px; }
+.chip-menu .menu a { display: block; padding: 9px 10px; border-radius: 6px; color: var(--text); text-transform: capitalize; }
+.chip-menu .menu a:hover { background: var(--muted-bg); }
+.table-card { padding: 0; overflow: hidden; }
+table.inbox { width: 100%; border-collapse: collapse; }
+table.inbox th { text-align: left; font: 500 12px/1 var(--font); letter-spacing: .02em; text-transform: uppercase; color: var(--text-2);
+  background: var(--muted-bg); padding: 11px 14px; border-bottom: 1px solid var(--line); }
+table.inbox td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+table.inbox tbody tr { cursor: pointer; }
+table.inbox tbody tr:hover td { background: var(--muted-bg); }
+table.inbox tr.sel td { background: var(--accent-wash); box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+table.inbox td.role { max-width: 380px; }
+.row-title { display: block; color: var(--text); font-weight: 500; }
+table.inbox small { display: block; margin-top: 2px; }
+table.inbox .why { max-width: 280px; }
+table.inbox .why span { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.inbox .acts { white-space: nowrap; text-align: right; }
+table.inbox .acts form { display: inline; }
+table.inbox .acts button { min-height: 34px; padding: 0 10px; }
+.hint { font-size: 12px; padding: 10px 14px; margin: 0; }
+.cards { display: none; list-style: none; margin: 0; padding: 0; }
+.next-step { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.next-step.find { color: var(--accent); } .next-step.ready { color: var(--strong-fg); }
+@media (max-width: 640px) {
+  .phone-only { display: inline; }
+  .table-card { display: none; }
+  .cards { display: block; }
+  .filter-chips { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 14px; padding: 0 16px 2px; }
+  .chip-menu { position: static; }
+  .chip-menu .menu { position: fixed; left: 16px; right: 16px; top: auto; bottom: calc(80px + env(safe-area-inset-bottom)); max-height: 50vh; }
+  .swipe-card { position: relative; margin-bottom: 10px; border-radius: var(--radius-card); overflow: hidden; touch-action: pan-y; }
+  .swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 22px;
+    font-weight: 600; visibility: hidden; }
+  .swipe-card[data-dir] .swipe-bg { visibility: visible; }
+  .swipe-card[data-dir=skip] .swipe-bg { background: var(--weak-bg); color: var(--weak-fg); }
+  .swipe-card[data-dir=snooze] .swipe-bg { background: var(--good-bg); color: var(--good-fg); }
+  .swipe-card[data-dir=skip] .bg-snooze, .swipe-card[data-dir=snooze] .bg-skip { visibility: hidden; }
+  .card-body { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1); padding: 14px 16px; }
+  .card-top { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+  .card-link { font-weight: 600; color: var(--text); line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+  .card-link::after { content: ""; position: absolute; inset: 0; }  /* whole card opens the job */
+  .card-meta { margin: 4px 0 6px; color: var(--text-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-why { margin: 0 0 10px; font-size: 13px; display: flex; gap: 10px; min-width: 0; }
+  .card-why span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card-acts { position: relative; z-index: 1; display: flex; gap: 6px; }
+  .card-acts button { padding: 0 12px; font-size: 13px; }
+  .cards .empty { list-style: none; }
+}
