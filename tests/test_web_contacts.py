@@ -7,14 +7,14 @@ from jobseeker.db.core import connect
 from jobseeker.web.app import create_app
 from jobseeker.web.filters import personal_note
 from tests.fakes import FakeLLM
-from tests.test_contacts_finder import PICKS, FakeSMTP, FakeTavily
+from tests.test_contacts_finder import FakeSMTP, FakeTavily, llm_for
 
 
 def make_client(settings, smtp=None):
     server = smtp or FakeSMTP({"asha.rao@zeptonow.com": 250})
 
     def deps():
-        return Deps(tavily=FakeTavily(), llm=FakeLLM([PICKS]), resolver=lambda d: f"mx.{d}",
+        return Deps(tavily=FakeTavily(), llm=llm_for(), resolver=lambda d: f"mx.{d}",
                     smtp_factory=lambda host: server, sleep=lambda s: None)
     return TestClient(create_app(settings, contacts_deps_factory=deps), follow_redirects=False)
 
@@ -84,3 +84,17 @@ def test_personal_note():
     assert personal_note("Loved your work on X.", "Asha Rao, PMP") == "Hi Asha, Loved your work on X."
     long = personal_note("x" * 400, "Asha Rao")
     assert len(long) == 300 and long.startswith("Hi Asha, ") and long.endswith("…")
+
+
+def test_set_company_email_domain(settings, seeded):
+    from jobseeker.db.contacts_repo import get_domain, save_domain
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    save_domain(conn, "cred", domain="wrong.com", pattern="first", catch_all=2, mx_host="mx.wrong.com")
+    client = make_client(settings)
+    assert "wrong.com" in client.get(f"/applications/{a}").text
+    r = client.post(f"/applications/{a}/contacts/domain", data={"domain": " https://www.Cred.club/ "})
+    assert "msg=" in r.headers["location"]
+    row = get_domain(connect(settings.db_path), "cred")
+    assert (row["domain"], row["pattern"], row["catch_all"], row["mx_host"]) == ("cred.club", None, None, None)

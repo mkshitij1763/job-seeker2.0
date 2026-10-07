@@ -67,10 +67,15 @@ def setup_app():
     return conn, ensure_application(conn, job_id, NOW)
 
 
+def llm_for(picks=PICKS, domain_index=0):
+    from jobseeker.contacts.people import Picks
+    return FakeLLM(handler=lambda schema, prompt: picks if schema is Picks else {"index": domain_index})
+
+
 def deps(smtp=None, llm=None, tavily=None, **kw):
     server = smtp or FakeSMTP()
     factory = kw.pop("smtp_factory", lambda host: server)
-    return Deps(tavily=tavily or FakeTavily(), llm=llm or FakeLLM([PICKS]), resolver=lambda d: f"mx.{d}",
+    return Deps(tavily=tavily or FakeTavily(), llm=llm or llm_for(), resolver=lambda d: f"mx.{d}",
                 smtp_factory=factory, sleep=lambda s: None, now=lambda: NOW, **kw), server
 
 
@@ -123,8 +128,7 @@ def test_blocked_people_are_excluded(prefs):
     conn.commit()
     job2, _ = upsert_job(conn, make_job(company="Zepto", title="Product Manager", source_job_id="z2", fingerprint="z2"))
     app2 = ensure_application(conn, job2, NOW)
-    llm = FakeLLM(handler=lambda schema, prompt: {"picks": [{"index": 0, "label": "peer", "reason": "r"}]})
-    d2, _ = deps(FakeSMTP(default=250), llm=llm)
+    d2, _ = deps(FakeSMTP(default=250), llm=llm_for({"picks": [{"index": 0, "label": "peer", "reason": "r"}]}))
     with pytest.raises(FinderError):
         find_contacts(conn, app2, prefs, d2)  # every Zepto person found is blocked -> nobody left
 
@@ -168,8 +172,8 @@ def test_apify_fallback_when_too_few_people(prefs):
 
     conn, app = setup_app()
     apify = Apify()
-    llm = FakeLLM([{"picks": [{"index": 0, "label": "hiring_manager", "reason": "a"},
-                              {"index": 1, "label": "recruiter", "reason": "b"}]}])
+    llm = llm_for({"picks": [{"index": 0, "label": "hiring_manager", "reason": "a"},
+                             {"index": 1, "label": "recruiter", "reason": "b"}]})
     d, _ = deps(FakeSMTP(default=250), llm=llm, tavily=FewTavily(), apify=apify)
     find_contacts(conn, app, prefs, d)
     ps = people(conn, app)
@@ -198,3 +202,19 @@ def test_mail_server_refusing_checks_gives_likely_and_note(prefs):
     summary = find_contacts(conn, app, prefs, d)
     assert any("refused verification" in n for n in summary["notes"])
     assert {p["email_status"] for p in people(conn, app)} == {"unverified"}
+
+
+def test_unclear_company_website_leaves_emails_not_found(prefs):
+    conn, app = setup_app()
+    d, _ = deps(llm=llm_for(domain_index=-1))
+    summary = find_contacts(conn, app, prefs, d)
+    assert any("email domain" in n for n in summary["notes"])
+    assert {p["email"] for p in people(conn, app)} == {""}
+
+
+def test_website_search_uses_city_and_india(prefs):
+    conn, app = setup_app()
+    tavily = FakeTavily()
+    d, _ = deps(tavily=tavily)
+    find_contacts(conn, app, prefs, d)
+    assert '"Zepto" bengaluru India official website' in tavily.queries

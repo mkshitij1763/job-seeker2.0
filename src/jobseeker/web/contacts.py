@@ -17,9 +17,15 @@ from jobseeker.web.deps import get_conn
 router = APIRouter(prefix="/applications")
 
 
+def _company(conn, app_id: int) -> str:
+    return conn.execute("SELECT j.company FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = ?",
+                        (app_id,)).fetchone()["company"]
+
+
 def card_context(request: Request, conn, app_id: int) -> dict:
     state = request.app.state
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
+            "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
             "usage": Budget(conn, state.prefs.contacts, datetime.now(UTC)).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
 
@@ -48,6 +54,19 @@ def card(request: Request, app_id: int, conn=Depends(get_conn)):
     drafts = {r["kind"]: dict(r) for r in conn.execute("SELECT * FROM drafts WHERE application_id = ?", (app_id,))}
     return request.app.state.templates.TemplateResponse(
         request, "_people.html", {"app": dict(app), "drafts": drafts, **card_context(request, conn, app_id)})
+
+
+@router.post("/{app_id}/contacts/domain")
+def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
+    from jobseeker.db.contacts_repo import save_domain
+
+    value = domain.strip().lower()
+    value = value.split("://", 1)[-1].split("/", 1)[0].removeprefix("www.").lstrip("@")
+    if "." not in value:
+        return _back(app_id, err="Enter a domain like company.com")
+    save_domain(conn, normalize_company(_company(conn, app_id)), domain=value, pattern=None, catch_all=None,
+                mx_host=None)
+    return _back(app_id, msg=f"Email domain set to {value}. Run Find contacts again to rebuild emails")
 
 
 @router.post("/{app_id}/contacts/{rank}/remove")

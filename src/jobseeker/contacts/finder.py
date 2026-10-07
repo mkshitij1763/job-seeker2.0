@@ -10,7 +10,7 @@ from pathlib import Path
 
 from jobseeker.config import Preferences
 from jobseeker.contacts import names
-from jobseeker.contacts.domains import domain_from_text, mx_host, official_domain
+from jobseeker.contacts.domains import domain_from_text, mx_host, pick_domain
 from jobseeker.contacts.people import from_results, rank, role_words, search_queries
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
@@ -86,8 +86,12 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     # 2. domain and pattern hints
     dom = get_domain(conn, norm) or {}
     domain = dom.get("domain") or domain_from_text(job["jd_text"], company)
-    if not domain:
-        domain = official_domain(_search(deps, budget, notes, f'"{company}" official website', max_results=5), company)
+    if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
+        query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
+        domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
+                             job["jd_text"], _search(deps, budget, notes, query, max_results=8))
+        if not domain:
+            notes.append(f"Couldn't tell which website is {company}'s; set the email domain on the card")
     mx = deps.resolver(domain) if domain else None
     if domain and not mx:
         notes.append(f"{domain} has no mail server")

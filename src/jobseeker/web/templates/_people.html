@@ -38,5 +38,11 @@
     <button {% if not has_tavily %}disabled title="Add TAVILY_API_KEY to .env"{% endif %}>{{ "Find contacts again" if people else "Find contacts" }}</button>
   </form>
   {% endif %}
+  <form method="post" action="/applications/{{ app.id }}/contacts/domain" class="domain-form">
+    <small>Email domain</small>
+    <input name="domain" value="{{ domain.domain if domain and domain.domain else '' }}" placeholder="company.com"
+           inputmode="url" autocapitalize="off" autocorrect="off">
+    <button>Save</button>
+  </form>
   <p class="muted usage"><small>This month: {{ usage }}</small></p>
 </div>
