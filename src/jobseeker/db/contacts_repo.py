@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from jobseeker.db.core import iso, utcnow
 from jobseeker.pipeline.normalize import normalize_company
 
-STALE_AFTER = timedelta(minutes=10)
+STALE_AFTER = timedelta(minutes=20)  # worst case: Apify search + 3 profile lookups at 180 s each, plus SMTP
 
 
 def set_find_status(conn: sqlite3.Connection, app_id: int, status: str, note: str = "") -> None:
@@ -17,6 +17,15 @@ def set_find_status(conn: sqlite3.Connection, app_id: int, status: str, note: st
     else:
         conn.execute("UPDATE applications SET find_status = ?, find_error = ? WHERE id = ?", (status, note, app_id))
     conn.commit()
+
+
+def claim_find(conn: sqlite3.Connection, app_id: int, now: datetime) -> bool:
+    """Atomically mark a find as running; False when another live run already holds it."""
+    cur = conn.execute("""UPDATE applications SET find_status = 'running', find_error = '', find_started_at = ?
+                          WHERE id = ? AND (find_status != 'running' OR find_started_at IS NULL
+                                            OR find_started_at < ?)""", (iso(now), app_id, iso(now - STALE_AFTER)))
+    conn.commit()
+    return cur.rowcount == 1
 
 
 def find_state(conn: sqlite3.Connection, app_id: int, now: datetime) -> dict:

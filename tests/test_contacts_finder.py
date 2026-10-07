@@ -6,7 +6,7 @@ from jobseeker.contacts.finder import Deps, FinderError, find_contacts
 from jobseeker.contacts.people import Candidate
 from jobseeker.contacts.smtp_verify import PortBlocked
 from jobseeker.db.applications import ensure_application, get_application
-from jobseeker.db.contacts_repo import find_state, get_domain, people, set_find_status
+from jobseeker.db.contacts_repo import STALE_AFTER, claim_find, find_state, get_domain, people, set_find_status
 from jobseeker.db.core import connect
 from jobseeker.db.jobs import upsert_job
 from tests.factories import make_job
@@ -186,10 +186,24 @@ def test_find_state_times_out():
     conn, app = setup_app()
     set_find_status(conn, app, "running")
     conn.execute("UPDATE applications SET find_started_at = ? WHERE id = ?",
-                 ((NOW - timedelta(minutes=11)).isoformat(timespec="seconds"), app))
+                 ((NOW - STALE_AFTER - timedelta(minutes=1)).isoformat(timespec="seconds"), app))
     conn.commit()
     state = find_state(conn, app, NOW)
     assert state["status"] == "failed" and "timed out" in state["note"]
+
+
+def test_stale_after_outlasts_worst_case_apify_run():
+    # one Apify people search + three profile-email lookups, each up to the 180 s client timeout
+    assert STALE_AFTER > timedelta(seconds=4 * 180)
+
+
+def test_claim_find_is_exclusive_until_stale():
+    conn, app = setup_app()
+    assert claim_find(conn, app, NOW) is True
+    assert claim_find(conn, app, NOW) is False  # a second click while running doesn't start another job
+    assert claim_find(conn, app, NOW + STALE_AFTER + timedelta(minutes=1)) is True  # a dead job can be retried
+    set_find_status(conn, app, "done")
+    assert claim_find(conn, app, NOW) is True
 
 
 def test_mail_server_refusing_checks_gives_likely_and_note(prefs):

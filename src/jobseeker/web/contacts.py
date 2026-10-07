@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from jobseeker.contacts import names
 from jobseeker.contacts.finder import run_find
 from jobseeker.db.contacts_repo import (
-    emailed_count, find_state, get_domain, link_contact, next_candidate, people, set_find_status, third_due,
+    claim_find, emailed_count, find_state, get_domain, link_contact, next_candidate, people, third_due,
     upsert_contact,
 )
 from jobseeker.db.usage import Budget
@@ -44,9 +44,8 @@ def find(request: Request, app_id: int, background: BackgroundTasks, conn=Depend
         return _back(app_id, err="Add TAVILY_API_KEY to .env to find contacts")
     if emailed_count(conn, app_id):
         return _back(app_id, err="People were already emailed for this job; edit or remove them individually")
-    if find_state(conn, app_id, datetime.now(UTC))["status"] == "running":
+    if not claim_find(conn, app_id, datetime.now(UTC)):
         return _back(app_id, msg="Already finding contacts")
-    set_find_status(conn, app_id, "running")
     background.add_task(run_find, state.settings.db_path, app_id, state.prefs, deps_factory)
     return _back(app_id)  # the People card shows progress and replaces itself when done
 
