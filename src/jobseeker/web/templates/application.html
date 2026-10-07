@@ -1,22 +1,70 @@
 {% extends "base.html" %}
 {% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
 {% block content %}
-<div class="detail">
-  <section class="col-main">
-    <div class="block head">
-      <h1>{{ job.title }}</h1>
-      <p class="meta">{{ job.company }} · {{ job.location or "location not stated" }}{% if job.remote %} · remote{% endif %} · {{ job.source }} · posted {{ (job.posted_at or job.first_seen_at)|age }}{% if job.salary_text %} · {{ job.salary_text }}{% endif %}</p>
-      <p><a href="{{ job.apply_url }}" target="_blank" rel="noopener">Open posting ↗</a> · status <span class="tag">{{ app.status|replace("_", " ") }}</span></p>
-      {% if score %}
-      <div class="scorebox">
-        <span class="big">{{ score.score }}</span>
-        <div>
-          <ul>{% for k, v in (score.breakdown|fromjson).items() %}<li>{{ k|replace("_", " ") }}: {{ v }}</li>{% endfor %}</ul>
-          <p>{% for m in score.matches|fromjson %}<span class="m">✓ {{ m }}</span> {% endfor %}{% for g in score.gaps|fromjson %}<span class="g">✗ {{ g }}</span> {% endfor %}</p>
-        </div>
+{% from "_icons.html" import icon %}
+<div class="job">
+  <header class="job-head">
+    <a class="back" href="/">{{ icon("back", 18) }} Jobs</a>
+    <div class="job-title-row">
+      <div class="job-title">
+        <h1>{{ job.title }}</h1>
+        <p class="muted">{{ job.company }} · {{ job.location or "Location not stated" }}{% if job.remote %} · Remote{% endif %} · {{ job.source }} · posted {{ (job.posted_at or job.first_seen_at)|age }}{% if job.salary_text %} · {{ job.salary_text }}{% endif %}</p>
       </div>
+      <div class="job-head-acts">
+        <span class="tag">{{ app.status|replace("_", " ") }}</span>
+        <a class="btn" href="{{ job.apply_url }}" target="_blank" rel="noopener">Open posting {{ icon("external", 16) }}</a>
+      </div>
+    </div>
+  </header>
+
+  {% if score %}
+  {% set t = tier(score.score) %}
+  <section class="card decision">
+    <div class="decision-score">
+      <div class="ring tier-{{ t }}" style="--pct: {{ [[score.score, 0]|max, 100]|min }}"><span class="ring-score">{{ score.score }}</span><span class="ring-label">match</span></div>
+      <p class="decision-tier {{ 'ok' if t == 'strong' else ('warnc' if t == 'good' else 'bad') }}">{{ TIER_LABELS[t] }}</p>
+    </div>
+    {% if bars %}
+    <ul class="bars">
+      {% for b in bars %}
+      <li><span class="bar-label">{{ b.label }}</span><span class="bar"><span class="bar-fill" style="width: {{ b.pct }}%"></span></span><span class="bar-num mono">{{ b.value }}/{{ b.max }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <div class="decision-lists">
+      <div><p class="label">Why you match</p><ul class="plain">{% for m in score.matches|fromjson %}<li class="ok">✓ {{ m }}</li>{% else %}<li class="muted">Nothing specific noted</li>{% endfor %}</ul></div>
+      <div><p class="label">Watch out</p><ul class="plain">{% for g in score.gaps|fromjson %}<li class="warnc">⚠ {{ g }}</li>{% else %}<li class="muted">No gaps noted</li>{% endfor %}</ul></div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if step %}
+  <section class="card next">
+    <ol class="steps">
+      {% for label in STEPS %}
+      <li class="step{{ ' is-done' if loop.index < step }}{{ ' is-current' if loop.index == step }}"><span class="step-num mono">{{ "✓" if loop.index < step else loop.index }}</span><span>{{ label }}</span></li>
+      {% endfor %}
+    </ol>
+    <div class="next-action">
+      {% if step == 1 %}
+        <form method="post" action="/applications/{{ app.id }}/contacts/find"><button class="primary" {% if not has_tavily %}disabled title="Add TAVILY_API_KEY to .env"{% endif %}>{{ icon("people", 18) }} Find contacts</button></form>
+        <p class="muted">Finds 3 people at {{ job.company }} with work emails. About half a minute.</p>
+      {% elif step == 2 %}
+        <a class="btn btn-primary" href="#approve" hx-boost="false">Review and approve ↓</a>
+        <p class="muted trust">Approve creates Gmail drafts for {{ people|selectattr("wave", "equalto", 1)|map(attribute="name")|join(" and ") or "your contact" }}. Nothing is sent until you press Send in Gmail.</p>
+      {% elif step == 3 %}
+        <a class="btn btn-primary" href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">{{ icon("gmail", 18) }} Open Gmail drafts</a>
+        <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="sent"><button>Mark sent</button></form>
+        <p class="muted">Send the drafts in Gmail, then mark sent so follow-ups are tracked.</p>
+      {% else %}
+        <p class="muted">Sent. Follow-ups appear in People 5 days after Mark sent if there's no reply.</p>
       {% endif %}
     </div>
+  </section>
+  {% endif %}
+
+<div class="detail">
+  <section class="col-main">
     <details class="block jd-box" open data-phone-closed>
       <summary class="phone-only-summary">Job description · {{ matched_skills }} skills matched</summary>
       <article class="jd">{{ job.jd_text|highlight(terms) }}</article>
@@ -75,7 +123,7 @@
       {% endif %}
     </div>
 
-    <div class="card block actions">
+    <div class="card block actions" id="approve">
       <form method="post" action="/applications/{{ app.id }}/approve" class="approve">
         {% set wave1 = people|selectattr("wave", "equalto", 1)|list %}
         {% set linked_ids = people|map(attribute="contact_id")|list %}
@@ -89,23 +137,26 @@
         {% elif contact and contact.email and contact.email_status != "verified" %}
         <label><input type="checkbox" name="confirm_unverified" value="true"> Email is unverified, draft anyway</label>
         {% endif %}
-        {% if drafts.email and drafts.email.gmail_draft_id %}<p class="warn">A Gmail draft already exists (id {{ drafts.email.gmail_draft_id }}). Approving again creates a new one; delete the old one in Gmail.</p>{% endif %}
+        {% if drafts.email and drafts.email.gmail_draft_id %}<p class="warnc">A Gmail draft already exists (id {{ drafts.email.gmail_draft_id }}). Approving again creates another; delete the older one in Gmail.</p>{% endif %}
+        <p class="muted trust">AI prepared this. You approve, Gmail keeps it as a draft, and nothing is sent until you press Send.</p>
         <button class="primary">Approve → Gmail draft</button>
       </form>
-      <details class="more" open data-phone-closed>
-        <summary class="phone-only-summary" aria-label="More actions">More</summary>
-        {% if drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
-        {% for s, label in [("sent", "Mark sent"), ("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
-        <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button>{{ label }}</button></form>
-        {% endfor %}
-        <form method="post" action="/applications/{{ app.id }}/snooze"><button>Snooze 3d</button></form>
-        {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button>Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
-        {% if drafts and app.status in ["new", "shortlisted", "drafted", "approved"] %}<form method="post" action="/applications/{{ app.id }}/draft"><button>Regenerate all</button></form>{% endif %}
-        {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button>Undo last change</button></form>{% endif %}
-        <form method="post" action="/applications/{{ app.id }}/not-interested">
-          <label><input type="checkbox" name="block_company" value="true"> also block company</label>
-          <button>Not interested</button>
-        </form>
+      <details class="more-menu">
+        <summary class="btn" aria-label="More actions">{{ icon("more", 18) }} More</summary>
+        <div class="menu">
+          {% if drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
+          {% for s, label in [("sent", "Mark sent"), ("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
+          <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button class="btn-ghost">{{ label }}</button></form>
+          {% endfor %}
+          <form method="post" action="/applications/{{ app.id }}/snooze"><button class="btn-ghost">Snooze 3d</button></form>
+          {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button class="btn-ghost">Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
+          {% if drafts and app.status in ["new", "shortlisted", "drafted", "approved"] %}<form method="post" action="/applications/{{ app.id }}/draft"><button class="btn-ghost">Regenerate all</button></form>{% endif %}
+          {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button class="btn-ghost">Undo last change</button></form>{% endif %}
+          <form method="post" action="/applications/{{ app.id }}/not-interested" class="danger-zone">
+            <label><input type="checkbox" name="block_company" value="true"> also block company</label>
+            <button class="btn-ghost bad">Not interested</button>
+          </form>
+        </div>
       </details>
     </div>
 
@@ -122,5 +173,6 @@
       <ul class="events">{% for e in events %}<li>{{ e.at[:16]|replace("T", " ") }} · {{ e.type }} {{ e.payload }}</li>{% endfor %}</ul>
     </details>
   </section>
+</div>
 </div>
 {% endblock %}

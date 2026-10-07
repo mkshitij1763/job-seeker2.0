@@ -73,13 +73,12 @@ def test_keys_js_folds_for_phone_and_copies_without_opening():
 def test_job_page_blocks_and_more_menu(settings, seeded):
     a = seeded[0]
     html = client(settings).get(f"/applications/{a}").text
-    for hook in ['class="block head"', 'class="card block drafts"', 'class="card block contact"',
-                 '<details class="block jd-box" open data-phone-closed>', 'class="card block history"',
-                 'class="card block actions"']:
+    for hook in ['class="job-head"', 'class="card block drafts"', 'class="card block contact"',
+                 'class="card block history"', 'class="card block actions"']:
         assert hook in html, hook
     actions = html.split('class="card block actions"', 1)[1]
-    assert actions.index("Approve → Gmail draft") < actions.index('<details class="more" open data-phone-closed>')
-    more = actions.split('<details class="more" open data-phone-closed>', 1)[1].split("</details>", 1)[0]
+    assert actions.index("Approve → Gmail draft") < actions.index('<details class="more-menu">')
+    more = actions.split('<details class="more-menu">', 1)[1].split("</details>", 1)[0]
     assert 'aria-label="More actions"' in more
     for label in ("Mark sent", "Applied via portal", "Skip", "Snooze 3d", "Not interested", "Regenerate all",
                   "Undo last change"):
@@ -116,12 +115,6 @@ def test_pipeline_columns_are_collapsible(settings, seeded):
     assert '<details class="col" open data-count="0">' in html
 
 
-def test_mobile_css_makes_approve_full_width():
-    css = (STATIC / "mobile.css").read_text()
-    phone = css[css.index("/* ---- Job page ---- */"):]
-    assert re.search(r"\.actions \.approve \{[^}]*display: block", phone)
-
-
 def test_swipe_rebinds_after_htmx_history_restore():
     js = (STATIC / "swipe.js").read_text()
     assert "new WeakSet()" in js and "swipeBound" not in js  # a DOM marker survives into history snapshots
@@ -132,12 +125,6 @@ def test_keys_js_unfolds_when_leaving_phone_width():
     js = (STATIC / "keys.js").read_text()
     assert 'addEventListener("change"' in js and 'setAttribute("open", "")' in js
     assert '"htmx:historyRestore"' in js
-
-
-def test_phone_job_description_sits_right_under_the_header():
-    css = (STATIC / "mobile.css").read_text()
-    job = css[css.index("/* ---- Job page ---- */"):]
-    assert re.search(r"\.head \{ order: 1; \}", job) and re.search(r"\.jd-box \{ order: 2; \}", job)
 
 
 def test_card_refresh_does_not_refold_open_sections():

@@ -47,8 +47,14 @@ def detail(request: Request, app_id: int, conn=Depends(get_conn)):
     matched = sum(1 for t in terms if t and t.lower() in jd)
     from jobseeker.web.contacts import card_context
 
+    from jobseeker.web.view import factor_bars, next_step, timeline
+
+    ctx = card_context(request, conn, app_id)
+    bars = factor_bars(d["score"]["breakdown"], request.app.state.rubric) if d["score"] else []
     return render(request, conn, "application.html", terms=terms, matched_skills=matched,
-                  can_undo=can_undo(conn, app_id), **card_context(request, conn, app_id), **d)
+                  can_undo=can_undo(conn, app_id), bars=bars,
+                  step=next_step(d["app"]["status"], bool(ctx["people"])),
+                  timeline_items=timeline(d["events"]), **ctx, **d)
 
 
 @router.post("/{app_id}/status")

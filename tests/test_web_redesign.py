@@ -89,3 +89,68 @@ def test_jobs_chip_links_keep_other_filters(settings, seeded):
     html = client(settings).get("/?band=review&city=bengaluru").text
     assert '<a class="chip" href="/?band=apply&amp;city=bengaluru">' in html  # switching band keeps the city
     assert 'href="/?band=review">All cities</a>' in html  # clearing city keeps the band
+
+
+def _drafted(settings, app_id):
+    from jobseeker.db.core import connect
+    from jobseeker.db.applications import save_draft
+
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE applications SET status = 'drafted' WHERE id = ?", (app_id,))
+    conn.commit()
+    save_draft(conn, app_id, "email", "Hello", "Body", edited=False)
+    return conn
+
+
+def test_job_page_decision_block_with_ring_and_bars(settings, seeded):
+    a = seeded[0]
+    html = client(settings).get(f"/applications/{a}").text
+    assert 'class="ring tier-good"' in html and '<span class="ring-score">88</span>' in html
+    assert "Good match" in html
+    assert '<span class="bar-label">Role fit</span>' in html and "30/30" in html  # seeded breakdown role_fit 30
+    assert "Why you match" in html and "Watch out" in html
+    assert "✓ SQL" in html and "⚠ Tableau" in html
+
+
+def test_job_page_step_bar_tracks_status(settings, seeded):
+    a = seeded[0]
+    conn = _drafted(settings, a)
+    html = client(settings).get(f"/applications/{a}").text
+    assert 'class="steps"' in html and 'class="step is-current"' in html
+    current = html.split('class="step is-current"', 1)[1][:120]
+    assert "Find contacts" in current
+    nxt = html.split('class="next-action"', 1)[1].split("</section>", 1)[0]
+    assert f'action="/applications/{a}/contacts/find"' in nxt
+    conn.execute("UPDATE applications SET status = 'approved' WHERE id = ?", (a,))
+    conn.commit()
+    html = client(settings).get(f"/applications/{a}").text
+    assert "Send in Gmail" in html.split('class="step is-current"', 1)[1][:120]
+    nxt = html.split('class="next-action"', 1)[1].split("</section>", 1)[0]
+    assert "mail.google.com/mail/u/0/#drafts" in nxt and 'value="sent"' in nxt
+
+
+def test_job_page_without_score_or_step_still_renders(settings, seeded):
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    conn.execute("DELETE FROM scores WHERE job_id = (SELECT job_id FROM applications WHERE id = ?)", (a,))
+    conn.execute("UPDATE applications SET status = 'snoozed' WHERE id = ?", (a,))
+    conn.commit()
+    r = client(settings).get(f"/applications/{a}")
+    assert r.status_code == 200 and 'class="ring' not in r.text and 'class="steps"' not in r.text
+
+
+def test_more_menu_holds_rare_actions(settings, seeded):
+    a = seeded[0]
+    _drafted(settings, a)
+    html = client(settings).get(f"/applications/{a}").text
+    more = html.split('<details class="more-menu">', 1)[1].split("</details>", 1)[0]
+    for label in ("Skip", "Snooze 3d", "Applied via portal", "Not interested", "Regenerate all"):
+        assert label in more, label
+
+
+def test_approve_explains_nothing_is_sent(settings, seeded):
+    html = client(settings).get(f"/applications/{seeded[0]}").text
+    approve = html.split('class="approve"', 1)[1].split("</form>", 1)[0]
+    assert "Nothing is sent until you press Send" in approve or "you press Send" in approve
