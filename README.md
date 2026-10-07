@@ -11,7 +11,8 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
    1. In Google Cloud Console, create an OAuth client of type **Desktop app** with the Gmail API enabled.
    2. Save it as `secrets/credentials.json`.
    3. Run `uv run jobseeker auth-gmail`. This asks only for permission to create drafts.
-6. `scripts/install_launchd.sh` schedules the daily 07:30 run.
+6. `scripts/install_launchd.sh` schedules the daily run (11:15, or on wake) and keeps the dashboard running on 127.0.0.1:8000 while you're logged in.
+7. Phone access (optional): install Tailscale on the Mac and phone with the same account, then run `tailscale serve --bg 8000`. The dashboard is then at `https://<mac>.<tailnet>.ts.net`, reachable only from your own Tailscale devices while the Mac is awake. Undo with `tailscale serve --bg off`.
 
 ## Daily use
 - `uv run jobseeker serve` → open http://127.0.0.1:8000

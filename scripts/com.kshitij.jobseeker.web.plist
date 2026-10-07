@@ -2,16 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.kshitij.jobseeker</string>
+  <key>Label</key><string>com.kshitij.jobseeker.web</string>
   <key>ProgramArguments</key>
   <array>
     <string>__UV__</string><string>run</string><string>--project</string><string>__ROOT__</string>
-    <string>jobseeker</string><string>run</string>
+    <string>jobseeker</string><string>serve</string>
   </array>
   <key>WorkingDirectory</key><string>__ROOT__</string>
-  <key>StartCalendarInterval</key>
-  <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>15</integer></dict>
-  <key>StandardOutPath</key><string>__ROOT__/data/logs/run.log</string>
-  <key>StandardErrorPath</key><string>__ROOT__/data/logs/run.err.log</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__ROOT__/data/logs/web.log</string>
+  <key>StandardErrorPath</key><string>__ROOT__/data/logs/web.err.log</string>
 </dict>
 </plist>
