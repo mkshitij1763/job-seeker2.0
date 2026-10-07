@@ -194,3 +194,13 @@ def test_job_skipped_after_two_failed_description_attempts(prefs, rubric, facts)
     for _ in range(3):
         run(conn, [Src("linkedin", [job])], prefs, rubric, facts, describe=lambda s, j: calls.append(j) or "")
     assert len(calls) == 2
+
+
+def test_rescore_makes_no_linkedin_description_calls(prefs, rubric, facts):
+    conn = connect(":memory:")
+    run(conn, [Src("linkedin", [raw(source="linkedin", source_job_id="li-9", jd_text="")])], prefs, rubric, facts,
+        describe=lambda s, j: "")
+    calls = []
+    run(conn, [], prefs, rubric, facts, fetch=False, force_rescore=True,
+        describe=lambda s, j: calls.append(j) or "Own the funnel.")
+    assert calls == []  # rescore re-scores stored jobs; fetching from LinkedIn is the daily run's job

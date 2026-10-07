@@ -127,13 +127,14 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
 
 
 def _select(conn, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferences, now: datetime,
-            force: bool, describe: Describe) -> list[dict]:
+            force: bool, describe: Describe | None) -> list[dict]:
     expire_unscored(conn, now, prefs.max_age_days)
     for row in jobs_missing_prescore(conn):  # jobs stored before pre-scores existed
         _rank(conn, stats, row["id"], facts, prefs, cutoff=True)
     candidates = jobs_needing_score(conn, rubric.version, -1, force=force)
     stats.candidates = len(candidates)
-    _fill_linkedin_descriptions(conn, stats, candidates, facts, prefs, now, describe)
+    if describe is not None:  # rescore works offline from stored jobs
+        _fill_linkedin_descriptions(conn, stats, candidates, facts, prefs, now, describe)
     # Score the best-ranked jobs that have a description; jobs still waiting for one never block the rest.
     return jobs_needing_score(conn, rubric.version, prefs.budgets.score_per_run, force=force, with_jd=True)
 
@@ -179,7 +180,7 @@ def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, pref
         _fetch(conn, stats, sources, client, facts, prefs, now)
 
     quota_hit = unavailable = False
-    for row in _select(conn, stats, rubric, facts, prefs, now, force_rescore, describe):
+    for row in _select(conn, stats, rubric, facts, prefs, now, force_rescore, describe if fetch else None):
         try:
             result = score_job(llm, job_from_row(row), facts, prefs, rubric, prefs.models.scoring)
         except (LLMQuotaExceeded, LLMUnavailable) as e:
