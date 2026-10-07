@@ -1,0 +1,41 @@
+/* Phone and touch rules (target: iPhone 15, 393 x 852). Desktop styles live in app.css. */
+:root { --skip-bg: #b91c1c; --skip-fg: #ffffff; --snooze-bg: #b45309; --snooze-fg: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root { --skip-bg: #f87171; --skip-fg: #0b0b0d; --snooze-bg: #fbbf24; --snooze-fg: #0b0b0d; }
+}
+
+/* Toast: one live region, above the home indicator and any sticky bar. */
+.toast { position: fixed; left: 12px; right: 12px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 50;
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  background: var(--text); color: var(--bg); padding: 12px 14px; border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .25); }
+.toast[hidden] { display: none; }
+.toast button { background: transparent; color: inherit; border-color: currentColor; font-weight: 600; }
+
+/* Pressed feedback on every tappable control, without moving its bounds. */
+button, .btn { transition: opacity .1s, transform .1s; }
+button:active, .btn:active { opacity: .7; transform: scale(.98); }
+.btn { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+
+@media (hover: none) { .hint { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* Desktop: summaries that only exist to fold content on phones stay hidden, so the desktop looks unchanged. */
+@media (min-width: 641px) {
+  .phone-only-summary { display: none; }
+  .toast { left: auto; right: 20px; max-width: 420px; }
+}
+
+@media (max-width: 640px) {
+  .top { gap: 14px; padding: calc(8px + env(safe-area-inset-top)) 16px 8px; }
+  .top .long { display: none; }
+  main { padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); }
+  .flash { margin: 8px 12px 0; }
+  button, select, .btn, summary { min-height: 44px; }
+  input, select, textarea { font-size: 16px; }
+  input:not([type=checkbox]), select { min-height: 44px; }
+  summary { padding: 10px 0; cursor: pointer; }
+}
