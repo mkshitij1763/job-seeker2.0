@@ -7,17 +7,19 @@
     <p class="{{ 'warn' if find.status == 'failed' else 'muted' }}">{{ find.note }}</p>
   {% endif %}
   {% for p in people %}
-  <div class="person">
-    <p><b>#{{ p.rank }} {{ p.name }}</b> <span class="tag">{{ p.label|replace("_", " ") }}</span>
-       <span class="tag muted">{{ "email now" if p.wave == 1 else "follow-up" }}</span><br>
-       <small class="muted">{{ p.role }}</small><br>
-       <small>{{ p.reason }}</small></p>
-    <p>{% if p.email %}{{ p.email }} <span class="tag">{{ "verified" if p.email_status == "verified" else ("bounced" if p.email_status == "bounced" else "likely") }}</span>
-       {% else %}<span class="muted">email not found</span>{% endif %}
-       {% if p.emailed_at %}<span class="tag muted">drafted</span>{% endif %}</p>
+  <article class="person">
+    <p class="person-head"><span class="rank mono">#{{ p.rank }}</span><b>{{ p.name }}</b> <span class="tag">{{ p.label|replace("_", " ") }}</span>
+       <span class="tag">{{ "email now" if p.wave == 1 else "follow-up" }}</span></p>
+    <p class="person-role muted">{{ p.role }}</p>
+    <p class="person-reason">{{ p.reason }}</p>
+    <p class="person-email">{% if p.email %}<span class="mono">{{ p.email }}</span> {% if p.email_status == 'verified' %}<span class="pill tier-strong">verified</span>{% elif p.email_status == 'bounced' %}<span class="pill tier-weak">bounced</span>{% else %}<span class="pill tier-good">likely</span>{% endif %}
+       {% else %}<span class="muted">Email not found</span>{% endif %}
+       {% if p.emailed_at %}<span class="tag">drafted</span>{% endif %}</p>
     <textarea id="note_{{ p.rank }}" hidden>{{ (drafts.li_note.body if drafts.li_note else "")|personal_note(p.name) }}</textarea>
-    <button type="button" data-copy="#note_{{ p.rank }}">Copy note</button>
-    <a class="btn" href="{{ p.linkedin_url }}" target="_blank" rel="noopener">LinkedIn ↗</a>
+    <div class="person-acts">
+      <button type="button" data-copy="#note_{{ p.rank }}">Copy note</button>
+      <a class="btn" href="{{ p.linkedin_url }}" target="_blank" rel="noopener">LinkedIn ↗</a>
+    </div>
     <details class="person-edit"><summary>Edit / remove</summary>
       <form method="post" action="/applications/{{ app.id }}/contacts/{{ p.rank }}/edit" class="grid">
         <input name="name" value="{{ p.name }}">
@@ -27,7 +29,7 @@
       </form>
       <form method="post" action="/applications/{{ app.id }}/contacts/{{ p.rank }}/remove"><button>Remove &amp; use next candidate</button></form>
     </details>
-  </div>
+  </article>
   {% endfor %}
   {% if nudge_due %}
   <form method="post" action="/applications/{{ app.id }}/contacts/followup"><button class="primary">Draft follow-up to #{{ nudge_due|map(attribute="rank")|join(" & #") }} ({% for p in nudge_due %}{{ p.name.split()[0] }}{{ ", " if not loop.last }}{% endfor %})</button></form>

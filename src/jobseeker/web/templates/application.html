@@ -63,18 +63,37 @@
   </section>
   {% endif %}
 
-<div class="detail">
-  <section class="col-main">
-    <details class="block jd-box" open data-phone-closed>
-      <summary class="phone-only-summary">Job description · {{ matched_skills }} skills matched</summary>
+<div class="job-body" data-tabs data-default="{{ 'draft' if app.status == 'approved' else ('people' if app.status == 'drafted' else 'job') }}">
+  <div class="tab-bar chips" role="tablist">
+    <button type="button" class="chip" data-tab="people" role="tab">{{ icon("people", 16) }} People{% if people %} <span class="count">{{ people|length }}</span>{% endif %}</button>
+    <button type="button" class="chip" data-tab="draft" role="tab">{{ icon("draft", 16) }} Draft</button>
+    <button type="button" class="chip" data-tab="job" role="tab">{{ icon("job", 16) }} Job</button>
+  </div>
+
+  <section class="panel panel-job" data-panel="job">
+    <details class="card block jd-box" open>
+      <summary><h2>Job description · {{ matched_skills }} skills matched</h2></summary>
       <article class="jd">{{ job.jd_text|highlight(terms) }}</article>
     </details>
+    <div class="card block notes">
+      <h2>Notes</h2>
+      <form method="post" action="/applications/{{ app.id }}/notes">
+        <textarea name="notes" rows="4" placeholder="Referral source, call notes…">{{ app.notes }}</textarea>
+        <button>Save notes</button>
+      </form>
+    </div>
+    <section class="card block history">
+      <h2>History</h2>
+      <ol class="timeline">{% for e in timeline_items %}<li><span class="mono muted">{{ e.day }}</span><span>{{ e.text }}</span></li>{% else %}<li class="muted">Nothing yet.</li>{% endfor %}</ol>
+    </section>
   </section>
 
-  <section class="col-side">
+  <section class="panel panel-people" data-panel="people">
     {% include "_people.html" %}
-    <div class="card block contact">
-      <h2>Add someone myself</h2>
+    <details class="add-person">
+      <summary class="btn btn-ghost">+ Add someone myself</summary>
+      <div class="card block contact">
+        <h2>Add someone myself</h2>
       {% if app.suggested_contact_role and not people %}
       <p>Suggested: <strong>{{ app.suggested_contact_role }}</strong>. {{ app.suggested_contact_reason }}
         <a href="{{ app.linkedin_search_url }}" target="_blank" rel="noopener">Search LinkedIn ↗</a></p>
@@ -89,8 +108,11 @@
         <select name="email_status">{% for s in ["unverified", "verified", "bounced"] %}<option {% if own and own.email_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
         <button>Save contact</button>
       </form>
-    </div>
+      </div>
+    </details>
+  </section>
 
+  <section class="panel panel-draft" data-panel="draft">
     <div class="card block drafts">
       <h2>Drafts</h2>
       {% if warnings %}<p class="warn">Check before sending: {{ warnings|join("; ") }}</p>{% endif %}
@@ -102,7 +124,7 @@
             <input name="subject" value="{{ drafts.email.subject }}" style="width:100%">
             <textarea name="body" rows="11" data-limit="150" data-unit="words" data-counter="#c_email">{{ drafts.email.body }}</textarea>
             <small id="c_email"></small> <button>Save</button>
-            <br><small class="muted">On Approve, "Hi &lt;first name&gt;," is added (unless you wrote your own greeting) and your signature is appended.</small>
+            <small class="muted">On Approve, "Hi &lt;first name&gt;," is added (unless you wrote your own greeting) and your signature is appended.</small>
           </form>
         </details>
         <details><summary>LinkedIn note</summary>
@@ -122,7 +144,6 @@
         </details>
       {% endif %}
     </div>
-
     <div class="card block actions" id="approve">
       <form method="post" action="/applications/{{ app.id }}/approve" class="approve">
         {% set wave1 = people|selectattr("wave", "equalto", 1)|list %}
@@ -159,19 +180,6 @@
         </div>
       </details>
     </div>
-
-    <div class="card block notes">
-      <h2>Notes</h2>
-      <form method="post" action="/applications/{{ app.id }}/notes">
-        <textarea name="notes" rows="4" placeholder="Referral source, call notes…">{{ app.notes }}</textarea>
-        <button>Save notes</button>
-      </form>
-    </div>
-
-    <details class="card block history" open data-phone-closed>
-      <summary><h2>History</h2></summary>
-      <ul class="events">{% for e in events %}<li>{{ e.at[:16]|replace("T", " ") }} · {{ e.type }} {{ e.payload }}</li>{% endfor %}</ul>
-    </details>
   </section>
 </div>
 </div>

@@ -154,3 +154,47 @@ def test_approve_explains_nothing_is_sent(settings, seeded):
     html = client(settings).get(f"/applications/{seeded[0]}").text
     approve = html.split('class="approve"', 1)[1].split("</form>", 1)[0]
     assert "Nothing is sent until you press Send" in approve or "you press Send" in approve
+
+
+def test_job_page_phone_tabs_and_timeline(settings, seeded):
+    a = seeded[0]
+    _drafted(settings, a)
+    c = client(settings)
+    c.post(f"/applications/{a}/status", data={"status": "skipped"})
+    c.post(f"/applications/{a}/undo")
+    html = c.get(f"/applications/{a}").text
+    assert '<div class="job-body" data-tabs data-default="people">' in html
+    for name in ("people", "draft", "job"):
+        assert f'data-tab="{name}"' in html and f'data-panel="{name}"' in html
+    assert "is-hidden" not in html.split('<div class="job-body"', 1)[1]  # no JS: everything visible
+    assert '<ol class="timeline">' in html and "Undid skipped, back to drafted" in html
+    assert 'src="/static/tabs.js?v=' in html
+    assert '<details class="add-person">' in html  # "Add someone myself" is collapsed behind a link
+
+
+def test_job_page_default_tab_follows_status(settings, seeded):
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    for status, tab in (("approved", "draft"), ("sent", "job"), ("drafted", "people")):
+        conn.execute("UPDATE applications SET status = ? WHERE id = ?", (status, a))
+        conn.commit()
+        assert f'data-tabs data-default="{tab}"' in client(settings).get(f"/applications/{a}").text, status
+
+
+def test_people_card_restyled_with_rank_and_status_pills(settings, seeded):
+    from jobseeker.db.contacts_repo import link_contact, upsert_contact
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    for rank, (name, st) in enumerate([("Asha Rao", "verified"), ("Vikram Singh", "unverified")], start=1):
+        cid = upsert_contact(conn, "CRED", name, "PM", f"https://www.linkedin.com/in/{name[:4].lower()}",
+                             f"{name[:4].lower()}@cred.club", st)
+        link_contact(conn, a, rank, cid, "peer", "r", "smtp")
+    html = client(settings).get(f"/applications/{a}").text
+    card = html.split('id="people-card"', 1)[1]
+    assert card.count('<article class="person">') == 2
+    assert '<span class="rank mono">#1</span>' in card and '<span class="pill tier-strong">verified</span>' in card
+    assert '<span class="pill tier-good">likely</span>' in card

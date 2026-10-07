@@ -41,43 +41,6 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   summary { padding: 10px 0; cursor: pointer; }
 }
 
-/* ---- Job page ---- */
-.history > summary { list-style: none; }
-.history > summary::-webkit-details-marker { display: none; }
-.history > summary h2 { display: inline; }
-.more { display: inline; }
-.more > form { display: inline-block; margin: 4px 4px 4px 0; }
-@media (max-width: 640px) {
-  .detail { display: flex; flex-direction: column; gap: 12px; }
-  .col-main, .col-side { display: contents; }
-  .detail .card { margin-bottom: 0; }
-  .head { order: 1; }
-  .jd-box { order: 2; }
-  .drafts { order: 3; }
-  .people { order: 4; }
-  .contact { order: 5; }
-  .notes { order: 6; }
-  .history { order: 7; }
-  .jd-box > summary { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; }
-  .jd { max-height: none; margin-top: 8px; }
-  .grid { grid-template-columns: 1fr; }
-  .drafts textarea[name=body][data-unit=words] { min-height: 16em; }
-  .drafts form button, .drafts form .btn { margin-top: 6px; }
-  /* Sticky Approve bar */
-  .actions { order: 8; position: sticky; bottom: 0; z-index: 20; margin: 0 -12px calc(-24px - env(safe-area-inset-bottom));
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-radius: 0; border-width: 1px 0 0;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, .12); }
-  .actions .approve { display: block; margin: 0; }
-  .actions .approve button.primary { width: 100%; font-weight: 600; }
-  .actions .approve label { display: block; margin-bottom: 8px; }
-  .actions .more { display: block; }
-  .actions .more > summary { text-align: center; color: var(--accent); }
-  .actions .more[open] { max-height: 50vh; overflow: auto; }
-  .actions .more > form { display: block; margin: 6px 0; }
-  .actions .more > form button { width: 100%; }
-  body.typing .actions { display: none; }  /* never cover the field being typed in */
-}
-
 /* ---- Pipeline ---- */
 @media (max-width: 640px) {
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -88,12 +51,4 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   .kanban .col > summary h3 { margin: 0; }
   .kcard form { display: flex; gap: 8px; }
   .kcard select { flex: 1; }
-}
-
-/* ---- People card ---- */
-.people .person { border-top: 1px solid var(--line); padding: 8px 0; }
-.people .person:first-of-type { border-top: 0; }
-.people .usage { margin: 8px 0 0; }
-@media (max-width: 640px) {
-  .people .person .btn, .people .person button { margin-top: 6px; }
 }

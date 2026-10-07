@@ -290,3 +290,57 @@ ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; fon
   .next-action > form, .next-action > .btn { flex: 1 1 auto; }
   .next-action button, .next-action .btn { width: 100%; }
 }
+
+/* ---- Job page: body, tabs, people, drafts, timeline ---- */
+.job-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-areas: "job people" "job draft";
+  grid-template-rows: auto 1fr; gap: 14px; align-items: start; }
+.tab-bar { display: none; }
+.panel { display: grid; gap: 14px; min-width: 0; }
+.panel-job { grid-area: job; } .panel-people { grid-area: people; } .panel-draft { grid-area: draft; }
+.block h2 { font-size: 16px; }
+.jd-box > summary { list-style: none; cursor: pointer; }
+.jd-box > summary::-webkit-details-marker { display: none; }
+.jd-box > summary h2 { margin: 0; }
+.jd-box[open] > summary h2 { margin-bottom: 10px; }
+.jd { white-space: pre-wrap; font-size: 14px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
+mark, .jd mark { background: var(--strong-bg); color: var(--strong-fg); border-radius: 4px; padding: 0 2px; }
+.notes form, .drafts form { display: grid; gap: 8px; }
+.notes form button, .drafts form button { justify-self: start; }
+.drafts details { border-top: 1px solid var(--line); padding: 4px 0; }
+.drafts details:first-of-type { border-top: 0; }
+.drafts details > summary { cursor: pointer; font-weight: 500; padding: 8px 0; }
+.drafts form > div, .drafts .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.over { color: var(--weak-fg); font-weight: 600; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.people .person { border-top: 1px solid var(--line); padding: 12px 0; display: grid; gap: 6px; }
+.people .person:first-of-type { border-top: 0; padding-top: 4px; }
+.people .person p { margin: 0; }
+.person-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rank { color: var(--text-3); }
+.person-role, .person-reason { font-size: 13px; }
+.person-email { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.person-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.person-edit > summary { cursor: pointer; color: var(--text-2); font-size: 13px; padding: 6px 0; }
+.person-edit form { margin-top: 6px; }
+.people form { margin-top: 8px; }
+.people .usage { margin: 10px 0 0; }
+.domain-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.domain-form input { flex: 1 1 160px; }
+.add-person > summary { list-style: none; width: 100%; }
+.add-person > summary::-webkit-details-marker { display: none; }
+.add-person[open] > summary { display: none; }
+ol.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+ol.timeline li { display: flex; gap: 10px; }
+ol.timeline .mono { flex: 0 0 52px; font-size: 12px; padding-top: 2px; }
+@media (max-width: 640px) {
+  .job-body { display: block; }
+  .tab-bar { display: flex; position: sticky; top: calc(60px + env(safe-area-inset-top)); z-index: 10; background: var(--bg);
+    margin: 0 -16px 10px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+  .tab-bar .chip { flex: 1; justify-content: center; min-height: 44px; }
+  .panel.is-hidden { display: none; }
+  .panel + .panel { margin-top: 14px; }
+  .grid { grid-template-columns: 1fr; }
+  .drafts textarea[data-unit=words] { min-height: 16em; }
+  .person-acts > * { flex: 1; }
+  body.typing .tabbar { display: none; }  /* never cover the field being typed in */
+}
