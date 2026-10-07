@@ -41,6 +41,9 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
 - `profile/preferences.yaml` → `search:` the roles and cities searched every morning on LinkedIn, Naukri and Indeed India. Companies found there that use Greenhouse, Lever or Ashby are discovered automatically and fetched from their own boards afterwards; see them with `uv run jobseeker companies`.
 - `companies.yaml`: optional favourites that are always fetched. Check a slug with `uv run python scripts/verify_companies.py <slug>`.
 
+## Backups
+After each daily run, a gzipped copy of the database and `facts.json` is saved, keeping the last 7 days. It goes to `BACKUP_DIR` from `.env` if set, otherwise iCloud Drive (`JobSeeker-backups`) when iCloud Drive is on, otherwise `~/JobSeeker-backups`. Run `uv run jobseeker backup` at any time. To restore, stop the dashboard and run `gunzip -c <backup>.db.gz > data/jobseeker.db`.
+
 ## Cost and limits
 - Free. Groq's free tier allows about 200K tokens/day per model, which covers about 35 scored and 10 drafted jobs a day (the default caps).
 - If a run hits the daily quota it stops cleanly, and the remaining jobs are picked up the next morning.

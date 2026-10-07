@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     apify_api_token: str = ""
     hunter_api_key: str = ""
+    backup_dir: Path | None = None
+
+    @property
+    def backup_path(self) -> Path:
+        """BACKUP_DIR from .env, else iCloud Drive when it's on (survives losing the Mac), else ~/JobSeeker-backups."""
+        if self.backup_dir:
+            return self.backup_dir
+        icloud = Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
+        return (icloud if icloud.is_dir() else Path.home()) / "JobSeeker-backups"
 
     @property
     def data_dir(self) -> Path:

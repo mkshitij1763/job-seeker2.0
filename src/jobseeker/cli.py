@@ -53,8 +53,24 @@ def _run(fetch: bool, force: bool) -> None:
 
 @app.command()
 def run() -> None:
-    """Fetch, dedup, filter, score and draft (the daily job)."""
+    """Fetch, dedup, filter, score and draft (the daily job), then back up the database."""
     _run(fetch=True, force=False)
+    try:
+        backup()
+    except Exception as e:  # a failed backup must not hide the run's own result
+        typer.echo(f"Backup failed: {type(e).__name__}: {e}", err=True)
+
+
+@app.command()
+def backup() -> None:
+    """Save a gzipped copy of the database and facts.json (keeps the last 7 days)."""
+    from datetime import datetime
+
+    from jobseeker.db.backup import backup as write_backup
+
+    settings = Settings()
+    out = write_backup(settings.db_path, settings.facts_path, settings.backup_path, datetime.now().astimezone())
+    typer.echo(f"Backup written to {out}")
 
 
 @app.command()
