@@ -23,7 +23,7 @@ title_deny: [sales, sde, software engineer, intern, internship, director, head o
   designer, design lead, engineer, engineering, developer, architect, product marketing]
 # a title must contain at least one of these (cheap gate before any LLM call)
 title_allow: [product, analyst, analytics, founder, chief of staff, growth, strategy, insights, business intelligence]
-drop_if_min_years_at_least: 8
+drop_if_min_years_at_least: 2.5  # drop jobs whose stated minimum experience is 2.5+ years
 max_age_days: 7
 thresholds: {apply: 70, review: 50}
 budgets: {score_per_run: 35, draft_per_run: 10}

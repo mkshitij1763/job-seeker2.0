@@ -72,3 +72,28 @@ def test_drops_non_pm_product_titles(prefs, title):
 ])
 def test_keeps_target_titles(prefs, title):
     assert prefilter(make_job(title=title), prefs, NOW, set()) is None
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("1.5 years of experience in analytics", 1.5),
+    ("2.5+ years of experience", 2.5),
+    ("Experience: 3-5 Yrs", 3),
+])
+def test_min_years_decimals(text, expected):
+    assert min_years_required(text) == expected
+
+
+@pytest.mark.parametrize("jd,reason", [
+    ("2-4 years of experience", None),
+    ("1.5 years of experience", None),
+    ("No experience stated", None),
+    ("2.5 years of experience", "experience: 2.5+ years"),
+    ("3-5 years of experience", "experience: 3+ years"),
+    ("Experience: 3-5 Yrs", "experience: 3+ years"),
+])
+def test_drops_jobs_requiring_two_and_a_half_years_or_more(prefs, jd, reason):
+    assert prefilter(make_job(jd_text=jd), prefs, NOW, set()) == reason
+
+
+def test_min_years_decimal_upper_bound_uses_lower_bound():
+    assert min_years_required("2-4.5 years of experience") == 2

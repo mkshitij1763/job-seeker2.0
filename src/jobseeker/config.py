@@ -97,7 +97,7 @@ class Preferences(BaseModel):
     deal_breakers: list[str] = []
     title_deny: list[str] = []
     title_allow: list[str] = []
-    drop_if_min_years_at_least: int = 8
+    drop_if_min_years_at_least: float = 8
     max_age_days: int = 7
     thresholds: Thresholds = Thresholds()
     budgets: Budgets = Budgets()
