@@ -66,7 +66,7 @@ Everything that works on the laptop keeps working the same way there.
 
 ### 4.2 Inbox (`inbox.html`)
 
-- **Rows become cards.** At phone width the existing table is restyled with CSS: `table`, `tr` and `td` become blocks, the header row is hidden, and each row becomes a card laid out with CSS grid. There is no second copy of the markup. Card layout:
+- **Rows become cards.** At phone width the table is hidden and a card list (`<ul class="cards">`, rendered from the same rows) is shown instead. On desktop the list is hidden. A swipe needs a moving card in front of a fixed coloured panel, which table rows can't provide. Each card is `<li class="swipe-card" data-app-id data-swipe>`, holding an `aria-hidden` `.swipe-bg` panel and a `.card-body`. Card layout:
   - **Line 1:** score badge (the existing hi/mid/lo colours) and the title as a link. The whole card is tappable through the title link's enlarged hit area.
   - **Line 2:** company · city · age · source.
   - **Line 3:** the role-family tag, the status tag, and up to two ✓ matches and one ✗ gap.
@@ -161,7 +161,12 @@ The `data-open` behaviour is removed from `keys.js`. The DM keeps its single **C
 
 **Accessibility:** every swipe action keeps its visible button on the card (Skip, Snooze), so swiping is never the only way (WCAG 2.2, 2.5.7 Dragging Movements).
 
-**Code structure:** swipe recognition is a pure function in `static/swipe.js`: `decide(start, current, now, cardWidth, viewportWidth) → {mode: "scroll"|"swipe"|"none", commit: "skip"|"snooze"|null}`. It loads in the browser as `window.JobSwipe` and in Node via `module.exports`. The browser wiring (touch events, animation, fetch, toast) is a thin layer around it.
+**Code structure:** `static/swipe.js` holds three pure functions, loaded in the browser as `window.JobSwipe` and in Node via `module.exports`:
+- `decide(start, current) → {mode: "none"|"scroll"|"swipe"}`: is the gesture a scroll or a swipe?
+- `release(start, end, cardWidth) → "skip"|"snooze"|null`: commit or snap back?
+- `parseOutcome(finalUrl, ok, status) → {ok, message}`: read the server's redirect.
+
+The browser wiring (touch events, the `.card-body` transform, fetch, toast) is a thin layer around them.
 
 ### 4.8 Interaction polish (from the ui-ux-pro-max checklist)
 
