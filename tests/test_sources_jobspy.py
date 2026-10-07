@@ -119,3 +119,11 @@ def test_unknown_city_is_not_relabelled_as_searched_city():
     empty = to_raw_job("naukri", {"id": "nk-2", "title": "PA", "company": "C", "location": "",
                                   "job_url": "https://n/2"}, "Pune")
     assert empty.location == "Pune"
+
+
+def test_naukri_row_without_description_has_empty_jd():
+    # Naukri's detail fetch can fail (e.g. HTTP 406); an "Experience: …" stub must not stand in for a description,
+    # or it overwrites the full one stored earlier and triggers a re-score on almost no text.
+    job = to_raw_job("naukri", {"id": "nk-1", "title": "APM", "company": "C", "location": "Pune, India",
+                                "job_url": "https://n/1", "experience_range": "1-3 Yrs", "description": None}, "Pune")
+    assert job.jd_text == ""

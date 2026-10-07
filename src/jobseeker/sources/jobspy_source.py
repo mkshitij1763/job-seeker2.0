@@ -61,8 +61,8 @@ def to_raw_job(site: str, row: dict, search_location: str) -> RawJob | None:
         location = f"{search_location}, {location}" if location else search_location
     description = _text(row.get("description"))
     experience = _text(row.get("experience_range"))
-    if experience:
-        description = f"Experience: {experience}\n\n{description}".strip()
+    if experience and description:  # never let the experience line stand in for a missing description
+        description = f"Experience: {experience}\n\n{description}"
     remote = row.get("is_remote") is True or _text(row.get("work_from_home_type")).lower() == "remote"
     return RawJob(source=site, source_job_id=job_id, company=company, title=title, location=location,
                   remote=remote, posted_at=parse_iso(_text(row.get("date_posted")) or None),
