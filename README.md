@@ -32,6 +32,7 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
   4. Click **Approve → Gmail draft**.
   5. Send it from Gmail, then click **Mark sent**.
 - **Pipeline:** every application at a glance, with a **follow up** badge after 5 days without a reply.
+- **On your iPhone:** open the Tailscale address (see Setup step 7) and Add to Home Screen. In the inbox, swipe a card left to **Skip** or right to **Snooze** (Undo appears for 6 seconds). On a job page, **Approve** is pinned to the bottom; everything else is under **More**.
 
 ## Tuning
 - `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models.
