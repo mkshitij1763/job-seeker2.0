@@ -278,3 +278,9 @@ def test_sent_job_with_follow_up_due_opens_on_people(settings, seeded):
     assert 'data-tabs data-default="people"' in html
     nxt = html.split('class="next-action"', 1)[1].split("</section>", 1)[0]
     assert 'href="#people-card"' in nxt and "Follow up now" in nxt
+
+
+def test_tabs_rebind_after_htmx_history_restore():
+    js = (STATIC / "tabs.js").read_text()
+    assert "new WeakSet()" in js and "dataset.bound" not in js  # a DOM marker survives into history snapshots
+    assert '"htmx:historyRestore"' in js

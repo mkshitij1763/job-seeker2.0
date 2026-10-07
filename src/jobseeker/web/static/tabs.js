@@ -18,12 +18,14 @@
     box.querySelectorAll("[data-panel]").forEach((p) => p.classList.toggle("is-hidden", p.dataset.panel !== name));
     box.dataset.current = name;
   }
+  const bound = new WeakSet();
   function init() {
     document.querySelectorAll("[data-tabs]").forEach((box) => {
       const names = [...box.querySelectorAll("[data-tab]")].map((b) => b.dataset.tab);
       show(box, resolveTab(names, box.dataset.current || null, box.dataset.default || ""));
-      if (box.dataset.bound) return;  // one listener per container; it survives the People card's outerHTML refresh
-      box.dataset.bound = "1";
+      // A WeakSet, not a DOM marker: htmx history snapshots copy attributes but not listeners.
+      if (bound.has(box)) return;
+      bound.add(box);
       box.addEventListener("click", (e) => {
         const b = e.target.closest("[data-tab]");
         if (b && box.contains(b)) { e.preventDefault(); show(box, b.dataset.tab); }
