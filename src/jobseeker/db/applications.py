@@ -213,7 +213,7 @@ def _undo_target(conn: sqlite3.Connection, app_id: int) -> tuple[str, str]:
     frm, to = payload.get("from"), payload.get("to")
     if to in UNDO_BLOCKED:
         raise InvalidTransition(f"{to.replace('_', ' ')} can't be undone")
-    if not frm or frm == "snoozed":
+    if not frm or frm == "snoozed" or "reason" in payload:  # "reason" = the app moved it (e.g. edited after approval)
         raise InvalidTransition("that change can't be undone")
     if get_status(conn, app_id) != to:
         raise InvalidTransition("the status has changed since")

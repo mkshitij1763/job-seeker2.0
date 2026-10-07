@@ -107,3 +107,15 @@ def test_min_years_decimal_upper_bound_uses_lower_bound():
 ])
 def test_min_years_plus_or_range_followed_by_in_as_working(text, expected):
     assert min_years_required(text) == expected
+
+
+@pytest.mark.parametrize("text", [
+    "We have been in business for 10+ years in a row",
+    "Founded 20+ years in business",
+    "We are 15+ years in the making",
+    "Over the past 3+ years in India we grew 5x",
+    "Our team has 50+ years in combined fintech expertise",
+    "with 10+ years working with Fortune 500 clients",
+])
+def test_company_boilerplate_is_not_a_requirement(text):
+    assert min_years_required(text) is None

@@ -75,3 +75,22 @@ def test_undo_route_and_button(settings, seeded):
     assert get_status(connect(settings.db_path), a) == "drafted"
     r = client.post(f"/applications/{a}/undo")
     assert "err=" in r.headers["location"]
+
+
+def test_undo_refused_for_system_transition_after_approval(settings, seeded):
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    transition(conn, a, "approved", {"gmail_draft_id": "G1"})
+    transition(conn, a, "drafted", {"reason": "edited after approval"})
+    assert not can_undo(conn, a)  # undo would claim "approved" while Gmail holds the old text
+    with pytest.raises(InvalidTransition):
+        undo_last_status(conn, a)
+
+
+def test_undoing_an_approval_warns_about_the_gmail_draft(settings, seeded):
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    transition(conn, a, "approved", {"gmail_draft_id": "G1"})
+    client = TestClient(create_app(settings), follow_redirects=False)
+    r = client.post(f"/applications/{a}/undo")
+    assert "Gmail" in r.headers["location"] and "delete" in r.headers["location"].lower()

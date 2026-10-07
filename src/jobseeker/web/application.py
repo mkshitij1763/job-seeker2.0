@@ -160,11 +160,15 @@ def followed_up(app_id: int, conn=Depends(get_conn)):
 
 @router.post("/{app_id}/undo")
 def undo(app_id: int, next: str = Form(""), conn=Depends(get_conn)):
+    was = get_status(conn, app_id)
     try:
         restored = undo_last_status(conn, app_id)
     except InvalidTransition as e:
         return _back(app_id, next, err=f"Can't undo: {e}")
-    return _back(app_id, next, msg=f"Undone: back to {restored.replace('_', ' ')}")
+    msg = f"Undone: back to {restored.replace('_', ' ')}"
+    if was == "approved":
+        msg += ". The Gmail draft still exists; delete it in Gmail"
+    return _back(app_id, next, msg=msg)
 
 
 @router.post("/{app_id}/not-interested")

@@ -121,3 +121,15 @@ def test_mobile_css_makes_approve_full_width():
     css = (STATIC / "mobile.css").read_text()
     phone = css[css.index("/* ---- Job page ---- */"):]
     assert re.search(r"\.actions \.approve \{[^}]*display: block", phone)
+
+
+def test_swipe_rebinds_after_htmx_history_restore():
+    js = (STATIC / "swipe.js").read_text()
+    assert "new WeakSet()" in js and "swipeBound" not in js  # a DOM marker survives into history snapshots
+    assert '"htmx:historyRestore"' in js and '"htmx:beforeHistorySave"' in js
+
+
+def test_keys_js_unfolds_when_leaving_phone_width():
+    js = (STATIC / "keys.js").read_text()
+    assert 'addEventListener("change"' in js and 'setAttribute("open", "")' in js
+    assert '"htmx:historyRestore"' in js

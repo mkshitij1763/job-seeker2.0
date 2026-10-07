@@ -78,9 +78,12 @@
     if (x) card.dataset.dir = x < 0 ? "skip" : "snooze"; else delete card.dataset.dir;
   }
 
+  // A WeakSet, not a DOM marker: htmx history snapshots copy attributes but not listeners.
+  const bound = new WeakSet();
+
   function bind(card) {
-    if (card.dataset.swipeBound) return;
-    card.dataset.swipeBound = "1";
+    if (bound.has(card)) return;
+    bound.add(card);
     let start = null, mode = "none";
     card.addEventListener("touchstart", (e) => {
       const t = e.touches[0];
@@ -116,4 +119,9 @@
   function init() { document.querySelectorAll("[data-swipe]").forEach(bind); }
   document.addEventListener("DOMContentLoaded", init);
   document.addEventListener("htmx:afterSettle", init);
+  document.addEventListener("htmx:historyRestore", init);  // Back/Forward rebuilds the body without afterSettle
+  document.addEventListener("htmx:beforeHistorySave", () => {  // never snapshot a toast whose Undo is dead
+    const el = document.getElementById("toast");
+    if (el) el.hidden = true;
+  });
 })(typeof window !== "undefined" ? window : globalThis);

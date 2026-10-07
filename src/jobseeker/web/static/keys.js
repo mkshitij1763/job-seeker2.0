@@ -1,5 +1,6 @@
 (function () {
-  const phone = () => window.matchMedia("(max-width: 640px)").matches;
+  const phoneQuery = window.matchMedia("(max-width: 640px)");
+  const phone = () => phoneQuery.matches;
   let i = 0;
   const rows = () => Array.from(document.querySelectorAll("table[data-keys=rows] tbody tr[data-href]"));
   function select(n) {
@@ -56,6 +57,11 @@
     document.querySelectorAll('details[data-phone-closed], details.col[data-count="0"]')
       .forEach((d) => d.removeAttribute("open"));
   }
+  // Rotating to landscape (852px) hides the phone-only summaries, so folded sections must open again.
+  phoneQuery.addEventListener("change", () => {
+    if (phone()) foldForPhone();
+    else document.querySelectorAll("details[data-phone-closed], details.col").forEach((d) => d.setAttribute("open", ""));
+  });
   function init() {
     if (!phone()) select(0);
     foldForPhone();
@@ -63,4 +69,5 @@
   }
   document.addEventListener("DOMContentLoaded", init);
   document.addEventListener("htmx:afterSettle", init);
+  document.addEventListener("htmx:historyRestore", init);
 })();
