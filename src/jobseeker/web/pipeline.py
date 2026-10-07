@@ -13,3 +13,8 @@ def pipeline(request: Request, conn=Depends(get_conn)):
     now = datetime.now(UTC)
     return render(request, conn, "pipeline.html", board=queries.pipeline(conn, now),
                   columns=queries.PIPELINE_COLUMNS, st=queries.stats(conn, now))
+
+
+@router.get("/today")
+def today(request: Request, conn=Depends(get_conn)):
+    return render(request, conn, "today.html", t=queries.today(conn, datetime.now(UTC)))

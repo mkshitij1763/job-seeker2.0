@@ -79,3 +79,15 @@ mark { background: var(--mark); color: inherit; }
 .kcard.due { border-color: var(--warn); }
 .kcard p { margin: 4px 0; font-size: 12px; }
 @media (max-width: 900px) { .detail { grid-template-columns: 1fr; } }
+
+/* ---- Today ---- */
+.today { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.today > section { min-width: 0; }
+.today h2 { display: flex; align-items: center; gap: 8px; }
+.today-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.today-row form { margin: 0; }
+.today-job { display: flex; align-items: center; gap: 10px; color: var(--text); min-width: 0; flex: 1; }
+.today-job > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.today-job b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-job .score { flex: 0 0 auto; min-width: 36px; text-align: center; }
+.today-new { text-align: center; margin: 4px 0 20px; }

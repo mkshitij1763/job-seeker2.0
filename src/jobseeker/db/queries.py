@@ -108,3 +108,26 @@ def stats(conn: sqlite3.Connection, now: datetime, days: int = 30) -> dict:
     return {"drafted": moved_to("drafted"), "sent": sent, "replied": replied,
             "reply_rate": (replied / sent) if sent else 0.0, "interviews": moved_to("interview"),
             "jobs_per_source": per_source}
+
+
+def today(conn: sqlite3.Connection, now: datetime) -> dict:
+    """What needs the user now, most urgent first: Gmail drafts to send, follow-ups due, drafts ready to approve,
+    drafted jobs that still need people."""
+    from jobseeker.db.contacts_repo import nudge_due, third_due
+
+    rows = [dict(r) for r in conn.execute(
+        f"""SELECT a.id AS app_id, a.status, j.title, j.company, j.first_seen_at, s.score,
+                   (SELECT COUNT(*) FROM application_contacts ac WHERE ac.application_id = a.id) AS people
+            FROM applications a JOIN jobs j ON j.id = a.job_id JOIN scores s ON {_LATEST_SCORE}
+            WHERE a.status IN ('new', 'shortlisted', 'drafted', 'approved', 'sent')
+            ORDER BY s.score DESC, a.id""").fetchall()]
+    drafted = [r for r in rows if r["status"] == "drafted"]
+    since = iso(now - timedelta(days=1))
+    return {
+        "send": [r for r in rows if r["status"] == "approved"],
+        "followups": [r for r in rows if r["status"] == "sent"
+                      and (nudge_due(conn, r["app_id"], now) or third_due(conn, r["app_id"], now))],
+        "ready": [r for r in drafted if r["people"]],
+        "find_contacts": [r for r in drafted if not r["people"]],
+        "new_since_yesterday": sum(1 for r in rows if r["status"] in _INBOX_STATUSES and r["first_seen_at"] >= since),
+    }

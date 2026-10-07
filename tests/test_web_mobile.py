@@ -26,7 +26,7 @@ def test_base_has_phone_meta_and_toast(settings, seeded):
 
 def test_manifest(settings):
     data = json.loads(client(settings).get("/static/manifest.webmanifest").content)
-    assert data["display"] == "standalone" and data["start_url"] == "/"
+    assert data["display"] == "standalone" and data["start_url"] == "/today"
     assert {i["sizes"] for i in data["icons"]} == {"180x180", "512x512"}
 
 

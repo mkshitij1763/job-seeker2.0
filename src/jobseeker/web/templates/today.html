@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Today · Job Seeker{% endblock %}
+{% block content %}
+{% macro job(r) %}<a class="today-job" href="/applications/{{ r.app_id }}"><span class="score {% if r.score >= 70 %}hi{% elif r.score >= 50 %}mid{% else %}lo{% endif %}">{{ r.score }}</span><span><b>{{ r.title }}</b><small class="muted">{{ r.company }}</small></span></a>{% endmacro %}
+<div class="today">
+  {% if t.send %}
+  <section class="card block">
+    <h2>Send in Gmail <span class="tag">{{ t.send|length }}</span></h2>
+    <p class="muted">Drafts are waiting in Gmail. Send them, then mark sent here.</p>
+    {% for r in t.send %}
+    <div class="today-row">{{ job(r) }}
+      <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="sent"><input type="hidden" name="next" value="/today"><button>Mark sent</button></form>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {% if t.followups %}
+  <section class="card block">
+    <h2>Follow-ups due <span class="tag">{{ t.followups|length }}</span></h2>
+    <p class="muted">5+ days with no reply. Open one to draft a follow-up or email #3.</p>
+    {% for r in t.followups %}<div class="today-row">{{ job(r) }}</div>{% endfor %}
+  </section>
+  {% endif %}
+  {% if t.ready %}
+  <section class="card block">
+    <h2>Ready to approve <span class="tag">{{ t.ready|length }}</span></h2>
+    <p class="muted">People found. Check them and tap Approve to create Gmail drafts.</p>
+    {% for r in t.ready %}<div class="today-row">{{ job(r) }}</div>{% endfor %}
+  </section>
+  {% endif %}
+  {% if t.find_contacts %}
+  <section class="card block">
+    <h2>Find contacts <span class="tag">{{ t.find_contacts|length }}</span></h2>
+    <p class="muted">Drafts are written; find who to send them to. Best matches first.</p>
+    {% for r in t.find_contacts[:5] %}<div class="today-row">{{ job(r) }}</div>{% endfor %}
+    {% if t.find_contacts|length > 5 %}<p><a href="/">{{ t.find_contacts|length - 5 }} more in the Inbox →</a></p>{% endif %}
+  </section>
+  {% endif %}
+  {% if not (t.send or t.followups or t.ready or t.find_contacts) %}
+  <section class="card block"><h2>All caught up</h2><p class="muted">Nothing needs you right now. New jobs arrive after the 11:15 run.</p></section>
+  {% endif %}
+  <p class="today-new"><a href="/">{{ t.new_since_yesterday }} new job{{ "s" if t.new_since_yesterday != 1 }} since yesterday · Inbox →</a></p>
+</div>
+{% endblock %}
