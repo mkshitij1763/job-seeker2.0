@@ -379,3 +379,25 @@ ol.timeline .mono { flex: 0 0 52px; font-size: 12px; padding-top: 2px; }
   .kcard .move button { min-height: 44px; }
   .kmove > summary { min-height: 32px; display: flex; align-items: center; }
 }
+
+/* ---- Tablet / narrow desktop: one column on the job page, inputs never wider than their box ---- */
+input, select, textarea { min-width: 0; }
+.grid > * { min-width: 0; }
+.table-card { overflow-x: auto; }
+@media (min-width: 641px) and (max-width: 1240px) {
+  /* Stitch tablet rule: the sidebar becomes an icon rail */
+  .shell { grid-template-columns: 72px minmax(0, 1fr); }
+  .sidebar { padding: 18px 10px; align-items: center; }
+  .sidebar .brand { padding: 4px 0 18px; font-size: 0; gap: 0; }
+  .sidebar .nav-item { position: relative; justify-content: center; width: 48px; height: 48px; padding: 0; }
+  .sidebar .nav-item > span:not(.count) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sidebar .nav-item .count { position: absolute; top: 2px; right: 0; margin: 0; background: var(--accent); color: #fff; }
+  .sidebar-foot { padding: 0; text-align: center; }
+  .sidebar .run-notes > summary { font-size: 11px; }
+  .sidebar .run-notes-panel { left: 0; }
+  table.inbox th:nth-child(6), table.inbox td.why { display: none; }
+  .job-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: "people" "draft" "job"; grid-template-rows: auto; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pipe-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .main { padding: 24px; }
+}

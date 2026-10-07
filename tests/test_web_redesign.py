@@ -249,3 +249,11 @@ def test_legacy_stylesheets_are_gone(settings, seeded):
     html = client(settings).get("/today").text
     assert "app.css" not in html and "mobile.css" not in html
     assert not (STATIC / "app.css").exists() and not (STATIC / "mobile.css").exists()
+
+
+def test_tablet_layout_contract():
+    css = (STATIC / "ui.css").read_text()
+    tablet = css[css.index("@media (min-width: 641px) and (max-width: 1240px)"):]
+    assert ".shell { grid-template-columns: 72px" in tablet  # sidebar becomes an icon rail
+    assert 'grid-template-areas: "people" "draft" "job"' in tablet  # job page stacks into one column
+    assert ".table-card { overflow-x: auto; }" in css  # the Jobs table scrolls instead of being clipped
