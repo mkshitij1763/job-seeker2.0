@@ -83,3 +83,24 @@ def test_truncated_and_invalid_raise_llm_error():
     llm, _ = _llm([_ok('{"a": "x"}')])
     with pytest.raises(LLMError):
         llm.json(model="m", system="s", prompt="p", schema=Inner)
+
+
+def _connection_error():
+    return groq.APIConnectionError(request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions"))
+
+
+def test_connection_error_retried_then_succeeds():
+    sleeps: list[float] = []
+    llm, comp = _llm([_connection_error(), _ok()], sleeps)
+    assert llm.json(model="m", system="s", prompt="p", schema=Inner) == Inner(a=3)
+    assert sleeps == [2.0] and len(comp.kwargs) == 2
+
+
+def test_persistent_connection_errors_raise_unavailable():
+    from jobseeker.llm import LLMUnavailable
+
+    sleeps: list[float] = []
+    llm, comp = _llm([_connection_error() for _ in range(4)], sleeps)
+    with pytest.raises(LLMUnavailable):
+        llm.json(model="m", system="s", prompt="p", schema=Inner)
+    assert sleeps == [2.0, 4.0, 8.0] and len(comp.kwargs) == 4

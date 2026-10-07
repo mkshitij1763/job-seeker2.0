@@ -11,6 +11,7 @@ T = TypeVar("T", bound=BaseModel)
 MAX_WAITS = 4            # per call, for short per-minute 429s
 MAX_WAIT_SECONDS = 65.0  # one token-per-minute window
 QUOTA_THRESHOLD = 120.0  # a longer retry-after means the daily quota is gone
+CONNECTION_RETRIES = 3  # dropped connections are retried after 2, 4 and 8 seconds
 
 
 class LLMError(Exception):
@@ -19,6 +20,10 @@ class LLMError(Exception):
 
 class LLMQuotaExceeded(LLMError):
     pass
+
+
+class LLMUnavailable(LLMError):
+    """Groq could not be reached even after retrying; stop LLM work for this run."""
 
 
 def strict_schema(model_cls: type[BaseModel]) -> dict:
@@ -69,7 +74,8 @@ class GroqLLM:
             reasoning_effort=effort,
             max_completion_tokens=max_tokens,
         )
-        for attempt in range(MAX_WAITS + 1):
+        waits = dropped = 0
+        while True:
             try:
                 resp = self._client.chat.completions.create(**request)
                 break
@@ -77,9 +83,15 @@ class GroqLLM:
                 wait = _retry_after(e)
                 if wait > QUOTA_THRESHOLD:
                     raise LLMQuotaExceeded(f"Groq daily quota used up for {model}; retry in {wait:.0f}s") from e
-                if attempt == MAX_WAITS:
+                if waits == MAX_WAITS:
                     raise LLMError(f"still rate limited after {MAX_WAITS} waits") from e
+                waits += 1
                 self._sleep(min(wait, MAX_WAIT_SECONDS))
+            except groq.APIConnectionError as e:
+                if dropped == CONNECTION_RETRIES:
+                    raise LLMUnavailable(f"Groq unreachable after {CONNECTION_RETRIES} retries: {e}") from e
+                dropped += 1
+                self._sleep(2.0 ** dropped)
             except groq.APIError as e:
                 raise LLMError(f"{type(e).__name__}: {e}") from e
         choice = resp.choices[0]

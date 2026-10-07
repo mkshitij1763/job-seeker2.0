@@ -111,3 +111,14 @@ def test_run_records_actual_finish_time(prefs, rubric, facts):
     run = last_run(conn)
     assert run["started_at"] == "2026-10-07T02:00:00+00:00"
     assert run["finished_at"] == "2026-10-07T02:05:00+00:00"
+
+
+def test_llm_unavailable_stops_all_llm_work(prefs, rubric, facts):
+    from jobseeker.llm import LLMUnavailable
+
+    conn = connect(":memory:")
+    llm = FakeLLM(handler=lambda schema, prompt: LLMUnavailable("Groq unreachable"))
+    jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
+    stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
+    assert len(llm.calls) == 1 and stats.scored == 0
+    assert stats.errors == ["scoring stopped: Groq unreachable"]

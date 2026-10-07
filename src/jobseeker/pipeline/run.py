@@ -18,7 +18,7 @@ from jobseeker.db.jobs import (
     record_jd_attempt, set_jd_text, set_prescore, upsert_job,
 )
 from jobseeker.db.runs import finish_run, start_run
-from jobseeker.llm import LLM, LLMError, LLMQuotaExceeded
+from jobseeker.llm import LLM, LLMError, LLMQuotaExceeded, LLMUnavailable
 from jobseeker.outreach.drafter import draft_outreach
 from jobseeker.pipeline.discovery import GENERIC_WORDS, discover
 from jobseeker.pipeline.normalize import normalize, normalize_company, normalize_title
@@ -172,13 +172,14 @@ def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, pref
     if fetch:
         _fetch(conn, stats, sources, client, facts, prefs, now)
 
-    quota_hit = False
+    quota_hit = unavailable = False
     for row in _select(conn, stats, rubric, facts, prefs, now, force_rescore, describe):
         try:
             result = score_job(llm, job_from_row(row), facts, prefs, rubric, prefs.models.scoring)
-        except LLMQuotaExceeded as e:
+        except (LLMQuotaExceeded, LLMUnavailable) as e:
             stats.errors.append(f"scoring stopped: {e}")
             quota_hit = True
+            unavailable = isinstance(e, LLMUnavailable)
             break
         except LLMError as e:
             stats.errors.append(f"score job {row['id']}: {e}")
@@ -190,14 +191,16 @@ def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, pref
             transition(conn, app_id, "shortlisted", {"score": result.score}, now)
             stats.shortlisted += 1
 
-    # Scoring and drafting use different models (separate daily quotas); skip drafting only if they share one.
+    # Scoring and drafting use different models (separate daily quotas): a used-up scoring quota only stops
+    # drafting when they share one. Groq being unreachable stops both.
     same_model = prefs.models.drafting == prefs.models.scoring
-    drafting_apps = [] if (quota_hit and same_model) else _apps_needing_drafts(conn, prefs.budgets.draft_per_run)
+    skip_drafting = (quota_hit and same_model) or unavailable
+    drafting_apps = [] if skip_drafting else _apps_needing_drafts(conn, prefs.budgets.draft_per_run)
     for app_id in drafting_apps:
         try:
             draft_application(conn, app_id, llm, facts, prefs, now)
             stats.drafted += 1
-        except LLMQuotaExceeded as e:
+        except (LLMQuotaExceeded, LLMUnavailable) as e:
             stats.errors.append(f"drafting stopped: {e}")
             break
         except LLMError as e:
