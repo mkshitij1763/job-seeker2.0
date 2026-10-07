@@ -3,10 +3,10 @@
 {% block title %}Today · Job Seeker{% endblock %}
 {% block content %}
 {% set hour = now_hour if now_hour is defined else 9 %}
-{% set first = request.app.state.prefs.name.split()[0] %}
+{% set first = (request.app.state.prefs.name or "").split()|first %}
 {% macro job(r) %}<a class="today-job" href="/applications/{{ r.app_id }}"><span class="pill tier-{{ tier(r.score) }}">{{ r.score }}</span><span class="today-job-text"><b>{{ r.title }}</b><small class="muted">{{ r.company }}</small></span></a>{% endmacro %}
 <header class="page-head">
-  <h1>Good {{ "morning" if hour < 12 else ("afternoon" if hour < 17 else "evening") }}, {{ first }}.</h1>
+  <h1>Good {{ "morning" if hour < 12 else ("afternoon" if hour < 17 else "evening") }}{% if first %}, {{ first }}{% endif %}.</h1>
   <p class="muted">Here's what needs you today.</p>
 </header>
 <div class="stats">

@@ -284,3 +284,13 @@ def test_tabs_rebind_after_htmx_history_restore():
     js = (STATIC / "tabs.js").read_text()
     assert "new WeakSet()" in js and "dataset.bound" not in js  # a DOM marker survives into history snapshots
     assert '"htmx:historyRestore"' in js
+
+
+def test_today_greeting_survives_blank_name(settings, seeded):
+    import yaml
+
+    data = yaml.safe_load(settings.preferences_path.read_text())
+    data["name"] = ""
+    settings.preferences_path.write_text(yaml.safe_dump(data))
+    r = client(settings).get("/today")
+    assert r.status_code == 200 and re.search(r"Good (morning|afternoon|evening)\.", r.text)
