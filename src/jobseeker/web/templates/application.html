@@ -81,6 +81,7 @@
       {% endfor %}
       <form method="post" action="/applications/{{ app.id }}/snooze"><button>Snooze 3d</button></form>
       {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button>Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
+      {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button>Undo last change</button></form>{% endif %}
       <form method="post" action="/applications/{{ app.id }}/not-interested">
         <label><input type="checkbox" name="block_company" value="true"> also block company</label>
         <button>Not interested</button>

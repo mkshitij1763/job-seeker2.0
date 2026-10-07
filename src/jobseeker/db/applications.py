@@ -191,3 +191,51 @@ def set_gmail_draft_id(conn: sqlite3.Connection, app_id: int, draft_id: str) -> 
     conn.execute("UPDATE drafts SET gmail_draft_id = ? WHERE application_id = ? AND kind = 'email'",
                  (draft_id, app_id))
     conn.commit()
+
+
+UNDO_BLOCKED = {"not_interested"}  # its blocklist entries are not reverted
+
+
+def last_status_event(conn: sqlite3.Connection, app_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM events WHERE application_id = ? AND type IN ('status', 'undo') ORDER BY id DESC LIMIT 1",
+        (app_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _undo_target(conn: sqlite3.Connection, app_id: int) -> tuple[str, str]:
+    """(current status, status to restore) for an undoable latest change; raises InvalidTransition otherwise."""
+    ev = last_status_event(conn, app_id)
+    if not ev or ev["type"] != "status":
+        raise InvalidTransition("nothing to undo")
+    payload = json.loads(ev["payload"])
+    frm, to = payload.get("from"), payload.get("to")
+    if to in UNDO_BLOCKED:
+        raise InvalidTransition(f"{to.replace('_', ' ')} can't be undone")
+    if not frm or frm == "snoozed":
+        raise InvalidTransition("that change can't be undone")
+    if get_status(conn, app_id) != to:
+        raise InvalidTransition("the status has changed since")
+    return to, frm
+
+
+def can_undo(conn: sqlite3.Connection, app_id: int) -> bool:
+    try:
+        _undo_target(conn, app_id)
+    except InvalidTransition:
+        return False
+    return True
+
+
+def undo_last_status(conn: sqlite3.Connection, app_id: int, now: datetime | None = None) -> str:
+    current, restored = _undo_target(conn, app_id)
+    conn.execute(
+        """UPDATE applications SET status = ?, snoozed_until = NULL, snoozed_from = NULL, updated_at = ?,
+           applied_via_portal = CASE WHEN ? = 'applied_via_portal' THEN 0 ELSE applied_via_portal END
+           WHERE id = ?""",
+        (restored, _now(now), current, app_id),
+    )
+    add_event(conn, app_id, "undo", {"from": current, "to": restored}, now)
+    conn.commit()
+    return restored

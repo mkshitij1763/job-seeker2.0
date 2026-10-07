@@ -8,8 +8,8 @@ from fastapi.responses import RedirectResponse
 
 from jobseeker.db import queries
 from jobseeker.db.applications import (
-    BlockedContact, get_status, mark_not_interested, record_followup, save_contact, save_draft,
-    set_gmail_draft_id, set_notes, snooze, transition,
+    BlockedContact, can_undo, get_status, mark_not_interested, record_followup, save_contact, save_draft,
+    set_gmail_draft_id, set_notes, snooze, transition, undo_last_status,
 )
 from jobseeker.gmail.client import GmailUnavailable, create_draft
 from jobseeker.gmail.mime import build_raw_message
@@ -40,7 +40,7 @@ def detail(request: Request, app_id: int, conn=Depends(get_conn)):
         raise HTTPException(404)
     settings = request.app.state.settings
     terms = load_facts(settings.facts_path).skills if settings.facts_path.exists() else []
-    return render(request, conn, "application.html", terms=terms, **d)
+    return render(request, conn, "application.html", terms=terms, can_undo=can_undo(conn, app_id), **d)
 
 
 @router.post("/{app_id}/status")
@@ -153,6 +153,15 @@ def followed_up(app_id: int, conn=Depends(get_conn)):
     except ValueError as e:
         return _back(app_id, err=str(e))
     return _back(app_id, msg="Follow-up recorded")
+
+
+@router.post("/{app_id}/undo")
+def undo(app_id: int, next: str = Form(""), conn=Depends(get_conn)):
+    try:
+        restored = undo_last_status(conn, app_id)
+    except InvalidTransition as e:
+        return _back(app_id, next, err=f"Can't undo: {e}")
+    return _back(app_id, next, msg=f"Undone: back to {restored.replace('_', ' ')}")
 
 
 @router.post("/{app_id}/not-interested")
