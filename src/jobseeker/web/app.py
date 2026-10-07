@@ -10,9 +10,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from jobseeker.config import Settings, load_preferences
+from jobseeker.config import Settings, load_preferences, load_rubric
 from jobseeker.status import allowed_next
 from jobseeker.web.filters import age, highlight, personal_note
+from jobseeker.web.view import STEPS, TIER_LABELS, tier
 
 HERE = Path(__file__).parent
 
@@ -48,8 +49,10 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     templates.env.filters.update(highlight=highlight, age=age, fromjson=json.loads, personal_note=personal_note)
     templates.env.globals["allowed_next"] = allowed_next
     templates.env.globals["asset"] = asset
+    templates.env.globals.update(tier=tier, TIER_LABELS=TIER_LABELS, STEPS=STEPS)
     app.state.settings = settings
     app.state.prefs = load_preferences(settings.preferences_path)
+    app.state.rubric = load_rubric(settings.rubric_path)
     app.state.templates = templates
     app.state.llm_factory = llm_factory or (
         lambda: FallbackLLM(build_llm(settings), app.state.prefs.models.fallbacks))
