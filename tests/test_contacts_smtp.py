@@ -113,3 +113,13 @@ def test_postfix_user_unknown_with_relay_word_is_not_a_refusal():
     with verifier(server) as v:
         assert v.is_catch_all("y.com") is False
         assert v.check(["a@y.com"]) is None
+
+
+def test_rcpt_that_raises_still_counts_against_the_daily_limit():
+    from jobseeker.contacts.smtp_verify import VerifyUnavailable
+
+    spent = []
+    with pytest.raises(VerifyUnavailable):
+        with verifier(ScriptedSMTP(drop_after=1), spend=lambda: spent.append(1)) as v:
+            v.check(["a@x.com", "b@x.com"])
+    assert len(spent) == 2  # the dropped RCPT was sent, so the server saw it
