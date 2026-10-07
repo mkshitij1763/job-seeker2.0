@@ -25,13 +25,18 @@ def age(value: str | None) -> str:
     return "today" if days <= 0 else f"{days}d"
 
 
+_OPENING_GREETING = re.compile(r"^\s*(hi|hello|hey|dear)\b[^,.!\n]{0,20}[,.!]\s*", re.I)
+
+
 def personal_note(body: str, name: str) -> str:
     """LinkedIn connection note for one person: 'Hi <First>, ' in front, kept within LinkedIn's 300 characters."""
     from jobseeker.contacts.names import first_name_title
 
     first = first_name_title(name)
-    head = f"Hi {first}, " if first else ""
-    text = head + (body or "")
+    body = body or ""
+    if first:  # the draft's own "Hi," / "Hello there," would double up with ours
+        body = _OPENING_GREETING.sub("", body, count=1)
+    text = (f"Hi {first}, " if first else "") + body
     return text if len(text) <= 300 else text[:299] + "…"
 
 

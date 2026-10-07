@@ -105,3 +105,11 @@ def test_find_redirect_carries_no_stale_progress_message(settings, seeded):
     zepto(settings, a)
     r = make_client(settings).post(f"/applications/{a}/contacts/find")
     assert r.headers["location"] == f"/applications/{a}"  # the card shows progress; a ?msg would outlive the run
+
+
+def test_personal_note_replaces_the_drafts_own_greeting():
+    assert personal_note("Hi, I'm a Product Analyst at Inito.", "Anshu Kumar") == "Hi Anshu, I'm a Product Analyst at Inito."
+    assert personal_note("Hello there, loved your post.", "Asha Rao") == "Hi Asha, loved your post."
+    assert personal_note("Hey! Quick note.", "Asha Rao") == "Hi Asha, Quick note."
+    assert personal_note("Hi, I'm Kshitij.", "") == "Hi, I'm Kshitij."  # no usable first name: keep the draft as is
+    assert personal_note("Highlights from my work.", "Asha Rao") == "Hi Asha, Highlights from my work."  # not a greeting
