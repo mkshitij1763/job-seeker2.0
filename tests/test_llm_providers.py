@@ -91,3 +91,10 @@ def test_build_llm_wires_keys(tmp_path):
 def test_openai_compat_retries_brief_overload():
     respx.post(URL).mock(side_effect=[httpx.Response(503, json={}), ok_reply()])
     assert client().json(model="m", system="s", prompt="p", schema=Out).ok
+
+
+@respx.mock
+def test_openai_compat_rejected_key_is_unavailable_so_fallback_skips_it():
+    respx.post(URL).mock(return_value=httpx.Response(403, json={"errors": [{"message": "Authentication error"}]}))
+    with pytest.raises(LLMUnavailable, match="rejected the API key"):
+        client().json(model="m", system="s", prompt="p", schema=Out)

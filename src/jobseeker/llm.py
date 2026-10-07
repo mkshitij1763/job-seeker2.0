@@ -163,6 +163,8 @@ class OpenAICompatLLM:
                 dropped += 1
                 self._sleep(2.0 ** dropped)
                 continue
+            if resp.status_code in (401, 403):  # wrong key or missing permission: skip this provider
+                raise LLMUnavailable(f"{self.name} rejected the API key (HTTP {resp.status_code}); check .env")
             if resp.status_code >= 400:
                 raise LLMError(f"{self.name} HTTP {resp.status_code}: {resp.text[:200]}")
             break
