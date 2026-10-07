@@ -87,3 +87,29 @@ def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
                  (app_id, rank))
     conn.commit()
     return _back(app_id, msg="Saved")
+
+
+@router.post("/{app_id}/contacts/3/email")
+def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
+    from jobseeker.db.applications import get_status, record_followup
+    from jobseeker.db.core import utcnow
+    from jobseeker.gmail.client import GmailUnavailable, create_draft
+    from jobseeker.web.application import _raw_for
+
+    if get_status(conn, app_id) != "sent":
+        return _back(app_id, err="Email #3 is for applications marked sent")
+    third = next((p for p in people(conn, app_id) if p["rank"] == 3), None)
+    if not third or not third["email"] or third["email_status"] == "bounced" or third["emailed_at"]:
+        return _back(app_id, err="No usable email for #3")
+    email = conn.execute("SELECT * FROM drafts WHERE application_id = ? AND kind = 'email'", (app_id,)).fetchone()
+    try:
+        draft_id = create_draft(request.app.state.gmail_factory(),
+                                _raw_for(request.app.state, third["email"], third["name"], dict(email),
+                                         extra="I also reached out to your colleague earlier."))
+    except GmailUnavailable as e:
+        return _back(app_id, err=f"Reconnect Gmail: {e}")
+    conn.execute("UPDATE application_contacts SET gmail_draft_id = ?, emailed_at = ? WHERE application_id = ? AND rank = 3",
+                 (draft_id, utcnow(), app_id))
+    conn.commit()
+    record_followup(conn, app_id)
+    return _back(app_id, msg=f"Gmail draft created for {third['name']}. Review and press Send")

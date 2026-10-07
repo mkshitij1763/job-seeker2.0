@@ -164,6 +164,11 @@ def mark_not_interested(conn: sqlite3.Connection, app_id: int, block_company: bo
     if app["contact_id"]:
         conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
                      (app["contact_id"], _now(now)))
+    linked = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND contact_id != ?",
+                          (app_id, app["contact_id"] or -1)).fetchall()
+    for r in linked:
+        conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
+                     (r["contact_id"], _now(now)))
     if block_company:
         conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (NULL, ?, 'not interested', ?)",
                      (company, _now(now)))

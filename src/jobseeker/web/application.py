@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from jobseeker.db import queries
+from jobseeker.db.core import utcnow
 from jobseeker.db.applications import (
     BlockedContact, can_undo, get_status, mark_not_interested, record_followup, save_contact, save_draft,
     set_gmail_draft_id, set_notes, snooze, transition, undo_last_status,
@@ -117,29 +118,75 @@ def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
 
 
 @router.post("/{app_id}/approve")
-def approve(request: Request, app_id: int, confirm_unverified: bool = Form(False), conn=Depends(get_conn)):
+async def approve(request: Request, app_id: int, conn=Depends(get_conn)):
+    from jobseeker.db.contacts_repo import people
+
+    form = await request.form()
     state = request.app.state
     d = queries.application_detail(conn, app_id)
     if not d:
         raise HTTPException(404)
-    contact, email = d["contact"], d["drafts"].get("email")
+    email = d["drafts"].get("email")
     if not email:
         return _back(app_id, err="No email draft yet")
+    if get_status(conn, app_id) != "drafted":
+        return _back(app_id, err=f"Can't approve from status '{get_status(conn, app_id)}'")
+    linked = [p for p in people(conn, app_id) if p["wave"] == 1]
+    if not linked:
+        return _approve_single(state, conn, app_id, d, email, bool(form.get("confirm_unverified")))
+    targets, skipped = [], []
+    for p in linked:
+        if not p["email"] or p["email_status"] == "bounced":
+            skipped.append(p["name"])
+        elif p["email_status"] != "verified" and not form.get(f"confirm_{p['rank']}"):
+            return _back(app_id, err=f"{p['name']}'s email is unverified. Tick the confirmation box to draft anyway")
+        else:
+            targets.append(p)
+    if not targets:
+        return _back(app_id, err="No usable email for #1 or #2. Edit the people or add an email first")
+    created, failure = [], None
+    for p in targets:
+        try:
+            draft_id = create_draft(state.gmail_factory(), _raw_for(state, p["email"], p["name"], email))
+        except GmailUnavailable as e:
+            failure = e
+            break
+        conn.execute("""UPDATE application_contacts SET gmail_draft_id = ?, emailed_at = ?
+                        WHERE application_id = ? AND rank = ?""", (draft_id, utcnow(), app_id, p["rank"]))
+        conn.commit()
+        created.append(p["name"])
+    if created:
+        set_gmail_draft_id(conn, app_id, draft_id if not failure else conn.execute(
+            "SELECT gmail_draft_id FROM application_contacts WHERE application_id = ? AND rank = ?",
+            (app_id, targets[0]["rank"])).fetchone()["gmail_draft_id"])
+        transition(conn, app_id, "approved", {"drafts_for": created})
+    parts = [f"Gmail drafts created for {', '.join(created)}"] if created else []
+    if skipped:
+        parts.append(f"skipped {', '.join(skipped)} (no usable email)")
+    if failure:
+        return _back(app_id, err="; ".join(parts + [f"Reconnect Gmail: {failure}"]))
+    return _back(app_id, msg="; ".join(parts) + ". Review and press Send in Gmail")
+
+
+def _raw_for(state, to: str, name: str, email: dict, extra: str = "") -> str:
+    prefs = state.prefs
+    body = email["body"] + (f"\n\n{extra}" if extra else "")
+    return build_raw_message(
+        to=to, subject=email["subject"], body=greeting(name, body) + signature(prefs),
+        attachment=state.settings.resume_path if state.settings.resume_path.exists() else None,
+        attachment_name=f"{prefs.name.replace(' ', '_')}_Resume.pdf")
+
+
+def _approve_single(state, conn, app_id: int, d: dict, email: dict, confirm_unverified: bool):
+    contact = d["contact"]
     if not contact or not contact["email"]:
         return _back(app_id, err="Add the contact's email first")
     if contact["email_status"] == "bounced":
         return _back(app_id, err="This email bounced before. Find another address")
     if contact["email_status"] != "verified" and not confirm_unverified:
         return _back(app_id, err="Email is unverified. Tick the confirmation box to draft anyway")
-    if get_status(conn, app_id) != "drafted":
-        return _back(app_id, err=f"Can't approve from status '{get_status(conn, app_id)}'")
-    prefs = state.prefs
-    raw = build_raw_message(
-        to=contact["email"], subject=email["subject"], body=greeting(contact["name"], email["body"]) + signature(prefs),
-        attachment=state.settings.resume_path if state.settings.resume_path.exists() else None,
-        attachment_name=f"{prefs.name.replace(' ', '_')}_Resume.pdf")
     try:
-        draft_id = create_draft(state.gmail_factory(), raw)
+        draft_id = create_draft(state.gmail_factory(), _raw_for(state, contact["email"], contact["name"], email))
     except GmailUnavailable as e:
         return _back(app_id, err=f"Reconnect Gmail: {e}")
     previous = email["gmail_draft_id"]

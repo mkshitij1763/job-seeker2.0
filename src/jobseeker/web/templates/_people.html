@@ -29,6 +29,10 @@
     </details>
   </div>
   {% endfor %}
+  {% set third = people|selectattr("rank", "equalto", 3)|first %}
+  {% if app.status == "sent" and third and third.email and not third.emailed_at and third.email_status != "bounced" %}
+  <form method="post" action="/applications/{{ app.id }}/contacts/3/email"><button class="primary">Draft email to #3 ({{ third.name.split()[0] }})</button></form>
+  {% endif %}
   {% if find.status != "running" %}
   <form method="post" action="/applications/{{ app.id }}/contacts/find">
     <button {% if not has_tavily %}disabled title="Add TAVILY_API_KEY to .env"{% endif %}>{{ "Find contacts again" if people else "Find contacts" }}</button>

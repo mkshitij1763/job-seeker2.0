@@ -75,7 +75,12 @@
 
     <div class="card block actions">
       <form method="post" action="/applications/{{ app.id }}/approve" class="approve">
-        {% if contact and contact.email and contact.email_status != "verified" %}
+        {% set wave1 = people|selectattr("wave", "equalto", 1)|list %}
+        {% if wave1 %}
+          {% for p in wave1 if p.email and p.email_status == "unverified" %}
+          <label><input type="checkbox" name="confirm_{{ p.rank }}" value="true"> {{ p.name }}'s email is unverified, draft anyway</label>
+          {% endfor %}
+        {% elif contact and contact.email and contact.email_status != "verified" %}
         <label><input type="checkbox" name="confirm_unverified" value="true"> Email is unverified, draft anyway</label>
         {% endif %}
         {% if drafts.email and drafts.email.gmail_draft_id %}<p class="warn">A Gmail draft already exists (id {{ drafts.email.gmail_draft_id }}). Approving again creates a new one; delete the old one in Gmail.</p>{% endif %}

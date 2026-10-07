@@ -77,6 +77,14 @@ def pipeline(conn: sqlite3.Connection, now: datetime) -> dict[str, list[dict]]:
         last = datetime.fromisoformat(card["last_at"]) if card["last_at"] else now
         card["days_since"] = max(0, (now - last).days)
         card["needs_followup"] = card["status"] == "sent" and card["days_since"] >= 5 and card["followups_sent"] < 2
+        card["third"] = None
+        if card["needs_followup"]:
+            t = conn.execute(
+                """SELECT c.name, ac.label FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
+                   WHERE ac.application_id = ? AND ac.rank = 3 AND ac.emailed_at IS NULL
+                   AND c.email != '' AND c.email_status != 'bounced'""", (card["app_id"],)).fetchone()
+            if t:
+                card["third"] = {"name": t["name"], "label": t["label"]}
         board[card["status"]].append(card)
     return board
 

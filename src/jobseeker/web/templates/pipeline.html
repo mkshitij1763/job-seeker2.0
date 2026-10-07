@@ -17,7 +17,7 @@
     <article class="kcard{% if c.needs_followup %} due{% endif %}">
       <a href="/applications/{{ c.app_id }}">{{ c.title }}</a>
       <p>{{ c.company }} · {{ c.score }}</p>
-      <p class="muted">{{ c.days_since }}d since last action{% if c.needs_followup %} · <b>follow up</b>{% endif %}</p>
+      <p class="muted">{{ c.days_since }}d since last action{% if c.third %} · <b>Email #3: {{ c.third.name.split()[0] }} ({{ c.third.label|replace("_", " ") }})</b>{% elif c.needs_followup %} · <b>follow up</b>{% endif %}</p>
       {% set nexts = allowed_next(c.status) %}
       {% if nexts %}
       <form method="post" action="/applications/{{ c.app_id }}/status">
