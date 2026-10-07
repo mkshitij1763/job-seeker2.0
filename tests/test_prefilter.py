@@ -97,3 +97,13 @@ def test_drops_jobs_requiring_two_and_a_half_years_or_more(prefs, jd, reason):
 
 def test_min_years_decimal_upper_bound_uses_lower_bound():
     assert min_years_required("2-4.5 years of experience") == 2
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("* 7+ years in product analytics, growth analytics, or data science", 7),
+    ("3-5 years as a product manager at a consumer company", 3),
+    ("2+ years working on consumer products", 2),
+    ("We have been 10 years in business and love it", None),
+])
+def test_min_years_plus_or_range_followed_by_in_as_working(text, expected):
+    assert min_years_required(text) == expected

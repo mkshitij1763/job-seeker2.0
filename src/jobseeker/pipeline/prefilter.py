@@ -13,12 +13,16 @@ _YEARS = re.compile(
 # label precedes it ("Experience: 5 years", "at least 4 years"); "10 years ago" never counts.
 _EXP_AFTER = re.compile(r"(?!\s+(?:ago|old)\b)\s+(?:of\s+)?(?:[\w/&-]+\s+){0,3}?exp(?:erience)?\b", re.I)
 _LABEL_BEFORE = re.compile(r"(?:\bexp(?:erience)?\s*[:\-–]?|\bminimum(?:\s+of)?|\bat\s+least)\s*$", re.I)
+# "7+ years in product analytics", "3-5 years as a PM": a plus sign or a range marks a requirement.
+_FIELD_AFTER = re.compile(r"\s+(?:in|as|working)\b", re.I)
+_PLUS_OR_RANGE = re.compile(r"\+|plus|-|–|—|\bto\b", re.I)
 
 
 def min_years_required(text: str) -> float | None:
     found = []
     for m in _YEARS.finditer(text):
-        if _EXP_AFTER.match(text, m.end()) or _LABEL_BEFORE.search(text[max(0, m.start() - 30): m.start()]):
+        qualified = _PLUS_OR_RANGE.search(m.group(0)) and _FIELD_AFTER.match(text, m.end())
+        if qualified or _EXP_AFTER.match(text, m.end()) or _LABEL_BEFORE.search(text[max(0, m.start() - 30): m.start()]):
             found.append(float(m.group(1)))
     return min(found) if found else None
 
