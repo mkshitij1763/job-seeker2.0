@@ -257,3 +257,24 @@ def test_tablet_layout_contract():
     assert ".shell { grid-template-columns: 72px" in tablet  # sidebar becomes an icon rail
     assert 'grid-template-areas: "people" "draft" "job"' in tablet  # job page stacks into one column
     assert ".table-card { overflow-x: auto; }" in css  # the Jobs table scrolls instead of being clipped
+
+
+def test_sent_job_with_follow_up_due_opens_on_people(settings, seeded):
+    from datetime import UTC, datetime, timedelta
+
+    from jobseeker.db.contacts_repo import link_contact, upsert_contact
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    cid = upsert_contact(conn, "CRED", "Asha Rao", "PM", "https://www.linkedin.com/in/asha", "asha@cred.club", "verified")
+    link_contact(conn, a, 1, cid, "peer", "r", "smtp")
+    then = (datetime.now(UTC) - timedelta(days=6)).isoformat(timespec="seconds")
+    conn.execute("UPDATE applications SET status = 'sent' WHERE id = ?", (a,))
+    conn.execute("UPDATE application_contacts SET emailed_at = ? WHERE application_id = ?", (then, a))
+    conn.execute("UPDATE events SET at = ? WHERE application_id = ?", (then, a))
+    conn.commit()
+    html = client(settings).get(f"/applications/{a}").text
+    assert 'data-tabs data-default="people"' in html
+    nxt = html.split('class="next-action"', 1)[1].split("</section>", 1)[0]
+    assert 'href="#people-card"' in nxt and "Follow up now" in nxt

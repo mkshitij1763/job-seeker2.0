@@ -56,6 +56,9 @@
         <a class="btn btn-primary" href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">{{ icon("gmail", 18) }} Open Gmail drafts</a>
         <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="sent"><button>Mark sent</button></form>
         <p class="muted">Send the drafts in Gmail, then mark sent so follow-ups are tracked.</p>
+      {% elif nudge_due or third_due %}
+        <a class="btn btn-primary" href="#people-card" hx-boost="false">Follow up now ↓</a>
+        <p class="muted">5+ days with no reply. Draft a short follow-up to #1 and #2, or email #3.</p>
       {% else %}
         <p class="muted">Sent. Follow-ups appear in People 5 days after Mark sent if there's no reply.</p>
       {% endif %}
@@ -63,7 +66,8 @@
   </section>
   {% endif %}
 
-<div class="job-body" data-tabs data-default="{{ 'draft' if app.status == 'approved' else ('people' if app.status == 'drafted' else 'job') }}">
+{% set follow_up_due = nudge_due or third_due %}
+<div class="job-body" data-tabs data-default="{{ 'draft' if app.status == 'approved' else ('people' if app.status == 'drafted' or follow_up_due else 'job') }}">
   <div class="tab-bar chips" role="tablist">
     <button type="button" class="chip" data-tab="people" role="tab">{{ icon("people", 16) }} People{% if people %} <span class="count">{{ people|length }}</span>{% endif %}</button>
     <button type="button" class="chip" data-tab="draft" role="tab">{{ icon("draft", 16) }} Draft</button>
