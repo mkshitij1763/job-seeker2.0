@@ -24,3 +24,17 @@ def test_pipeline_board_and_followup_flag(settings, seeded):
     r = TestClient(create_app(settings)).get("/pipeline")
     assert r.status_code == 200
     assert "follow up" in r.text and "Senior Product Analyst 0" in r.text
+
+
+def test_stats_ignore_undone_transitions(settings, seeded):
+    from jobseeker.db.applications import undo_last_status
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    transition(conn, a, "approved")
+    transition(conn, a, "sent")
+    undo_last_status(conn, a)  # "Mark sent" pressed by mistake
+    st = queries.stats(conn, datetime.now(UTC))
+    assert st["sent"] == 0 and st["drafted"] == 1
+    transition(conn, a, "sent")
+    assert queries.stats(conn, datetime.now(UTC))["sent"] == 1

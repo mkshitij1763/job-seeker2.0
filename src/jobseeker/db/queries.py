@@ -93,10 +93,12 @@ def stats(conn: sqlite3.Connection, now: datetime, days: int = 30) -> dict:
     since = iso(now - timedelta(days=days))
 
     def moved_to(status: str) -> int:
-        return conn.execute(
-            """SELECT COUNT(DISTINCT application_id) FROM events
-               WHERE type = 'status' AND json_extract(payload, '$.to') = ? AND at >= ?""",
-            (status, since)).fetchone()[0]
+        return conn.execute(  # a move later undone (e.g. "Mark sent" by mistake) doesn't count
+            """SELECT COUNT(DISTINCT e.application_id) FROM events e
+               WHERE e.type = 'status' AND json_extract(e.payload, '$.to') = ? AND e.at >= ?
+               AND NOT EXISTS (SELECT 1 FROM events u WHERE u.application_id = e.application_id
+                               AND u.type = 'undo' AND u.id > e.id AND json_extract(u.payload, '$.from') = ?)""",
+            (status, since, status)).fetchone()[0]
 
     sent, replied = moved_to("sent"), moved_to("replied")
     per_source = {r["source"]: r["n"] for r in conn.execute(
