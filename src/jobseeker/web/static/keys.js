@@ -52,22 +52,24 @@
     }
   });
   document.addEventListener("focusout", () => document.body.classList.remove("typing"));
-  function foldForPhone() {
+  // Fold only what was just loaded: the People card refreshes every 3s and must not re-close an open section.
+  function foldForPhone(root) {
     if (!phone()) return;
-    document.querySelectorAll('details[data-phone-closed], details.col[data-count="0"]')
+    root.querySelectorAll('details[data-phone-closed], details.col[data-count="0"]')
       .forEach((d) => d.removeAttribute("open"));
   }
   // Rotating to landscape (852px) hides the phone-only summaries, so folded sections must open again.
   phoneQuery.addEventListener("change", () => {
-    if (phone()) foldForPhone();
+    if (phone()) foldForPhone(document);
     else document.querySelectorAll("details[data-phone-closed], details.col").forEach((d) => d.setAttribute("open", ""));
   });
-  function init() {
+  function init(root) {
+    root = root && root.querySelectorAll ? root : document;
     if (!phone()) select(0);
-    foldForPhone();
+    foldForPhone(root);
     document.querySelectorAll("[data-limit]").forEach(count);
   }
-  document.addEventListener("DOMContentLoaded", init);
-  document.addEventListener("htmx:afterSettle", init);
-  document.addEventListener("htmx:historyRestore", init);
+  document.addEventListener("DOMContentLoaded", () => init(document));
+  document.addEventListener("htmx:afterSettle", (e) => init(e.detail && e.detail.elt));
+  document.addEventListener("htmx:historyRestore", () => init(document));
 })();

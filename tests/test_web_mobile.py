@@ -133,3 +133,15 @@ def test_keys_js_unfolds_when_leaving_phone_width():
     js = (STATIC / "keys.js").read_text()
     assert 'addEventListener("change"' in js and 'setAttribute("open", "")' in js
     assert '"htmx:historyRestore"' in js
+
+
+def test_phone_job_description_sits_right_under_the_header():
+    css = (STATIC / "mobile.css").read_text()
+    job = css[css.index("/* ---- Job page ---- */"):]
+    assert re.search(r"\.head \{ order: 1; \}", job) and re.search(r"\.jd-box \{ order: 2; \}", job)
+
+
+def test_card_refresh_does_not_refold_open_sections():
+    js = (STATIC / "keys.js").read_text()
+    assert "function foldForPhone(root)" in js and "root.querySelectorAll" in js
+    assert 'addEventListener("htmx:afterSettle", (e) => init(e.detail && e.detail.elt' in js

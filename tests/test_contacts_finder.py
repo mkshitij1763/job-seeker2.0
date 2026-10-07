@@ -362,3 +362,17 @@ def test_fallback_errors_keep_verified_results(prefs):
     summary = find_contacts(conn, app, prefs, d)
     ps = people(conn, app)
     assert ps[0]["email_status"] == "verified" and any("Apify" in n for n in summary["notes"])
+
+
+def test_changing_the_domain_replaces_verified_addresses_on_the_old_domain(prefs):
+    from jobseeker.db.contacts_repo import save_domain
+
+    conn, app = setup_app()
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
+    ps = people(conn, app)
+    conn.execute("UPDATE contacts SET email = 'asha@oldname.com', email_status = 'verified' WHERE id = ?", (ps[0]["contact_id"],))
+    conn.commit()
+    save_domain(conn, "zepto", domain="zeptonow.com", pattern="first.last", catch_all=1, mx_host="mx")  # user set it
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
+    p = people(conn, app)[0]
+    assert p["email"] == "asha.rao@zeptonow.com" and p["email_status"] == "unverified"

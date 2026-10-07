@@ -211,7 +211,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                 email, status, source = guesses[0], "likely", "pattern"
                 taken.add(email)
         cid = upsert_contact(conn, company, c.name, c.headline, c.linkedin_url, email,
-                             "verified" if status == "verified" else "unverified")
+                             "verified" if status == "verified" else "unverified", domain=domain if mx else None)
         if cid is None:
             continue
         verified += status == "verified"

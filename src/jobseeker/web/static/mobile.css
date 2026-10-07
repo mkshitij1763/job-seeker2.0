@@ -78,18 +78,19 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   .col-main, .col-side { display: contents; }
   .detail .card { margin-bottom: 0; }
   .head { order: 1; }
-  .drafts { order: 2; }
-  .contact { order: 3; }
-  .jd-box { order: 4; }
-  .notes { order: 5; }
-  .history { order: 6; }
+  .jd-box { order: 2; }
+  .drafts { order: 3; }
+  .people { order: 4; }
+  .contact { order: 5; }
+  .notes { order: 6; }
+  .history { order: 7; }
   .jd-box > summary { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; }
   .jd { max-height: none; margin-top: 8px; }
   .grid { grid-template-columns: 1fr; }
   .drafts textarea[name=body][data-unit=words] { min-height: 16em; }
   .drafts form button, .drafts form .btn { margin-top: 6px; }
   /* Sticky Approve bar */
-  .actions { order: 7; position: sticky; bottom: 0; z-index: 20; margin: 0 -12px calc(-24px - env(safe-area-inset-bottom));
+  .actions { order: 8; position: sticky; bottom: 0; z-index: 20; margin: 0 -12px calc(-24px - env(safe-area-inset-bottom));
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-radius: 0; border-width: 1px 0 0;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, .12); }
   .actions .approve { display: block; margin: 0; }
@@ -120,7 +121,5 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
 .people .person:first-of-type { border-top: 0; }
 .people .usage { margin: 8px 0 0; }
 @media (max-width: 640px) {
-  .people { order: 3; }
-  .contact { order: 3; }
   .people .person .btn, .people .person button { margin-top: 6px; }
 }

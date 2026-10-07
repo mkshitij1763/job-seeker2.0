@@ -48,7 +48,7 @@ def find(request: Request, app_id: int, background: BackgroundTasks, conn=Depend
         return _back(app_id, msg="Already finding contacts")
     set_find_status(conn, app_id, "running")
     background.add_task(run_find, state.settings.db_path, app_id, state.prefs, deps_factory)
-    return _back(app_id, msg="Finding contacts… this takes about half a minute")
+    return _back(app_id)  # the People card shows progress and replaces itself when done
 
 
 @router.get("/{app_id}/contacts/card")

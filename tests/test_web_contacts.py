@@ -98,3 +98,10 @@ def test_set_company_email_domain(settings, seeded):
     assert "msg=" in r.headers["location"]
     row = get_domain(connect(settings.db_path), "cred")
     assert (row["domain"], row["pattern"], row["catch_all"], row["mx_host"]) == ("cred.club", None, None, None)
+
+
+def test_find_redirect_carries_no_stale_progress_message(settings, seeded):
+    a = seeded[0]
+    zepto(settings, a)
+    r = make_client(settings).post(f"/applications/{a}/contacts/find")
+    assert r.headers["location"] == f"/applications/{a}"  # the card shows progress; a ?msg would outlive the run

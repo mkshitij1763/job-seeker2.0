@@ -122,7 +122,7 @@ def blocked_profile_urls(conn: sqlite3.Connection, company: str) -> set[str]:
 
 
 def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str, linkedin_url: str, email: str,
-                   email_status: str) -> int | None:
+                   email_status: str, domain: str | None = None) -> int | None:
     row = conn.execute("SELECT id, email, email_status FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",
                        (linkedin_url,)).fetchone()
     if not row and email:  # only adopt an email-matched row that isn't someone else's profile
@@ -131,7 +131,8 @@ def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str,
     if row:
         if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ?", (row["id"],)).fetchone():
             return None
-        if row["email_status"] == "verified" and email_status != "verified" and row["email"]:
+        on_domain = not domain or (row["email"] or "").lower().endswith("@" + domain)
+        if row["email_status"] == "verified" and email_status != "verified" and row["email"] and on_domain:
             email, email_status = row["email"], "verified"  # never downgrade a verified address
         elif row["email_status"] == "bounced" and email.lower() == (row["email"] or "").lower():
             email_status = "bounced"
