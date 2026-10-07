@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 import smtplib
 import socket
@@ -14,6 +15,14 @@ class PortBlocked(Exception):
 
 class BudgetExceeded(Exception):
     """The daily SMTP check limit is reached."""
+
+
+class VerifyUnavailable(Exception):
+    """The server refuses address checks (policy) or dropped the connection; nothing more can be verified."""
+
+
+# 5.1.x means "no such mailbox"; 5.4.x / 5.7.x (and these words) mean the server is refusing us, not the address.
+_REFUSAL = re.compile(rb"\b5\.[47]\.\d+\b|access denied|blocked|spamhaus|policy|not permitted|relay", re.I)
 
 
 class SmtpVerifier:
@@ -45,8 +54,13 @@ class SmtpVerifier:
     def _rcpt(self, address: str) -> int:
         if not self.allow():
             raise BudgetExceeded("SMTP daily limit reached")
-        code, _ = self.server.rcpt(address)
+        try:
+            code, message = self.server.rcpt(address)
+        except (smtplib.SMTPException, OSError) as e:
+            raise VerifyUnavailable(f"mail server dropped the connection ({e})") from e
         self.spend()
+        if code >= 500 and _REFUSAL.search(message or b""):
+            raise VerifyUnavailable(f"mail server refused verification ({message[:80].decode(errors='replace')})")
         self.sleep(self.pause)
         return code
 

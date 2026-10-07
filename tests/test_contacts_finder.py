@@ -186,3 +186,15 @@ def test_find_state_times_out():
     conn.commit()
     state = find_state(conn, app, NOW)
     assert state["status"] == "failed" and "timed out" in state["note"]
+
+
+def test_mail_server_refusing_checks_gives_likely_and_note(prefs):
+    conn, app = setup_app()
+
+    class Refusing(FakeSMTP):
+        def rcpt(self, addr):
+            return 550, b"5.7.1 Access denied, policy"
+    d, _ = deps(Refusing())
+    summary = find_contacts(conn, app, prefs, d)
+    assert any("refused verification" in n for n in summary["notes"])
+    assert {p["email_status"] for p in people(conn, app)} == {"unverified"}

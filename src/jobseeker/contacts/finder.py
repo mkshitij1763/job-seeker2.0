@@ -12,7 +12,7 @@ from jobseeker.config import Preferences
 from jobseeker.contacts import names
 from jobseeker.contacts.domains import domain_from_text, mx_host, official_domain
 from jobseeker.contacts.people import from_results, rank, role_words, search_queries
-from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier
+from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
     blocked_profile_urls, get_domain, link_contact, save_candidates, save_domain, set_find_status, upsert_contact,
 )
@@ -123,6 +123,10 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             notes.append("Couldn't verify on this network (port 25 blocked); try again from office Wi-Fi")
         except BudgetExceeded:
             notes.append("SMTP daily check limit reached")
+        except VerifyUnavailable as e:
+            notes.append(f"{domain}'s mail server refused verification; emails left as likely ({e})")
+            if "refused" in str(e):
+                catch_all = 2  # remembered: skip checks for this domain next time
         save_domain(conn, norm, domain=domain, mx_host=mx, catch_all=catch_all,
                     pattern=hints[0] if hints else None)
 

@@ -64,3 +64,45 @@ def test_budget_stops_checks():
         with pytest.raises(BudgetExceeded):
             v.check(["a@zepto.com", "b@zepto.com"])
     assert len(spent) == 1
+
+
+class ScriptedSMTP(FakeSMTP):
+    """Like FakeSMTP but replies carry server text, and can disconnect after N RCPTs."""
+
+    def __init__(self, replies=None, default=(550, b"5.1.1 User unknown"), drop_after=None):
+        super().__init__()
+        self.replies, self.default, self.drop_after, self.count = replies or {}, default, drop_after, 0
+
+    def rcpt(self, addr):
+        import smtplib
+        self.count += 1
+        if self.drop_after is not None and self.count > self.drop_after:
+            raise smtplib.SMTPServerDisconnected("Server not connected")
+        self.log.append(("rcpt", addr))
+        return self.replies.get(addr, self.default)
+
+
+def test_policy_refusal_on_probe_means_unverifiable():
+    from jobseeker.contacts.smtp_verify import VerifyUnavailable
+
+    server = ScriptedSMTP(default=(550, b"5.4.1 Recipient address rejected: Access denied. AS(201806281)"))
+    with pytest.raises(VerifyUnavailable):
+        with verifier(server) as v:
+            v.is_catch_all("sliceit.com")
+
+
+def test_disconnect_mid_check_means_unverifiable():
+    from jobseeker.contacts.smtp_verify import VerifyUnavailable
+
+    with pytest.raises(VerifyUnavailable):
+        with verifier(ScriptedSMTP(drop_after=2)) as v:
+            v.is_catch_all("x.com")
+            v.check(["a@x.com", "b@x.com", "c@x.com"])
+
+
+def test_bad_mailbox_reply_is_just_not_found():
+    server = ScriptedSMTP(replies={"asha@x.com": (250, b"2.1.5 OK")},
+                          default=(550, b"5.1.1 The email account that you tried to reach does not exist"))
+    with verifier(server) as v:
+        assert v.is_catch_all("x.com") is False
+        assert v.check(["asha.rao@x.com", "asha@x.com"]) == "asha@x.com"
