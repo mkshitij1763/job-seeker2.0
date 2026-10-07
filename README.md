@@ -41,6 +41,9 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
 - `profile/preferences.yaml` → `search:` the roles and cities searched every morning on LinkedIn, Naukri and Indeed India. Companies found there that use Greenhouse, Lever or Ashby are discovered automatically and fetched from their own boards afterwards; see them with `uv run jobseeker companies`.
 - `companies.yaml`: optional favourites that are always fetched. Check a slug with `uv run python scripts/verify_companies.py <slug>`.
 
+## AI fallbacks
+Groq's free quota is per model and per day. When it runs out, scoring moves to Groq's qwen model, then Gemini (`GEMINI_API_KEY`), then Cloudflare Workers AI (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`). Drafting moves to Gemini 3.5 Flash, then Cloudflare. Providers without keys in `.env` are skipped. Change the chains under `models: fallbacks:` in `profile/preferences.yaml`.
+
 ## Backups
 After each daily run, a gzipped copy of the database and `facts.json` is saved, keeping the last 7 days. It goes to `BACKUP_DIR` from `.env` if set, otherwise iCloud Drive (`JobSeeker-backups`) when iCloud Drive is on, otherwise `~/JobSeeker-backups`. Run `uv run jobseeker backup` at any time. To restore, stop the dashboard and run `gunzip -c <backup>.db.gz > data/jobseeker.db`.
 

@@ -6,7 +6,7 @@ import typer
 
 from jobseeker.config import Settings, load_companies, load_preferences, load_rubric
 from jobseeker.db.core import connect
-from jobseeker.llm import GroqLLM
+from jobseeker.llm import FallbackLLM, build_llm
 
 app = typer.Typer(no_args_is_help=True, help="Personal job search and outreach assistant.")
 
@@ -28,7 +28,7 @@ def init() -> None:
     if not settings.resume_path.exists():
         typer.echo(f"Put your resume at {settings.resume_path} and run `jobseeker init` again.")
         raise typer.Exit(1)
-    facts = load_or_build_facts(GroqLLM(settings.groq_api_key), settings.resume_path,
+    facts = load_or_build_facts(FallbackLLM(build_llm(settings), prefs.models.fallbacks), settings.resume_path,
                                 settings.facts_path, prefs.models.facts)
     typer.echo(f"Facts written to {settings.facts_path}: {len(facts.achievements)} achievements, "
                f"{len(facts.skills)} skills. Review and edit that file if anything is wrong.")
@@ -46,7 +46,7 @@ def _run(fetch: bool, force: bool) -> None:
     facts = load_facts(settings.facts_path)
     sources = build_sources(load_companies(settings.companies_path), active_companies(conn), prefs.search)
     with make_client() as client:
-        stats = run_daily(conn, sources=sources, client=client, llm=GroqLLM(settings.groq_api_key),
+        stats = run_daily(conn, sources=sources, client=client, llm=build_llm(settings),
                           facts=facts, prefs=prefs, rubric=rubric, fetch=fetch, force_rescore=force)
     typer.echo(json.dumps(stats.__dict__, indent=2))
 

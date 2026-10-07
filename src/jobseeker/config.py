@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     apify_api_token: str = ""
     hunter_api_key: str = ""
+    gemini_api_key: str = ""
+    cloudflare_api_token: str = ""
+    cloudflare_account_id: str = ""
     backup_dir: Path | None = None
 
     @property
@@ -82,7 +85,10 @@ class Models(BaseModel):
     drafting: str = "openai/gpt-oss-120b"
     facts: str = "openai/gpt-oss-120b"
     # Used in order once a model's free daily quota is gone (Groq quotas are per model).
-    fallbacks: dict[str, list[str]] = {"openai/gpt-oss-20b": ["qwen/qwen3.8-27b"]}
+    fallbacks: dict[str, list[str]] = {
+        "openai/gpt-oss-20b": ["qwen/qwen3.8-27b", "gemini:gemini-3.5-flash-lite", "cloudflare:@cf/openai/gpt-oss-20b"],
+        "openai/gpt-oss-120b": ["gemini:gemini-3.5-flash", "cloudflare:@cf/openai/gpt-oss-120b"],
+    }
 
 
 class SearchConfig(BaseModel):

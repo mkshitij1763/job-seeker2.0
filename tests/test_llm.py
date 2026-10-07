@@ -156,4 +156,7 @@ def test_fallback_raises_quota_when_every_model_is_used_up():
 def test_default_scoring_fallback_is_configured():
     from jobseeker.config import Models
 
-    assert Models().fallbacks == {"openai/gpt-oss-20b": ["qwen/qwen3.8-27b"]}
+    chains = Models().fallbacks
+    assert chains["openai/gpt-oss-20b"][0] == "qwen/qwen3.8-27b"  # free Groq quota first, then other providers
+    assert any(m.startswith("gemini:") for m in chains["openai/gpt-oss-20b"])
+    assert any(m.startswith("gemini:") for m in chains["openai/gpt-oss-120b"])

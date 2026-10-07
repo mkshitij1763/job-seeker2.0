@@ -89,7 +89,8 @@ def test_quota_exhausted_stops_llm_work(prefs, rubric, facts):
     llm = FakeLLM(handler=lambda schema, prompt: LLMQuotaExceeded("daily quota used up"))
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
     stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
-    assert len(llm.calls) == 2 and stats.scored == 0 and stats.new == 3  # the scoring model, then its fallback
+    chain = 1 + len(prefs.models.fallbacks[prefs.models.scoring])
+    assert len(llm.calls) == chain and stats.scored == 0 and stats.new == 3  # each model tried once, then stop
     assert any("quota" in e for e in stats.errors)
 
 
@@ -132,5 +133,5 @@ def test_llm_unavailable_stops_all_llm_work(prefs, rubric, facts):
     llm = FakeLLM(handler=lambda schema, prompt: LLMUnavailable("Groq unreachable"))
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
     stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
-    assert len(llm.calls) == 1 and stats.scored == 0
+    assert len(llm.calls) == 1 + len(prefs.models.fallbacks[prefs.models.scoring]) and stats.scored == 0
     assert stats.errors == ["scoring stopped: Groq unreachable"]
