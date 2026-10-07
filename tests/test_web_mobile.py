@@ -144,7 +144,9 @@ def test_phone_job_description_sits_right_under_the_header():
 def test_card_refresh_does_not_refold_open_sections():
     js = (STATIC / "keys.js").read_text()
     assert "function foldForPhone(root)" in js and "root.querySelectorAll" in js
-    assert 'addEventListener("htmx:afterSettle", (e) => init(e.detail && e.detail.elt' in js
+    assert "e.detail.elt" in js  # fold only the swapped element, never the whole page
+    assert 'addEventListener("htmx:afterSwap", (e) => foldForPhone(rootOf(e)))' in js  # before paint: no flash
+    assert 'addEventListener("htmx:afterSettle", (e) => init(rootOf(e)))' in js
 
 
 def test_static_assets_are_fingerprinted_so_phones_get_updates(settings, seeded):

@@ -63,13 +63,15 @@
     if (phone()) foldForPhone(document);
     else document.querySelectorAll("details[data-phone-closed], details.col").forEach((d) => d.setAttribute("open", ""));
   });
+  const rootOf = (e) => (e.detail && e.detail.elt && e.detail.elt.querySelectorAll ? e.detail.elt : document);
   function init(root) {
-    root = root && root.querySelectorAll ? root : document;
     if (!phone()) select(0);
     foldForPhone(root);
     document.querySelectorAll("[data-limit]").forEach(count);
   }
   document.addEventListener("DOMContentLoaded", () => init(document));
-  document.addEventListener("htmx:afterSettle", (e) => init(e.detail && e.detail.elt));
+  // Fold in afterSwap (same task as the swap, before paint); afterSettle comes ~20 ms later and would flash.
+  document.addEventListener("htmx:afterSwap", (e) => foldForPhone(rootOf(e)));
+  document.addEventListener("htmx:afterSettle", (e) => init(rootOf(e)));
   document.addEventListener("htmx:historyRestore", () => init(document));
 })();

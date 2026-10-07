@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { decide, release, parseOutcome } = require("../../src/jobseeker/web/static/swipe.js");
+const { decide, release, parseOutcome, withoutFlash } = require("../../src/jobseeker/web/static/swipe.js");
 const at = (x, y, t = 0) => ({ x, y, t });
 
 test("small moves are undecided", () => assert.equal(decide(at(100, 100), at(105, 104)).mode, "none"));
@@ -22,3 +22,7 @@ test("parseOutcome reports err from redirect", () =>
   assert.deepEqual(parseOutcome("http://h/applications/3?err=Can%27t%20move", true, 200), { ok: false, message: "Can't move" }));
 test("parseOutcome reports HTTP failures", () =>
   assert.deepEqual(parseOutcome("http://h/applications/3/snooze", false, 500), { ok: false, message: "Request failed (HTTP 500)" }));
+test("withoutFlash drops msg/err but keeps filters", () =>
+  assert.equal(withoutFlash("https://h/?band=all&msg=Marked%20skipped&city=Pune"), "/?band=all&city=Pune"));
+test("withoutFlash on a clean URL is just the path", () =>
+  assert.equal(withoutFlash("https://h/?err=x"), "/"));

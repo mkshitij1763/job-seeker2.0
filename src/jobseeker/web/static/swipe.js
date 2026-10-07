@@ -28,7 +28,15 @@
     return { ok: true, message: params.get("msg") || "Done" };
   }
 
-  const api = { decide, release, parseOutcome };
+  // Where Undo should land: this page with its filters, minus an earlier action's ?msg/?err banner.
+  function withoutFlash(href) {
+    const url = new URL(href, "http://localhost");
+    url.searchParams.delete("msg");
+    url.searchParams.delete("err");
+    return url.pathname + (url.search || "");
+  }
+
+  const api = { decide, release, parseOutcome, withoutFlash };
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.JobSwipe = api;
 
@@ -63,7 +71,7 @@
     } catch (e) {
       return { ok: false, message: "Couldn't reach the Mac" };
     }
-    return parseOutcome(resp.url, resp.ok, resp.status);
+    return { ...parseOutcome(resp.url, resp.ok, resp.status), url: resp.url };
   }
 
   const ACTIONS = {
@@ -108,10 +116,17 @@
       move(card, action === "skip" ? -card.offsetWidth : card.offsetWidth, true);
       const outcome = await ACTIONS[action].send(id);
       if (!outcome.ok) { move(card, 0, true); toast(outcome.message); return; }
+      const list = card.parentElement;
       card.remove();
+      if (list && !list.querySelector(".swipe-card")) {
+        const empty = document.createElement("li");
+        empty.className = "empty";
+        empty.textContent = "All caught up. Change the filters or check back after the next run.";
+        list.appendChild(empty);
+      }
       toast(ACTIONS[action].label, async () => {
-        const undone = await post(`/applications/${id}/undo`, { next: "/" });
-        if (undone.ok) root.location.reload(); else toast(undone.message);
+        const undone = await post(`/applications/${id}/undo`, { next: withoutFlash(root.location.href) });
+        if (undone.ok) root.location.assign(undone.url); else toast(undone.message);  // shows only Undo's banner
       });
     });
   }
