@@ -52,9 +52,15 @@ def _pick(hosts: list[str], company: str) -> str | None:
 def domain_from_text(text: str, company: str) -> str | None:
     hosts = re.findall(r"@([A-Za-z0-9.-]+\.[A-Za-z]{2,})", text)
     hosts += [urlparse(u).hostname or "" for u in re.findall(r"https?://[^\s)>\]]+", text)]
-    token = (normalize_company(company).split() or [""])[0]
-    picked = _pick(hosts, company)
-    return picked if picked and token and token in picked.split(".")[0] else None
+    words = normalize_company(company).split()
+    if not words:
+        return None
+    name = "".join(words)
+
+    def matches(label: str) -> bool:  # tata1mg.com / sarvam.ai for "Sarvam AI"; never tatasteel.com or nslice.com
+        return label.startswith(name) or (name.startswith(label) and len(label) >= len(words[0]))
+    domains = [_registrable(h) for h in hosts if h and not _skip(h)]
+    return next((d for d in domains if matches(d.split(".")[0])), None)
 
 
 def official_domain(results: list[dict], company: str) -> str | None:

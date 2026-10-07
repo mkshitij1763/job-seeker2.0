@@ -10,6 +10,13 @@ def test_domain_from_text_ignores_job_boards_and_webmail():
     assert domain_from_text("mail me at x@gmail.com or see linkedin.com/company/x", "Acme") is None
 
 
+def test_domain_from_text_needs_the_full_company_name():
+    jd = "We partner with Tata Steel (careers@tatasteel.com) and https://www.nslice.com"
+    assert domain_from_text(jd, "Tata 1mg") is None  # "tata" alone matches a sister company
+    assert domain_from_text(jd, "slice") is None  # a name inside another label isn't a match
+    assert domain_from_text("Write to hr@tata1mg.com", "Tata 1mg") == "tata1mg.com"
+
+
 def test_official_domain_from_search_results():
     results = [{"url": "https://www.linkedin.com/company/zepto"}, {"url": "https://www.crunchbase.com/org/zepto"},
                {"url": "https://www.zeptonow.com/"}, {"url": "https://blog.zeptonow.com/x"}]
