@@ -48,9 +48,12 @@ def mark_inactive(conn: sqlite3.Connection, name_norm: str, now: datetime) -> No
     conn.commit()
 
 
-def bump_jobs_seen(conn: sqlite3.Connection, name_norm: str) -> None:
-    conn.execute("UPDATE discovered_companies SET jobs_seen = jobs_seen + 1 WHERE name_norm = ?", (name_norm,))
+def bump_jobs_seen(conn: sqlite3.Connection, name_norm: str, n: int = 1) -> bool:
+    """False when the company isn't recorded (yet), so the caller can count it after discovery."""
+    cur = conn.execute("UPDATE discovered_companies SET jobs_seen = jobs_seen + ? WHERE name_norm = ?",
+                       (n, name_norm))
     conn.commit()
+    return cur.rowcount == 1
 
 
 def list_companies(conn: sqlite3.Connection) -> list[dict]:

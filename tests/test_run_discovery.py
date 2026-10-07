@@ -132,7 +132,7 @@ def test_discovery_from_job_site_companies(prefs, rubric, facts):
     stats = run(conn, [Src("naukri", [job], discovers=True)], prefs, rubric, facts, client=httpx.Client())
     assert stats.discovered == 1
     assert [n for n, _ in active_companies(conn)] == ["tracxn"]
-    assert get_company(conn, "tracxn")["jobs_seen"] == 0  # counted from the run after discovery
+    assert get_company(conn, "tracxn")["jobs_seen"] == 1  # the job that led to the discovery counts too
 
 
 def test_discovered_board_404_marks_inactive(prefs, rubric, facts):

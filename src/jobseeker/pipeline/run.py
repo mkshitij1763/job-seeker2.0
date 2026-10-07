@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -86,6 +87,7 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
     blocked = blocked_companies(conn)
     known = {normalize_company(s.company.name) for s in sources if hasattr(s, "company")}
     seen: dict[str, tuple[str, set[str]]] = {}
+    unrecorded: Counter[str] = Counter()  # jobs at companies discovery may record later this run
     for src in sources:
         try:
             raws = src.fetch(client)
@@ -110,7 +112,9 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
                     set_filter_reason(conn, job_id, reason)
                     stats.filtered += 1
                     continue
-                bump_jobs_seen(conn, normalize_company(job.company))
+                norm = normalize_company(job.company)
+                if not bump_jobs_seen(conn, norm):
+                    unrecorded[norm] += 1
             else:
                 stats.duplicates += 1
             _rank(conn, stats, job_id, facts, prefs, cutoff=is_new)
@@ -118,6 +122,8 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
         query_words = {w for q in prefs.search.queries for w in normalize_title(q).split()}
         stats.discovered = discover(conn, client, seen, known | blocked, now,
                                     generic=GENERIC_WORDS | query_words)
+        for norm, n in unrecorded.items():
+            bump_jobs_seen(conn, norm, n)
 
 
 def _select(conn, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferences, now: datetime,
