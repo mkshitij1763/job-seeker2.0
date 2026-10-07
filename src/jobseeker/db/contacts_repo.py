@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import sqlite3
+from datetime import datetime, timedelta
+
+from jobseeker.db.core import iso, utcnow
+from jobseeker.pipeline.normalize import normalize_company
+
+STALE_AFTER = timedelta(minutes=10)
+
+
+def set_find_status(conn: sqlite3.Connection, app_id: int, status: str, note: str = "") -> None:
+    started = utcnow() if status == "running" else None
+    if started:
+        conn.execute("UPDATE applications SET find_status = ?, find_error = ?, find_started_at = ? WHERE id = ?",
+                     (status, note, started, app_id))
+    else:
+        conn.execute("UPDATE applications SET find_status = ?, find_error = ? WHERE id = ?", (status, note, app_id))
+    conn.commit()
+
+
+def find_state(conn: sqlite3.Connection, app_id: int, now: datetime) -> dict:
+    row = conn.execute("SELECT find_status, find_error, find_started_at FROM applications WHERE id = ?",
+                       (app_id,)).fetchone()
+    status, note = row["find_status"], row["find_error"]
+    if status == "running" and row["find_started_at"] and row["find_started_at"] < iso(now - STALE_AFTER):
+        return {"status": "failed", "note": "Finding contacts timed out (the Mac may have slept). Try again."}
+    return {"status": status, "note": note}
+
+
+def save_candidates(conn: sqlite3.Connection, app_id: int, ranked) -> None:
+    conn.execute("DELETE FROM contact_candidates WHERE application_id = ?", (app_id,))
+    conn.executemany(
+        """INSERT INTO contact_candidates (application_id, position, name, headline, linkedin_url, label, reason, used)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        [(app_id, i + 1, c.name, c.headline, c.linkedin_url, label, reason, int(i < 3))
+         for i, (c, label, reason) in enumerate(ranked)])
+    conn.commit()
+
+
+def next_candidate(conn: sqlite3.Connection, app_id: int) -> dict | None:
+    row = conn.execute("""SELECT * FROM contact_candidates WHERE application_id = ? AND used = 0
+                          ORDER BY position LIMIT 1""", (app_id,)).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE contact_candidates SET used = 1 WHERE id = ?", (row["id"],))
+    conn.commit()
+    return dict(row)
+
+
+def link_contact(conn: sqlite3.Connection, app_id: int, rank: int, contact_id: int, label: str, reason: str,
+                 email_source: str) -> None:
+    conn.execute(
+        """INSERT INTO application_contacts (application_id, contact_id, rank, label, reason, wave, email_source,
+                                             created_at)
+           VALUES (?,?,?,?,?,?,?,?)
+           ON CONFLICT (application_id, rank) DO UPDATE SET contact_id = excluded.contact_id,
+             label = excluded.label, reason = excluded.reason, email_source = excluded.email_source,
+             gmail_draft_id = NULL, emailed_at = NULL""",
+        (app_id, contact_id, rank, label, reason, 1 if rank <= 2 else 2, email_source, utcnow()))
+    if rank == 1:
+        conn.execute("UPDATE applications SET contact_id = ? WHERE id = ?", (contact_id, app_id))
+    conn.commit()
+
+
+def people(conn: sqlite3.Connection, app_id: int) -> list[dict]:
+    rows = conn.execute(
+        """SELECT ac.rank, ac.label, ac.reason, ac.wave, ac.email_source, ac.gmail_draft_id, ac.emailed_at,
+                  c.id AS contact_id, c.name, c.role, c.linkedin_url, c.email, c.email_status
+           FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
+           WHERE ac.application_id = ? ORDER BY ac.rank""", (app_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_domain(conn: sqlite3.Connection, name_norm: str) -> dict | None:
+    row = conn.execute("SELECT * FROM company_domains WHERE name_norm = ?", (name_norm,)).fetchone()
+    return dict(row) if row else None
+
+
+def save_domain(conn: sqlite3.Connection, name_norm: str, **fields) -> None:
+    current = get_domain(conn, name_norm) or {}
+    merged = {k: fields.get(k, current.get(k)) for k in ("domain", "pattern", "catch_all", "mx_host")}
+    conn.execute(
+        """INSERT INTO company_domains (name_norm, domain, pattern, catch_all, mx_host, checked_at)
+           VALUES (?,?,?,?,?,?)
+           ON CONFLICT (name_norm) DO UPDATE SET domain = excluded.domain, pattern = excluded.pattern,
+             catch_all = excluded.catch_all, mx_host = excluded.mx_host, checked_at = excluded.checked_at""",
+        (name_norm, merged["domain"], merged["pattern"],
+         None if merged["catch_all"] is None else int(merged["catch_all"]), merged["mx_host"], utcnow()))
+    conn.commit()
+
+
+def blocked_profile_urls(conn: sqlite3.Connection, company: str) -> set[str]:
+    norm = normalize_company(company)
+    rows = conn.execute("""SELECT c.company, c.linkedin_url FROM blocklist b JOIN contacts c ON c.id = b.contact_id
+                           WHERE c.linkedin_url != ''""").fetchall()
+    return {r["linkedin_url"] for r in rows if normalize_company(r["company"]) == norm}
+
+
+def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str, linkedin_url: str, email: str,
+                   email_status: str) -> int | None:
+    row = conn.execute("SELECT id FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",
+                       (linkedin_url,)).fetchone()
+    if not row and email:
+        row = conn.execute("SELECT id FROM contacts WHERE lower(email) = lower(?)", (email,)).fetchone()
+    if row:
+        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ?", (row["id"],)).fetchone():
+            return None
+        conn.execute("UPDATE contacts SET name=?, role=?, linkedin_url=?, email=?, email_status=? WHERE id=?",
+                     (name, role, linkedin_url, email, email_status, row["id"]))
+        conn.commit()
+        return row["id"]
+    cid = conn.execute(
+        """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source)
+           VALUES (?,?,?,?,?,?, 'finder')""", (company, name, role, linkedin_url, email, email_status)).lastrowid
+    conn.commit()
+    return cid
