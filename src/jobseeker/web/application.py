@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 
 from jobseeker.db import queries
@@ -119,10 +120,13 @@ def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
 
 @router.post("/{app_id}/approve")
 async def approve(request: Request, app_id: int, conn=Depends(get_conn)):
+    form = await request.form()  # the confirm_<rank> boxes are dynamic, so read the form here, then work off-loop
+    return await run_in_threadpool(_approve, request.app.state, conn, app_id, form)
+
+
+def _approve(state, conn, app_id: int, form):
     from jobseeker.db.contacts_repo import people
 
-    form = await request.form()
-    state = request.app.state
     d = queries.application_detail(conn, app_id)
     if not d:
         raise HTTPException(404)

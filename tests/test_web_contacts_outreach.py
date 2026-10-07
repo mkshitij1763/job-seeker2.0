@@ -175,3 +175,22 @@ def test_third_button_waits_five_days(settings, seeded):
     assert "Draft email to #3" not in c.get(f"/applications/{a}").text
     r = c.post(f"/applications/{a}/contacts/3/email")
     assert "err=" in r.headers["location"] and len(gmail.raws) == 2
+
+
+def test_approve_does_gmail_work_off_the_event_loop(settings, seeded):
+    import asyncio
+
+    a = seeded[0]
+    link_three(settings, a)
+    on_loop = []
+
+    def factory():
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(True)
+        except RuntimeError:
+            on_loop.append(False)
+        return FakeGmail()
+    settings.resume_path.write_bytes(b"%PDF fake")
+    TestClient(create_app(settings, gmail_factory=factory), follow_redirects=False).post(f"/applications/{a}/approve")
+    assert on_loop and not any(on_loop)  # blocking Gmail/SQLite calls must not stall other requests
