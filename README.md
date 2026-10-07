@@ -48,7 +48,7 @@ Groq's free quota is per model and per day. When it runs out, scoring moves to G
 After each daily run, a gzipped copy of the database and `facts.json` is saved, keeping the last 7 days. It goes to `BACKUP_DIR` from `.env` if set, otherwise iCloud Drive (`JobSeeker-backups`) when iCloud Drive is on, otherwise `~/JobSeeker-backups`. Run `uv run jobseeker backup` at any time. To restore, stop the dashboard and run `gunzip -c <backup>.db.gz > data/jobseeker.db`.
 
 ## Cost and limits
-- Free. Groq's free tier allows about 200K tokens/day per model, which covers about 35 scored and 10 drafted jobs a day (the default caps).
+- Free. Groq's free tier allows about 200K tokens/day per model (about 30 scored jobs); the qwen, Gemini and Cloudflare fallbacks cover the rest of the 80 scored and 10 drafted jobs a day (the caps in `budgets`).
 - If a run hits the daily quota it stops cleanly, and the remaining jobs are picked up the next morning.
 - The scheduled run may take 30–60 minutes because it waits out per-minute limits. That's fine, since it runs before you're up.
 - Job-site scraping is free but unofficial: LinkedIn may rate-limit after a few searches. A blocked site is skipped for the day and listed in the run's errors; everything else continues.
