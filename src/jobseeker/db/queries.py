@@ -18,7 +18,8 @@ def inbox(conn: sqlite3.Connection, band: str = "apply", family: str | None = No
           source: str | None = None, status: str | None = None) -> list[dict]:
     sql = f"""SELECT a.id AS app_id, a.status, j.id AS job_id, j.title, j.company, j.location, j.location_city,
                      j.remote, j.posted_at, j.first_seen_at, j.source, s.score, s.matches, s.gaps,
-                     s.role_family, s.recommendation
+                     s.role_family, s.recommendation,
+                     (SELECT COUNT(*) FROM application_contacts ac WHERE ac.application_id = a.id) AS people
               FROM applications a JOIN jobs j ON j.id = a.job_id JOIN scores s ON {_LATEST_SCORE}
               WHERE 1 = 1"""
     params: list = []

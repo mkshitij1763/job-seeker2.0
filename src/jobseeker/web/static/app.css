@@ -19,6 +19,7 @@ a:hover { text-decoration: underline; }
 .brand { font-weight: 700; color: var(--text); }
 .top nav a { margin-right: 14px; }
 .warn { color: var(--warn); }
+.inbox-count { display: none; }
 .run-notes { position: relative; margin-left: auto; }
 .run-notes > summary { cursor: pointer; list-style: none; }
 .run-notes > summary::-webkit-details-marker { display: none; }

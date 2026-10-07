@@ -156,3 +156,24 @@ def test_static_assets_are_fingerprinted_so_phones_get_updates(settings, seeded)
     for name in ("app.css", "mobile.css", "swipe.js", "keys.js", "htmx.min.js"):
         digest = hashlib.sha1((STATIC / name).read_bytes()).hexdigest()[:8]
         assert f"/static/{name}?v={digest}" in html, name
+
+
+def _card(html, a):
+    return html.split(f'<li class="swipe-card" data-app-id="{a}" data-swipe>', 1)[1].split("</li>", 1)[0]
+
+
+def test_compact_card_shows_next_step_one_match_and_count(settings, seeded):
+    from jobseeker.db.contacts_repo import link_contact, upsert_contact
+    from jobseeker.db.core import connect
+
+    a, b = seeded[0], seeded[1]
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE applications SET status = 'drafted' WHERE id IN (?, ?)", (a, b))
+    conn.execute("UPDATE scores SET recommendation = 'apply', matches = '[\"SQL\", \"A/B tests\"]'")
+    cid = upsert_contact(conn, "CRED", "Asha Rao", "PM", "https://www.linkedin.com/in/asha", "a@cred.club", "verified")
+    link_contact(conn, b, 1, cid, "peer", "r", "smtp")
+    html = client(settings).get("/").text
+    assert 'class="next-step find">Find contacts →' in _card(html, a)
+    assert 'class="next-step ready">Ready to approve →' in _card(html, b)
+    assert "✓ SQL" in _card(html, a) and "✓ A/B tests" not in _card(html, a)  # one match keeps cards short
+    assert 'class="inbox-count">2 jobs' in html
