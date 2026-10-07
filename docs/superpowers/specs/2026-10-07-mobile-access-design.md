@@ -38,7 +38,7 @@ Everything that works on the laptop keeps working the same way there.
 - **Touch:** `hover: none`, used only to hide keyboard hints.
 
 **JavaScript:** a little is added to `static/keys.js`, with no new dependency:
-- on phone width, close the `<details>` sections that are open by default on desktop;
+- on phone width, close the `<details>` sections that are open by default on desktop (filters, JD, empty pipeline columns);
 - show "Copied ✓" feedback after a copy.
 
 ## 4. Phone layout (the build)
@@ -117,9 +117,9 @@ The `data-open` behaviour is removed from `keys.js`. The DM keeps its single **C
 
 ### 4.6 Pipeline (`pipeline.html`)
 
-- **Columns become collapsible sections.** Each column becomes `<details class="col" {open if non-empty}>` with the summary "Status · count".
-  - **Desktop:** the summary is styled like today's column heading and all columns are open, so the board looks unchanged. Empty columns are open too, because on desktop the `open` rule doesn't depend on content.
-  - **Phone:** columns stack vertically, and empty ones start closed.
+- **Columns become collapsible sections.** Each column becomes `<details class="col" open data-count="N">` with the summary "Status · count". Every column is rendered open, because the server doesn't know the screen width.
+  - **Desktop:** the summary is styled like today's column heading, so the board looks unchanged.
+  - **Phone:** columns stack vertically, and `keys.js` closes those with `data-count="0"`.
 - **Phone width:** the kanban grid switches to a single vertical column with no horizontal scroll. Cards are full width. The **Move** select and button get 44 px targets. The **follow up** badge is unchanged.
 - **Stats strip:** wraps into two columns of tiles at phone width.
 
@@ -135,7 +135,7 @@ The `data-open` behaviour is removed from `keys.js`. The DM keeps its single **C
   - the `details.more` menu, containing Mark sent, Skip and Not interested;
   - Approve outside `details.more`.
 - The job page renders **Copy note** and a separate **Open LinkedIn** link pointing to the people-search URL when no contact URL exists. There is no `data-open` attribute.
-- The pipeline renders each status as `details.col`, with `open` on non-empty columns and no `open` on empty ones.
+- The pipeline renders each status as an open `details.col` with the right `data-count`, including `data-count="0"` for empty columns.
 - All existing web tests pass. The copy-button assertion in an existing test, if any, is updated as part of §4.4.
 
 **Visual check (before claiming done):** use Chrome DevTools device emulation at **393×852** (iPhone 15) against the live dashboard (`http://127.0.0.1:8000`). For the inbox, a job page and the pipeline:
