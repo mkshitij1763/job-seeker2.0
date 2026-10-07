@@ -60,8 +60,10 @@ mark { background: var(--mark); color: inherit; }
 .stats b { display: block; font-size: 20px; } .stats span { color: var(--muted); font-size: 12px; }
 .src span { margin-right: 10px; color: var(--muted); font-size: 12px; }
 .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 10px; overflow-x: auto; }
-.kanban section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 120px; }
+.kanban .col { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 120px; }
 .kanban h3 { font-size: 13px; margin: 0 0 8px; text-transform: capitalize; }
+.kanban .col > summary { list-style: none; cursor: pointer; }
+.kanban .col > summary::-webkit-details-marker { display: none; }
 .kcard { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
 .kcard.due { border-color: var(--warn); }
 .kcard p { margin: 4px 0; font-size: 12px; }

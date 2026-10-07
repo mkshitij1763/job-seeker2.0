@@ -106,3 +106,12 @@ def test_jd_summary_counts_matched_skills(settings, seeded, facts):
     html = client(settings).get(f"/applications/{seeded[0]}").text
     # seeded JD: "We want SQL and A/B Testing skills." -> SQL and A/B Testing are among the facts' skills
     assert "Job description · 2 skills matched" in html
+
+
+def test_pipeline_columns_are_collapsible(settings, seeded):
+    from jobseeker.db.queries import PIPELINE_COLUMNS
+
+    html = client(settings).get("/pipeline").text
+    assert html.count('<details class="col" open data-count="') == len(PIPELINE_COLUMNS)
+    assert '<details class="col" open data-count="1">' in html  # seeded: one drafted application
+    assert '<details class="col" open data-count="0">' in html

@@ -102,3 +102,15 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   .actions .more > form button { width: 100%; }
   body.typing .actions { display: none; }  /* never cover the field being typed in */
 }
+
+/* ---- Pipeline ---- */
+@media (max-width: 640px) {
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stats .src { grid-column: 1 / -1; margin: 0; }
+  .kanban { grid-auto-flow: row; grid-auto-columns: auto; overflow-x: visible; }
+  .kanban .col { min-height: 0; }
+  .kanban .col > summary { padding: 6px 0; }
+  .kanban .col > summary h3 { margin: 0; }
+  .kcard form { display: flex; gap: 8px; }
+  .kcard select { flex: 1; }
+}

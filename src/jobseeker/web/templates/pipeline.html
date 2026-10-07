@@ -11,8 +11,8 @@
 </div>
 <div class="kanban">
   {% for status in columns %}
-  <section>
-    <h3>{{ status|replace("_", " ") }} <small class="muted">{{ board[status]|length }}</small></h3>
+  <details class="col" open data-count="{{ board[status]|length }}">
+    <summary><h3>{{ status|replace("_", " ") }} <small class="muted">{{ board[status]|length }}</small></h3></summary>
     {% for c in board[status] %}
     <article class="kcard{% if c.needs_followup %} due{% endif %}">
       <a href="/applications/{{ c.app_id }}">{{ c.title }}</a>
@@ -28,7 +28,7 @@
       {% endif %}
     </article>
     {% endfor %}
-  </section>
+  </details>
   {% endfor %}
 </div>
 {% endblock %}
