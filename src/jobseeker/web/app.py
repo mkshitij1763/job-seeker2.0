@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -27,6 +28,16 @@ def asset(name: str) -> str:
     return f"/static/{name}?v={_fingerprint(name, path.stat().st_mtime_ns)}"
 
 
+class _Static(StaticFiles):
+    """asset() URLs carry a content hash (?v=), so the phone may keep them forever: no re-check per page."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if b"v=" in scope.get("query_string", b"") and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
@@ -44,7 +55,8 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
         lambda: FallbackLLM(build_llm(settings), app.state.prefs.models.fallbacks))
     app.state.gmail_factory = gmail_factory or (lambda: load_service(settings.secrets_dir / "token.json"))
     app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory))
-    app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+    app.mount("/static", _Static(directory=HERE / "static"), name="static")
+    app.add_middleware(GZipMiddleware, minimum_size=1000)  # the inbox is ~50 KB of HTML, ~8 KB gzipped
     app.include_router(inbox.router)
     app.include_router(application.router)
     app.include_router(contacts.router)

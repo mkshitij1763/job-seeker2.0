@@ -177,3 +177,15 @@ def test_compact_card_shows_next_step_one_match_and_count(settings, seeded):
     assert 'class="next-step ready">Ready to approve →' in _card(html, b)
     assert "✓ SQL" in _card(html, a) and "✓ A/B tests" not in _card(html, a)  # one match keeps cards short
     assert 'class="inbox-count">2 jobs' in html
+
+
+def test_fingerprinted_assets_are_cached_for_good_and_pages_are_compressed(settings, seeded):
+    import re as _re
+
+    c = client(settings)
+    html = c.get("/").text
+    css = _re.search(r'/static/app\.css\?v=[0-9a-f]+', html).group(0)
+    r = c.get(css)
+    assert "immutable" in r.headers["cache-control"] and "max-age=31536000" in r.headers["cache-control"]
+    assert "immutable" not in c.get("/static/app.css").headers.get("cache-control", "")  # unversioned: revalidate
+    assert c.get("/", headers={"Accept-Encoding": "gzip"}).headers.get("content-encoding") == "gzip"
