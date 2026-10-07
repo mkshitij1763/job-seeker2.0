@@ -6,6 +6,7 @@ from fastapi import Request
 
 from jobseeker.db.core import connect
 from jobseeker.db.runs import last_run
+from jobseeker.web.filters import explain_run
 
 
 def get_conn(request: Request):
@@ -21,4 +22,6 @@ def render(request: Request, conn, name: str, **ctx):
     ctx.setdefault("msg", request.query_params.get("msg"))
     ctx.setdefault("err", request.query_params.get("err"))
     ctx["run_errors"] = json.loads(run["errors"]) if run else []
+    ctx["run_notes"] = explain_run(ctx["run_errors"])
+    ctx["run_finished"] = run["finished_at"] if run else None
     return request.app.state.templates.TemplateResponse(request, name, ctx)

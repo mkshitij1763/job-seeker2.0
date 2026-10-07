@@ -32,6 +32,7 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
 @media (max-width: 640px) {
   .top { gap: 14px; padding: calc(8px + env(safe-area-inset-top)) 16px 8px; }
   .top .long { display: none; }
+  .run-notes-panel { position: fixed; left: 16px; right: 16px; width: auto; top: calc(52px + env(safe-area-inset-top)); }
   main { padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); }
   .flash { margin: 8px 12px 0; }
   button, select, .btn, summary { min-height: 44px; }

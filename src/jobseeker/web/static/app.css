@@ -15,10 +15,20 @@
 body { margin: 0; background: var(--bg); color: var(--text); }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.top { display: flex; gap: 20px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; }
+.top { display: flex; gap: 20px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 30; }
 .brand { font-weight: 700; color: var(--text); }
 .top nav a { margin-right: 14px; }
 .warn { color: var(--warn); }
+.run-notes { position: relative; margin-left: auto; }
+.run-notes > summary { cursor: pointer; list-style: none; }
+.run-notes > summary::-webkit-details-marker { display: none; }
+.run-notes > summary.err { color: var(--err); }
+.run-notes-panel { position: absolute; right: 0; top: calc(100% + 10px); z-index: 20; width: min(360px, calc(100vw - 32px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
+.run-notes-panel p { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.run-notes-panel ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.45; }
+.run-notes-panel li + li { margin-top: 6px; }
+.run-notes-panel li.err { color: var(--err); }
 main { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
 .flash { margin: 12px 20px 0; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line); }
 .flash.ok { border-color: var(--ok); } .flash.err { border-color: var(--err); color: var(--err); }

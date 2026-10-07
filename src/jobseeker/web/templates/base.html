@@ -19,7 +19,16 @@
   <header class="top">
     <a class="brand" href="/">Job Seeker</a>
     <nav><a href="/">Inbox</a><a href="/pipeline">Pipeline</a></nav>
-    {% if run_errors %}<span class="warn" title="{{ run_errors|join('\n') }}"><span class="long">Last run: </span>{{ run_errors|length }} error(s)</span>{% endif %}
+    {% if run_notes %}
+    {% set needs_you = run_notes|selectattr("action")|list %}
+    <details class="run-notes">
+      <summary class="{{ 'err' if needs_you else 'warn' }}"><span class="long">Last run: </span>{% if needs_you %}needs you{% else %}{{ run_notes|length }} note{{ "s" if run_notes|length != 1 }}{% endif %}</summary>
+      <div class="run-notes-panel">
+        <p class="muted">{% set ago = run_finished|age %}Daily run finished {{ ago if ago in ("today", "?") else ago ~ " ago" }}{% if not needs_you %}. Nothing to do: these fix themselves{% endif %}.</p>
+        <ul>{% for n in run_notes %}<li{% if n.action %} class="err"{% endif %}>{{ n.text }}</li>{% endfor %}</ul>
+      </div>
+    </details>
+    {% endif %}
   </header>
   {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
   {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
