@@ -32,6 +32,7 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
   4. Click **Approve → Gmail draft**.
   5. Send it from Gmail, then click **Mark sent**.
 - **Pipeline:** every application at a glance, with a **follow up** badge after 5 days without a reply.
+- **Find contacts:** on a job page, tap **Find contacts**. In about half a minute the People card lists the 3 most relevant people (via public LinkedIn search), each with a reason and a work email marked verified / likely / not found. **Approve** drafts emails to #1 and #2; 5 days after **Mark sent** with no reply, the pipeline offers **Email #3**. Each person has **Copy note** + **LinkedIn ↗** for a connection request. If the card shows the wrong **Email domain**, correct it once and run Find contacts again. Uses only free tiers (`TAVILY_API_KEY` required; `APIFY_API_TOKEN`, `HUNTER_API_KEY` optional, in `.env`); monthly usage is shown under the card.
 - **On your iPhone:** open the Tailscale address (see Setup step 7) and Add to Home Screen. In the inbox, swipe a card left to **Skip** or right to **Snooze** (Undo appears for 6 seconds). On a job page, **Approve** is pinned to the bottom; everything else is under **More**.
 
 ## Tuning
