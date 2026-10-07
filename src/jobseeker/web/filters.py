@@ -23,3 +23,13 @@ def age(value: str | None) -> str:
         dt = dt.replace(tzinfo=UTC)
     days = (datetime.now(UTC) - dt).days
     return "today" if days <= 0 else f"{days}d"
+
+
+def personal_note(body: str, name: str) -> str:
+    """LinkedIn connection note for one person: 'Hi <First>, ' in front, kept within LinkedIn's 300 characters."""
+    from jobseeker.contacts.names import first_name_title
+
+    first = first_name_title(name)
+    head = f"Hi {first}, " if first else ""
+    text = head + (body or "")
+    return text if len(text) <= 300 else text[:299] + "…"

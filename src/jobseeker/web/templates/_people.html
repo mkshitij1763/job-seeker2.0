@@ -1,0 +1,38 @@
+<div class="card block people" id="people-card"
+     {% if find.status == "running" %}hx-get="/applications/{{ app.id }}/contacts/card" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  <h2>People</h2>
+  {% if find.status == "running" %}
+    <p class="muted">Finding contacts… (searching, ranking and verifying emails, about half a minute)</p>
+  {% elif find.status in ["done", "failed"] and find.note %}
+    <p class="{{ 'warn' if find.status == 'failed' else 'muted' }}">{{ find.note }}</p>
+  {% endif %}
+  {% for p in people %}
+  <div class="person">
+    <p><b>#{{ p.rank }} {{ p.name }}</b> <span class="tag">{{ p.label|replace("_", " ") }}</span>
+       <span class="tag muted">{{ "email now" if p.wave == 1 else "follow-up" }}</span><br>
+       <small class="muted">{{ p.role }}</small><br>
+       <small>{{ p.reason }}</small></p>
+    <p>{% if p.email %}{{ p.email }} <span class="tag">{{ "verified" if p.email_status == "verified" else ("bounced" if p.email_status == "bounced" else "likely") }}</span>
+       {% else %}<span class="muted">email not found</span>{% endif %}
+       {% if p.emailed_at %}<span class="tag muted">drafted</span>{% endif %}</p>
+    <textarea id="note_{{ p.rank }}" hidden>{{ (drafts.li_note.body if drafts.li_note else "")|personal_note(p.name) }}</textarea>
+    <button type="button" data-copy="#note_{{ p.rank }}">Copy note</button>
+    <a class="btn" href="{{ p.linkedin_url }}" target="_blank" rel="noopener">LinkedIn ↗</a>
+    <details class="person-edit"><summary>Edit / remove</summary>
+      <form method="post" action="/applications/{{ app.id }}/contacts/{{ p.rank }}/edit" class="grid">
+        <input name="name" value="{{ p.name }}">
+        <input name="email" type="email" inputmode="email" autocapitalize="off" autocorrect="off" value="{{ p.email }}">
+        <select name="email_status">{% for s in ["unverified", "verified", "bounced"] %}<option {% if p.email_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+        <button>Save</button>
+      </form>
+      <form method="post" action="/applications/{{ app.id }}/contacts/{{ p.rank }}/remove"><button>Remove &amp; use next candidate</button></form>
+    </details>
+  </div>
+  {% endfor %}
+  {% if find.status != "running" %}
+  <form method="post" action="/applications/{{ app.id }}/contacts/find">
+    <button {% if not has_tavily %}disabled title="Add TAVILY_API_KEY to .env"{% endif %}>{{ "Find contacts again" if people else "Find contacts" }}</button>
+  </form>
+  {% endif %}
+  <p class="muted usage"><small>This month: {{ usage }}</small></p>
+</div>

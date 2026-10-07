@@ -114,3 +114,13 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   .kcard form { display: flex; gap: 8px; }
   .kcard select { flex: 1; }
 }
+
+/* ---- People card ---- */
+.people .person { border-top: 1px solid var(--line); padding: 8px 0; }
+.people .person:first-of-type { border-top: 0; }
+.people .usage { margin: 8px 0 0; }
+@media (max-width: 640px) {
+  .people { order: 3; }
+  .contact { order: 3; }
+  .people .person .btn, .people .person button { margin-top: 6px; }
+}

@@ -24,9 +24,10 @@
   </section>
 
   <section class="col-side">
+    {% include "_people.html" %}
     <div class="card block contact">
-      <h2>Contact</h2>
-      {% if app.suggested_contact_role %}
+      <h2>Add someone myself</h2>
+      {% if app.suggested_contact_role and not people %}
       <p>Suggested: <strong>{{ app.suggested_contact_role }}</strong>. {{ app.suggested_contact_reason }}
         <a href="{{ app.linkedin_search_url }}" target="_blank" rel="noopener">Search LinkedIn ↗</a></p>
       {% endif %}
