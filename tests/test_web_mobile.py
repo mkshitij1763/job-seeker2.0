@@ -79,8 +79,8 @@ def test_job_page_blocks_and_more_menu(settings, seeded):
                  'class="card block actions"']:
         assert hook in html, hook
     actions = html.split('class="card block actions"', 1)[1]
-    assert actions.index("Approve → Gmail draft") < actions.index('<details class="more" open>')
-    more = actions.split('<details class="more" open>', 1)[1].split("</details>", 1)[0]
+    assert actions.index("Approve → Gmail draft") < actions.index('<details class="more" open data-phone-closed>')
+    more = actions.split('<details class="more" open data-phone-closed>', 1)[1].split("</details>", 1)[0]
     assert 'aria-label="More actions"' in more
     for label in ("Mark sent", "Applied via portal", "Skip", "Snooze 3d", "Not interested", "Regenerate all",
                   "Undo last change"):
@@ -115,3 +115,9 @@ def test_pipeline_columns_are_collapsible(settings, seeded):
     assert html.count('<details class="col" open data-count="') == len(PIPELINE_COLUMNS)
     assert '<details class="col" open data-count="1">' in html  # seeded: one drafted application
     assert '<details class="col" open data-count="0">' in html
+
+
+def test_mobile_css_makes_approve_full_width():
+    css = (STATIC / "mobile.css").read_text()
+    phone = css[css.index("/* ---- Job page ---- */"):]
+    assert re.search(r"\.actions \.approve \{[^}]*display: block", phone)

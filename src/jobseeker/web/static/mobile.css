@@ -92,7 +92,7 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   .actions { order: 7; position: sticky; bottom: 0; z-index: 20; margin: 0 -12px calc(-24px - env(safe-area-inset-bottom));
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-radius: 0; border-width: 1px 0 0;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, .12); }
-  .actions .approve { margin: 0; }
+  .actions .approve { display: block; margin: 0; }
   .actions .approve button.primary { width: 100%; font-weight: 600; }
   .actions .approve label { display: block; margin-bottom: 8px; }
   .actions .more { display: block; }
