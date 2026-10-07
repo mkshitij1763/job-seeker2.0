@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.kshitij.jobseeker.uipreview</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__UV__</string><string>run</string><string>--project</string><string>__WORKTREE__</string>
+    <string>jobseeker</string><string>serve</string><string>--port</string><string>8001</string>
+  </array>
+  <!-- Runs the branch's code against the real data, .env and secrets in the main folder. -->
+  <key>WorkingDirectory</key><string>__MAIN__</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__MAIN__/data/logs/uipreview.log</string>
+  <key>StandardErrorPath</key><string>__MAIN__/data/logs/uipreview.err.log</string>
+</dict>
+</plist>
