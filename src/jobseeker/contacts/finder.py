@@ -14,8 +14,8 @@ from jobseeker.contacts.domains import FREE_MAIL, domain_from_text, mx_host, pic
 from jobseeker.contacts.people import from_results, rank, role_words, search_queries
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
-    blocked_profile_urls, bounced_emails, emailed_count, get_domain, link_contact, save_candidates, save_domain,
-    set_find_status, upsert_contact,
+    blocked_names, blocked_profile_urls, bounced_emails, emailed_count, get_domain, link_contact, save_candidates,
+    save_domain, set_find_status, upsert_contact,
 )
 from jobseeker.db.core import connect
 from jobseeker.db.jobs import get_job
@@ -82,6 +82,9 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                     cands.append(c)
         else:
             notes.append(f"Apify budget used for {budget.month}")
+    blocked = blocked_names(conn, company)
+    if blocked:
+        cands = [c for c in cands if (nm := names.clean_name(c.name)) is None or (nm.first, nm.last) not in blocked]
     if not cands:
         raise FinderError(" ".join(notes) or f"No people found at {company} for this role")
     ranked = rank(deps.llm, prefs.models.drafting, job["title"], company, job["jd_text"], cands)

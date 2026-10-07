@@ -130,6 +130,21 @@ def blocked_profile_urls(conn: sqlite3.Connection, company: str) -> set[str]:
     return {r["linkedin_url"] for r in rows if normalize_company(r["company"]) == norm}
 
 
+def blocked_names(conn: sqlite3.Connection, company: str) -> set[tuple[str, str]]:
+    """(first, last) of blocked people at this company who have no LinkedIn URL to match on."""
+    from jobseeker.contacts.names import clean_name
+
+    norm = normalize_company(company)
+    rows = conn.execute("""SELECT c.company, c.name FROM blocklist b JOIN contacts c ON c.id = b.contact_id
+                           WHERE c.linkedin_url = '' AND c.name != ''""").fetchall()
+    out = set()
+    for r in rows:
+        nm = clean_name(r["name"]) if normalize_company(r["company"]) == norm else None
+        if nm and nm.last:  # a first name alone is too common to block on
+            out.add((nm.first, nm.last))
+    return out
+
+
 def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str, linkedin_url: str, email: str,
                    email_status: str, domain: str | None = None) -> int | None:
     row = conn.execute("SELECT id, email, email_status FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",

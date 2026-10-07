@@ -133,6 +133,18 @@ def test_blocked_people_are_excluded(prefs):
         find_contacts(conn, app2, prefs, d2)  # every Zepto person found is blocked -> nobody left
 
 
+def test_blocked_contact_without_linkedin_url_is_excluded_by_name(prefs):
+    conn, app = setup_app()
+    cid = conn.execute("""INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source)
+                          VALUES ('Zepto', 'Dr. Asha Rao', '', '', 'asha@zeptonow.com', 'unverified', 'manual')""").lastrowid
+    conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
+                 (cid, NOW.isoformat()))
+    conn.commit()
+    d, _ = deps(FakeSMTP(default=250))
+    find_contacts(conn, app, prefs, d)
+    assert "Asha Rao" not in [p["name"] for p in people(conn, app)]
+
+
 def test_missing_tavily_raises(prefs):
     conn, app = setup_app()
     d, _ = deps()
