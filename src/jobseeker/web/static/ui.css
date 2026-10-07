@@ -145,3 +145,26 @@ label { font-size: 14px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* ---- pages (sections added per task) ---- */
+
+/* ---- Today ---- */
+.page-head { margin: 0 0 18px; }
+.page-head p { margin: 0; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+.stat { display: flex; flex-direction: column; gap: 2px; color: var(--text); padding: 14px 16px; }
+a.stat:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
+.stat b { font-size: 26px; line-height: 32px; font-weight: 500; }
+.stat-label { font-size: 13px; color: var(--text-2); }
+.today { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.today > section { min-width: 0; scroll-margin-top: 72px; }
+.today-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.today-job { display: flex; align-items: center; gap: 12px; color: var(--text); min-width: 0; flex: 1; }
+.today-job .pill { min-width: 40px; justify-content: center; }
+.today-job-text { display: flex; flex-direction: column; min-width: 0; }
+.today-job b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-job small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.more-link { margin: 10px 0 0; }
+@media (max-width: 640px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 12px 14px; }
+  .stat b { font-size: 22px; line-height: 28px; }
+}

@@ -15,6 +15,10 @@ def pipeline(request: Request, conn=Depends(get_conn)):
                   columns=queries.PIPELINE_COLUMNS, st=queries.stats(conn, now))
 
 
+def _local_hour() -> int:
+    return datetime.now().astimezone().hour
+
+
 @router.get("/today")
 def today(request: Request, conn=Depends(get_conn)):
-    return render(request, conn, "today.html", t=queries.today(conn, datetime.now(UTC)))
+    return render(request, conn, "today.html", t=queries.today(conn, datetime.now(UTC)), now_hour=_local_hour())
