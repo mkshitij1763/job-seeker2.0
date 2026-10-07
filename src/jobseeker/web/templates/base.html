@@ -1,38 +1,62 @@
+{% from "_icons.html" import icon %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Job Seeker">
   <title>{% block title %}Job Seeker{% endblock %}</title>
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="preload" href="/static/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ asset('app.css') }}">
   <link rel="stylesheet" href="{{ asset('mobile.css') }}">
+  <link rel="stylesheet" href="{{ asset('ui.css') }}">
   <script src="{{ asset('htmx.min.js') }}" defer></script>
   <script src="{{ asset('swipe.js') }}" defer></script>
   <script src="{{ asset('keys.js') }}" defer></script>
 </head>
 <body hx-boost="true">
-  <header class="top">
-    <a class="brand" href="/">Job Seeker</a>
-    <nav><a href="/today">Today</a><a href="/">Inbox</a><a href="/pipeline">Pipeline</a></nav>
-    {% if run_notes %}
-    {% set needs_you = run_notes|selectattr("action")|list %}
-    <details class="run-notes">
-      <summary class="{{ 'err' if needs_you else 'warn' }}"><span class="long">Last run: </span>{% if needs_you %}needs you{% else %}{{ run_notes|length }} note{{ "s" if run_notes|length != 1 }}{% endif %}</summary>
-      <div class="run-notes-panel">
-        <p class="muted">{% set ago = run_finished|age %}Daily run finished {{ ago if ago in ("today", "?") else ago ~ " ago" }}{% if not needs_you %}. Nothing to do: these fix themselves{% endif %}.</p>
-        <ul>{% for n in run_notes %}<li{% if n.action %} class="err"{% endif %}>{{ n.text }}</li>{% endfor %}</ul>
-      </div>
-    </details>
-    {% endif %}
-  </header>
-  {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
-  <main>{% block content %}{% endblock %}</main>
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+{% set path = request.url.path %}
+{% set items = [("today", "/today", "Today", nav.today if nav else 0), ("jobs", "/", "Jobs", nav.jobs if nav else 0),
+                ("pipeline", "/pipeline", "Pipeline", nav.pipeline if nav else 0)] %}
+{% macro nav_links() -%}
+  {% for key, href, label, count in items %}
+  {% set active = (path == href) or (key == "jobs" and path.startswith("/applications/")) %}
+  <a class="nav-item{{ ' is-active' if active }}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ label }}</span>{% if count %}<span class="count mono">{{ count }}</span>{% endif %}</a>
+  {% endfor %}
+{%- endmacro %}
+{% macro run_notes_box() -%}
+  {% if run_notes %}
+  {% set needs_you = run_notes|selectattr("action")|list %}
+  <details class="run-notes">
+    <summary class="{{ 'err' if needs_you else 'warn' }}">{% if needs_you %}Last run needs you{% else %}{{ run_notes|length }} note{{ "s" if run_notes|length != 1 }}{% endif %}</summary>
+    <div class="run-notes-panel">
+      {% set ago = run_finished|age %}<p class="muted">Daily run finished {{ ago if ago in ("today", "?") else ago ~ " ago" }}{% if not needs_you %}. Nothing to do: these fix themselves{% endif %}.</p>
+      <ul>{% for n in run_notes %}<li{% if n.action %} class="err"{% endif %}>{{ n.text }}</li>{% endfor %}</ul>
+    </div>
+  </details>
+  {% endif %}
+{%- endmacro %}
+<div class="shell">
+  <nav class="sidebar" aria-label="Main">
+    <a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>
+    {{ nav_links() }}
+    <div class="sidebar-foot">{{ run_notes_box() }}</div>
+  </nav>
+  <div>
+    <header class="topbar"><a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>{{ run_notes_box() }}</header>
+    <main class="main">
+      {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+      {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<nav class="tabbar" aria-label="Main">{{ nav_links() }}</nav>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
