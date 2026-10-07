@@ -146,6 +146,15 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         email = deps.apify.profile_email(c.linkedin_url)
         if email and (not domain or not mx or email.lower().endswith("@" + domain)):
             results[i] = (email.lower(), "verified", "apify")
+    if not (domain and mx):  # an Apify-verified address reveals the real email domain: remember it for free reuse
+        found = next(((results[i][0], person_names[i]) for i in sorted(results)
+                      if results[i][2] == "apify" and person_names[i]), None)
+        if found and deps.resolver(found[0].split("@", 1)[1]):
+            domain = found[0].split("@", 1)[1]
+            mx = deps.resolver(domain)
+            learned = names.pattern_of(found[0], found[1])
+            hints = ([learned] if learned else []) + [h for h in hints if h != learned]
+            save_domain(conn, norm, domain=domain, mx_host=mx, pattern=learned)
     missing = [i for i in range(len(top)) if i not in results]
     if domain and mx and missing and deps.hunter is not None and not hints:
         if budget.can("hunter"):

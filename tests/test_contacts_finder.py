@@ -234,3 +234,24 @@ def test_domain_without_mail_server_builds_no_emails(prefs):
     summary = find_contacts(conn, app, prefs, d)
     assert {p["email"] for p in people(conn, app)} == {""} and Hunter.calls == 0
     assert summary["people"] == 3
+
+
+def test_domain_learned_from_apify_emails_is_remembered(prefs):
+    class Apify:
+        SEARCH_PAGE_USD, PROFILE_EMAIL_USD = 0.10, 0.01
+
+        def search_people(self, company, words, location):
+            return []
+
+        def profile_email(self, url):
+            return {"https://www.linkedin.com/in/asharao": "asha.rao@zeptobank.com"}.get(url)
+
+    conn, app = setup_app()
+    d, _ = deps(llm=llm_for(domain_index=-1), apify=Apify())
+    d.resolver = lambda domain: "mx.zeptobank.com" if domain == "zeptobank.com" else None
+    find_contacts(conn, app, prefs, d)
+    row = get_domain(conn, "zepto")
+    assert (row["domain"], row["pattern"], row["mx_host"]) == ("zeptobank.com", "first.last", "mx.zeptobank.com")
+    ps = people(conn, app)
+    assert ps[0]["email"] == "asha.rao@zeptobank.com" and ps[0]["email_status"] == "verified"
+    assert ps[1]["email"] == "vikram.singh@zeptobank.com" and ps[1]["email_source"] == "pattern"
