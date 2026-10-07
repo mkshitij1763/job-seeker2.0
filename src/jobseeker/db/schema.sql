@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS application_contacts (
   gmail_draft_id TEXT,
   emailed_at TEXT,
   created_at TEXT NOT NULL,
+  nudged_at TEXT,
   UNIQUE (application_id, rank)
 );
 

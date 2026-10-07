@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from jobseeker.contacts import names
 from jobseeker.contacts.finder import run_find
 from jobseeker.db.contacts_repo import (
-    claim_find, emailed_count, find_state, get_domain, link_contact, next_candidate, people, third_due,
+    claim_find, emailed_count, find_state, get_domain, link_contact, next_candidate, nudge_due, people, third_due,
     upsert_contact,
 )
 from jobseeker.db.usage import Budget
@@ -28,6 +28,7 @@ def card_context(request: Request, conn, app_id: int) -> dict:
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
             "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
             "third_due": third_due(conn, app_id, datetime.now(UTC)),
+            "nudge_due": nudge_due(conn, app_id, datetime.now(UTC)),
             "already_emailed": emailed_count(conn, app_id) > 0,
             "usage": Budget(conn, state.prefs.contacts, datetime.now(UTC)).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
@@ -142,3 +143,41 @@ def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
     conn.commit()
     record_followup(conn, app_id)
     return _back(app_id, msg=f"Gmail draft created for {third['name']}. Review and press Send")
+
+
+FOLLOW_UP = ("Following up on my note from last week about the {title} role. I'd still love to hear how the team "
+             "is thinking about it, and 15 minutes whenever suits you would be great. My resume is attached again "
+             "for convenience.")
+
+
+@router.post("/{app_id}/contacts/followup")
+def follow_up(request: Request, app_id: int, conn=Depends(get_conn)):
+    from jobseeker.db.applications import record_followup
+    from jobseeker.db.core import utcnow
+    from jobseeker.gmail.client import GmailUnavailable, create_draft
+    from jobseeker.web.application import _raw_for
+
+    due = nudge_due(conn, app_id, datetime.now(UTC))
+    if not due:
+        return _back(app_id, err="Follow-ups are offered 5 days after Mark sent with no reply, once per person")
+    email = conn.execute("SELECT * FROM drafts WHERE application_id = ? AND kind = 'email'", (app_id,)).fetchone()
+    title = conn.execute("SELECT j.title FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = ?",
+                         (app_id,)).fetchone()["title"]
+    note = {"subject": f"Following up: {email['subject']}", "body": FOLLOW_UP.format(title=title)}
+    created, failure = [], None
+    for p in due:
+        try:
+            create_draft(request.app.state.gmail_factory(), _raw_for(request.app.state, p["email"], p["name"], note))
+        except GmailUnavailable as e:
+            failure = e
+            break
+        conn.execute("UPDATE application_contacts SET nudged_at = ? WHERE application_id = ? AND rank = ?",
+                     (utcnow(), app_id, p["rank"]))
+        conn.commit()
+        created.append(p["name"])
+    if created:
+        record_followup(conn, app_id)
+    parts = [f"Follow-up drafts created for {', '.join(created)}"] if created else []
+    if failure:
+        return _back(app_id, err="; ".join(parts + [f"Gmail draft not created: {failure}"]))
+    return _back(app_id, msg="; ".join(parts) + ". Review and press Send in Gmail")

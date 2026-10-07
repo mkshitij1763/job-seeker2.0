@@ -13,6 +13,7 @@ NEW_COLUMNS = {
     "applications": {"find_status": "TEXT NOT NULL DEFAULT 'idle'", "find_error": "TEXT NOT NULL DEFAULT ''",
                      "find_started_at": "TEXT"},
     "company_domains": {"catch_all_at": "TEXT"},
+    "application_contacts": {"nudged_at": "TEXT"},
 }
 
 

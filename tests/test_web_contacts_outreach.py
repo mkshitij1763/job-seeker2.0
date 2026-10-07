@@ -215,3 +215,37 @@ def test_add_someone_form_is_empty_when_contact_is_a_found_person(settings, seed
     save_contact(conn, a, name="Meera Iyer", role="PM", linkedin_url="", email="meera@cred.club",
                  email_status="unverified")
     assert "meera@cred.club" in _own_form(c.get(f"/applications/{a}").text)  # your own person stays editable
+
+
+def _age_events(conn, a, days):
+    then = datetime.now(UTC) - timedelta(days=days)
+    conn.execute("UPDATE events SET at = ? WHERE application_id = ?", (then.isoformat(timespec="seconds"), a))
+    conn.commit()
+
+
+def test_follow_up_to_first_two_after_five_days(settings, seeded):
+    import email as email_lib
+
+    a = seeded[0]
+    conn = link_three(settings, a)
+    gmail = FakeGmail()
+    c = client(settings, gmail)
+    c.post(f"/applications/{a}/approve")
+    transition(conn, a, "sent")
+    _age_events(conn, a, 3)
+    assert "Draft follow-up to #1 &amp; #2" not in c.get(f"/applications/{a}").text  # too early
+    _age_events(conn, a, 6)
+    assert "Draft follow-up to #1 &amp; #2" in c.get(f"/applications/{a}").text
+    before = len(gmail.raws)
+    r = c.post(f"/applications/{a}/contacts/followup")
+    assert "msg=" in r.headers["location"]
+    sent = [to_and_body(raw) for raw in gmail.raws[before:]]
+    assert [t for t, _ in sent] == ["asha@cred.club", "vikram@cred.club"]
+    assert sent[0][1].startswith("Hi Asha,") and "Following up" in sent[0][1]
+    subject = email_lib.message_from_bytes(base64.urlsafe_b64decode(gmail.raws[-1]))["Subject"]
+    assert subject.startswith("Following up: ")
+    ps = people(connect(settings.db_path), a)
+    assert ps[0]["nudged_at"] and ps[1]["nudged_at"] and not ps[2]["nudged_at"]
+    page = c.get(f"/applications/{a}").text
+    assert "Draft follow-up to #1" not in page  # once per person, and the 5-day clock restarts
+    assert queries.application_detail(connect(settings.db_path), a)["app"]["followups_sent"] == 1

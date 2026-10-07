@@ -76,6 +76,7 @@ def link_contact(conn: sqlite3.Connection, app_id: int, rank: int, contact_id: i
 def people(conn: sqlite3.Connection, app_id: int) -> list[dict]:
     rows = conn.execute(
         """SELECT ac.rank, ac.label, ac.reason, ac.wave, ac.email_source, ac.gmail_draft_id, ac.emailed_at,
+                  ac.nudged_at,
                   c.id AS contact_id, c.name, c.role, c.linkedin_url, c.email, c.email_status
            FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
            WHERE ac.application_id = ? ORDER BY ac.rank""", (app_id,)).fetchall()
@@ -126,13 +127,26 @@ def bounced_emails(conn: sqlite3.Connection, company: str) -> set[str]:
     return {r["email"].lower() for r in rows if normalize_company(r["company"]) == norm}
 
 
-def third_due(conn: sqlite3.Connection, app_id: int, now: datetime) -> bool:
-    """#3 is offered only when sent, 5+ days with no newer event, fewer than 2 follow-ups, and #3 has an email."""
+def _followup_window(conn: sqlite3.Connection, app_id: int, now: datetime) -> bool:
+    """Sent, 5+ days with no newer event (a reply, a follow-up), and fewer than 2 follow-ups so far."""
     app = conn.execute("SELECT status, followups_sent FROM applications WHERE id = ?", (app_id,)).fetchone()
     if not app or app["status"] != "sent" or app["followups_sent"] >= 2:
         return False
     last = conn.execute("SELECT at FROM events WHERE application_id = ? ORDER BY id DESC LIMIT 1", (app_id,)).fetchone()
-    if not last or datetime.fromisoformat(last["at"]) > now - timedelta(days=5):
+    return bool(last) and datetime.fromisoformat(last["at"]) <= now - timedelta(days=5)
+
+
+def nudge_due(conn: sqlite3.Connection, app_id: int, now: datetime) -> list[dict]:
+    """#1/#2 who were emailed, haven't bounced and haven't had a follow-up yet, once the follow-up window opens."""
+    if not _followup_window(conn, app_id, now):
+        return []
+    return [p for p in people(conn, app_id) if p["rank"] in (1, 2) and p["emailed_at"] and not p["nudged_at"]
+            and p["email"] and p["email_status"] != "bounced"]
+
+
+def third_due(conn: sqlite3.Connection, app_id: int, now: datetime) -> bool:
+    """#3 is offered only in the follow-up window, and only when #3 has a usable email."""
+    if not _followup_window(conn, app_id, now):
         return False
     return conn.execute("""SELECT 1 FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
                            WHERE ac.application_id = ? AND ac.rank = 3 AND ac.emailed_at IS NULL
