@@ -46,3 +46,7 @@ def test_mobile_css_contract():
     assert "@media (prefers-reduced-motion: reduce)" in css
     desktop = css[css.index("@media (min-width: 641px)"):]
     assert ".phone-only-summary" in desktop.split("}")[0] and "display: none" in desktop.split("}")[0]
+
+
+def test_swipe_script_loaded(settings, seeded):
+    assert '<script src="/static/swipe.js" defer></script>' in client(settings).get("/").text
