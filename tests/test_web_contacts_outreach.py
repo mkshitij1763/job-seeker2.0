@@ -194,3 +194,24 @@ def test_approve_does_gmail_work_off_the_event_loop(settings, seeded):
     settings.resume_path.write_bytes(b"%PDF fake")
     TestClient(create_app(settings, gmail_factory=factory), follow_redirects=False).post(f"/applications/{a}/approve")
     assert on_loop and not any(on_loop)  # blocking Gmail/SQLite calls must not stall other requests
+
+
+def _own_form(html):
+    start = html.index("Add someone myself")
+    return html[start:html.index("</form>", start)]
+
+
+def test_add_someone_form_is_empty_when_contact_is_a_found_person(settings, seeded):
+    from jobseeker.db.applications import save_contact
+
+    a = seeded[0]
+    conn = link_three(settings, a)
+    conn.execute("UPDATE applications SET contact_id = (SELECT contact_id FROM application_contacts "
+                 "WHERE application_id = ? AND rank = 1) WHERE id = ?", (a, a))  # what Find contacts does
+    conn.commit()
+    c = TestClient(create_app(settings), follow_redirects=False)
+    form = _own_form(c.get(f"/applications/{a}").text)
+    assert "asha@cred.club" not in form and "Asha Rao" not in form
+    save_contact(conn, a, name="Meera Iyer", role="PM", linkedin_url="", email="meera@cred.club",
+                 email_status="unverified")
+    assert "meera@cred.club" in _own_form(c.get(f"/applications/{a}").text)  # your own person stays editable

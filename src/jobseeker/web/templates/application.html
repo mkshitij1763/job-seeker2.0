@@ -31,12 +31,14 @@
       <p>Suggested: <strong>{{ app.suggested_contact_role }}</strong>. {{ app.suggested_contact_reason }}
         <a href="{{ app.linkedin_search_url }}" target="_blank" rel="noopener">Search LinkedIn ↗</a></p>
       {% endif %}
+      {# Prefill only someone you added yourself; Find contacts' #1 is edited on the People card. #}
+      {% set own = contact if contact and contact.id not in people|map(attribute="contact_id")|list else none %}
       <form method="post" action="/applications/{{ app.id }}/contact" class="grid">
-        <input name="name" placeholder="Name" autocomplete="off" value="{{ contact.name if contact else '' }}">
-        <input name="role" placeholder="Role" value="{{ contact.role if contact else app.suggested_contact_role }}">
-        <input name="linkedin_url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="LinkedIn URL" value="{{ contact.linkedin_url if contact else '' }}">
-        <input name="email" type="email" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="Email" value="{{ contact.email if contact else '' }}">
-        <select name="email_status">{% for s in ["unverified", "verified", "bounced"] %}<option {% if contact and contact.email_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+        <input name="name" placeholder="Name" autocomplete="off" value="{{ own.name if own else '' }}">
+        <input name="role" placeholder="Role" value="{{ own.role if own else ('' if people else app.suggested_contact_role) }}">
+        <input name="linkedin_url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="LinkedIn URL" value="{{ own.linkedin_url if own else '' }}">
+        <input name="email" type="email" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="Email" value="{{ own.email if own else '' }}">
+        <select name="email_status">{% for s in ["unverified", "verified", "bounced"] %}<option {% if own and own.email_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
         <button>Save contact</button>
       </form>
     </div>
