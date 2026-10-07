@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,6 +16,17 @@ from jobseeker.web.filters import age, highlight, personal_note
 HERE = Path(__file__).parent
 
 
+@lru_cache(maxsize=64)
+def _fingerprint(name: str, mtime_ns: int) -> str:
+    return hashlib.sha1((HERE / "static" / name).read_bytes()).hexdigest()[:8]
+
+
+def asset(name: str) -> str:
+    """Static URL with a content fingerprint, so browsers (iPhone Safari especially) never keep a stale copy."""
+    path = HERE / "static" / name
+    return f"/static/{name}?v={_fingerprint(name, path.stat().st_mtime_ns)}"
+
+
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import GroqLLM
@@ -23,6 +36,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     templates = Jinja2Templates(directory=HERE / "templates")
     templates.env.filters.update(highlight=highlight, age=age, fromjson=json.loads, personal_note=personal_note)
     templates.env.globals["allowed_next"] = allowed_next
+    templates.env.globals["asset"] = asset
     app.state.settings = settings
     app.state.prefs = load_preferences(settings.preferences_path)
     app.state.templates = templates

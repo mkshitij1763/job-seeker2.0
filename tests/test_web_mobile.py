@@ -19,7 +19,7 @@ def test_base_has_phone_meta_and_toast(settings, seeded):
     html = client(settings).get("/").text
     for snippet in ['viewport-fit=cover', '<link rel="manifest" href="/static/manifest.webmanifest">',
                     '<link rel="apple-touch-icon" href="/static/icon-180.png">', '<meta name="theme-color"',
-                    'name="apple-mobile-web-app-capable" content="yes"', 'href="/static/mobile.css"',
+                    'name="apple-mobile-web-app-capable" content="yes"', 'href="/static/mobile.css?v=',
                     '<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>']:
         assert snippet in html, snippet
 
@@ -49,7 +49,7 @@ def test_mobile_css_contract():
 
 
 def test_swipe_script_loaded(settings, seeded):
-    assert '<script src="/static/swipe.js" defer></script>' in client(settings).get("/").text
+    assert '<script src="/static/swipe.js?v=' in client(settings).get("/").text
 
 
 def test_inbox_filters_fold_and_cards_render(settings, seeded):
@@ -145,3 +145,12 @@ def test_card_refresh_does_not_refold_open_sections():
     js = (STATIC / "keys.js").read_text()
     assert "function foldForPhone(root)" in js and "root.querySelectorAll" in js
     assert 'addEventListener("htmx:afterSettle", (e) => init(e.detail && e.detail.elt' in js
+
+
+def test_static_assets_are_fingerprinted_so_phones_get_updates(settings, seeded):
+    import hashlib
+
+    html = client(settings).get("/").text
+    for name in ("app.css", "mobile.css", "swipe.js", "keys.js", "htmx.min.js"):
+        digest = hashlib.sha1((STATIC / name).read_bytes()).hexdigest()[:8]
+        assert f"/static/{name}?v={digest}" in html, name

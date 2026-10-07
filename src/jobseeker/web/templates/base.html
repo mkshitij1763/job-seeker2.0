@@ -9,11 +9,11 @@
   <title>{% block title %}Job Seeker{% endblock %}</title>
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/static/icon-180.png">
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="stylesheet" href="/static/mobile.css">
-  <script src="/static/htmx.min.js" defer></script>
-  <script src="/static/swipe.js" defer></script>
-  <script src="/static/keys.js" defer></script>
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <link rel="stylesheet" href="{{ asset('mobile.css') }}">
+  <script src="{{ asset('htmx.min.js') }}" defer></script>
+  <script src="{{ asset('swipe.js') }}" defer></script>
+  <script src="{{ asset('keys.js') }}" defer></script>
 </head>
 <body hx-boost="true">
   <header class="top">
