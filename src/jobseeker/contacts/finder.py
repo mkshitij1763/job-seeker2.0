@@ -171,6 +171,14 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         else:
             notes.append(f"Hunter budget used for {budget.month}")
 
+    # Verified addresses at this company beat any hint: guesses follow their pattern.
+    for i in sorted(results):
+        learned = person_names[i] and names.pattern_of(results[i][0], person_names[i])
+        if learned and domain and results[i][0].endswith("@" + domain):
+            hints = [learned] + [h for h in hints if h != learned]
+            save_domain(conn, norm, pattern=learned)
+            break
+
     # 5. best guesses, then save
     verified = 0
     for i, (c, label, reason) in enumerate(top):

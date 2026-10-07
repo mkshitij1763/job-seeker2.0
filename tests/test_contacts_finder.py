@@ -255,3 +255,22 @@ def test_domain_learned_from_apify_emails_is_remembered(prefs):
     ps = people(conn, app)
     assert ps[0]["email"] == "asha.rao@zeptobank.com" and ps[0]["email_status"] == "verified"
     assert ps[1]["email"] == "vikram.singh@zeptobank.com" and ps[1]["email_source"] == "pattern"
+
+
+def test_guesses_follow_pattern_of_verified_addresses(prefs):
+    class Apify:
+        SEARCH_PAGE_USD, PROFILE_EMAIL_USD = 0.10, 0.01
+
+        def search_people(self, company, words, location):
+            return []
+
+        def profile_email(self, url):
+            return {"https://www.linkedin.com/in/vsingh": "vikram@zeptonow.com"}.get(url)
+
+    conn, app = setup_app()
+    d, _ = deps(FakeSMTP(default=250), apify=Apify())  # catch-all: SMTP can't verify; public hint says first.last
+    find_contacts(conn, app, prefs, d)
+    ps = {p["name"]: p for p in people(conn, app)}
+    assert ps["Vikram Singh"]["email"] == "vikram@zeptonow.com" and ps["Vikram Singh"]["email_status"] == "verified"
+    assert ps["Asha Rao"]["email"] == "asha@zeptonow.com"  # follows the verified 'first' pattern, not the hint
+    assert get_domain(conn, "zepto")["pattern"] == "first"
