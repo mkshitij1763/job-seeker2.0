@@ -50,3 +50,22 @@ def test_mobile_css_contract():
 
 def test_swipe_script_loaded(settings, seeded):
     assert '<script src="/static/swipe.js" defer></script>' in client(settings).get("/").text
+
+
+def test_inbox_filters_fold_and_cards_render(settings, seeded):
+    html = client(settings).get("/").text
+    assert '<details class="filters-box" open data-phone-closed>' in html
+    assert '<summary class="phone-only-summary">Filters</summary>' in html
+    a = seeded[0]
+    assert f'<li class="swipe-card" data-app-id="{a}" data-swipe>' in html
+    card = html.split(f'<li class="swipe-card" data-app-id="{a}" data-swipe>', 1)[1].split("</li>", 1)[0]
+    assert '<div class="swipe-bg" aria-hidden="true">' in card and '<div class="card-body">' in card
+    assert ">Skip</button>" in card and ">Snooze</button>" in card  # the non-swipe alternative stays
+    assert f'href="/applications/{a}"' in card
+
+
+def test_keys_js_folds_for_phone_and_copies_without_opening():
+    js = (STATIC / "keys.js").read_text()
+    assert "details[data-phone-closed]" in js and 'details.col[data-count="0"]' in js
+    assert "dataset.open" not in js and "Copied ✓" in js
+    assert 'classList.add("typing")' in js

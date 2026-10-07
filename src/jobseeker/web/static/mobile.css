@@ -39,3 +39,30 @@ button:active, .btn:active { opacity: .7; transform: scale(.98); }
   input:not([type=checkbox]), select { min-height: 44px; }
   summary { padding: 10px 0; cursor: pointer; }
 }
+
+/* ---- Inbox: table on desktop, swipeable cards on phones ---- */
+.cards { display: none; list-style: none; margin: 0; padding: 0; }
+@media (max-width: 640px) {
+  .filters-box { margin-bottom: 10px; }
+  .filters-box > summary { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 600; }
+  .filters { flex-direction: column; align-items: stretch; margin: 8px 0 0; }
+  table.inbox { display: none; }
+  .cards { display: block; }
+  .cards .empty { text-align: center; color: var(--muted); padding: 30px 0; }
+  .swipe-card { position: relative; margin-bottom: 10px; border-radius: 12px; overflow: hidden; touch-action: pan-y; }
+  .swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; font-weight: 700; visibility: hidden; }
+  .swipe-card[data-dir] .swipe-bg { visibility: visible; }
+  .swipe-card[data-dir=skip] .swipe-bg { background: var(--skip-bg); color: var(--skip-fg); }
+  .swipe-card[data-dir=snooze] .swipe-bg { background: var(--snooze-bg); color: var(--snooze-fg); }
+  .swipe-card[data-dir=skip] .bg-snooze, .swipe-card[data-dir=snooze] .bg-skip { visibility: hidden; }
+  .card-body { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card-top { display: flex; gap: 10px; align-items: flex-start; }
+  .card-top .score { flex: 0 0 auto; min-width: 40px; padding: 4px 6px; }
+  .card-link { font-weight: 600; color: var(--text); line-height: 1.3; }
+  .card-link::after { content: ""; position: absolute; inset: 0; }  /* whole card opens the job */
+  .card-meta { margin: 6px 0 4px; color: var(--muted); font-size: 13px; }
+  .card-tags { margin: 0 0 8px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .card-acts { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card-acts form, .card-acts button { width: 100%; margin: 0; }
+}

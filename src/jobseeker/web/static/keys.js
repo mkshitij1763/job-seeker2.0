@@ -1,4 +1,5 @@
 (function () {
+  const phone = () => window.matchMedia("(max-width: 640px)").matches;
   let i = 0;
   const rows = () => Array.from(document.querySelectorAll("table[data-keys=rows] tbody tr[data-href]"));
   function select(n) {
@@ -20,14 +21,19 @@
       if (b) b.click();
     }
   });
+  // Copy only: iOS Safari blocks opening a window after an async clipboard write, so "Open LinkedIn" is a plain link.
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-copy]");
     if (!b) return;
     e.preventDefault();
     const src = document.querySelector(b.dataset.copy);
+    const label = b.dataset.label || b.textContent;
+    b.dataset.label = label;
     navigator.clipboard.writeText(src.value || src.textContent).then(() => {
       b.textContent = "Copied ✓";
-      if (b.dataset.open) window.open(b.dataset.open, "_blank", "noopener");
+      setTimeout(() => { b.textContent = label; }, 2000);
+    }, () => {
+      if (window.JobToast) window.JobToast("Couldn't copy. Select the text and copy it manually.");
     });
   });
   function count(t) {
@@ -38,7 +44,23 @@
     out.classList.toggle("over", n > Number(t.dataset.limit));
   }
   document.addEventListener("input", (e) => { if (e.target.dataset.limit) count(e.target); });
-  function init() { select(0); document.querySelectorAll("[data-limit]").forEach(count); }
+  // On phones the sticky action bar hides while typing, so it never covers the focused field.
+  document.addEventListener("focusin", (e) => {
+    if (phone() && e.target.matches("textarea, input:not([type=checkbox]):not([type=hidden])")) {
+      document.body.classList.add("typing");
+    }
+  });
+  document.addEventListener("focusout", () => document.body.classList.remove("typing"));
+  function foldForPhone() {
+    if (!phone()) return;
+    document.querySelectorAll('details[data-phone-closed], details.col[data-count="0"]')
+      .forEach((d) => d.removeAttribute("open"));
+  }
+  function init() {
+    if (!phone()) select(0);
+    foldForPhone();
+    document.querySelectorAll("[data-limit]").forEach(count);
+  }
   document.addEventListener("DOMContentLoaded", init);
   document.addEventListener("htmx:afterSettle", init);
 })();

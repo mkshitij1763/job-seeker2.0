@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
-<form class="filters" method="get" action="/">
-  <select name="band">{% for b in ["apply", "review", "hide", "all"] %}<option value="{{ b }}" {% if b == f.band %}selected{% endif %}>{{ b }}</option>{% endfor %}</select>
-  <select name="family"><option value="">all roles</option>{% for x in families %}<option {% if x == f.family %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-  <select name="city"><option value="">all cities</option>{% for x in cities %}<option {% if x == f.city %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-  <select name="source"><option value="">all sources</option>{% for x in sources %}<option {% if x == f.source %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-  <button>Filter</button>
-  <span class="hint">j/k move · enter open · s skip · z snooze</span>
-</form>
+<details class="filters-box" open data-phone-closed>
+  <summary class="phone-only-summary">Filters</summary>
+  <form class="filters" method="get" action="/">
+    <select name="band">{% for b in ["apply", "review", "hide", "all"] %}<option value="{{ b }}" {% if b == f.band %}selected{% endif %}>{{ b }}</option>{% endfor %}</select>
+    <select name="family"><option value="">all roles</option>{% for x in families %}<option {% if x == f.family %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    <select name="city"><option value="">all cities</option>{% for x in cities %}<option {% if x == f.city %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    <select name="source"><option value="">all sources</option>{% for x in sources %}<option {% if x == f.source %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    <button>Filter</button>
+    <span class="hint">j/k move · enter open · s skip · z snooze</span>
+  </form>
+</details>
 <table class="inbox" data-keys="rows">
   <thead><tr><th>Score</th><th>Role</th><th>Company</th><th>City</th><th>Age</th><th>Source</th><th>Why</th><th></th></tr></thead>
   <tbody>
@@ -30,4 +33,26 @@
   {% endfor %}
   </tbody>
 </table>
+{# Phone: the same rows as swipeable cards (a table row can't slide over a fixed coloured panel). #}
+<ul class="cards">
+  {% for r in rows %}
+  <li class="swipe-card" data-app-id="{{ r.app_id }}" data-swipe>
+    <div class="swipe-bg" aria-hidden="true"><span class="bg-snooze">Snooze</span><span class="bg-skip">Skip</span></div>
+    <div class="card-body">
+      <div class="card-top">
+        <span class="score {% if r.score >= 70 %}hi{% elif r.score >= 50 %}mid{% else %}lo{% endif %}">{{ r.score }}</span>
+        <a class="card-link" href="/applications/{{ r.app_id }}">{{ r.title }}</a>
+      </div>
+      <p class="card-meta">{{ r.company }} · {{ r.location_city or ("remote" if r.remote else (r.location or "?")) }} · {{ (r.posted_at or r.first_seen_at)|age }} · {{ r.source }}</p>
+      <p class="card-tags"><span class="tag">{{ r.role_family|replace("_", " ") }}</span> <span class="tag muted">{{ r.status }}</span>{% for m in (r.matches|fromjson)[:2] %} <span class="m">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %} <span class="g">✗ {{ g }}</span>{% endfor %}</p>
+      <div class="card-acts">
+        <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="/"><button>Skip</button></form>
+        <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="/"><button>Snooze</button></form>
+      </div>
+    </div>
+  </li>
+  {% else %}
+  <li class="empty">Nothing here yet. Run <code>jobseeker run</code> or change the filters.</li>
+  {% endfor %}
+</ul>
 {% endblock %}
