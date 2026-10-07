@@ -30,5 +30,5 @@ def test_inbox_filter_by_family_and_source(settings, seeded):
 
 def test_static_assets_served(settings):
     client = TestClient(create_app(settings))
-    assert client.get("/static/app.css").status_code == 200
+    assert client.get("/static/ui.css").status_code == 200
     assert client.get("/static/htmx.min.js").status_code == 200

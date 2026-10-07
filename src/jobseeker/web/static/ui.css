@@ -344,3 +344,38 @@ ol.timeline .mono { flex: 0 0 52px; font-size: 12px; padding-top: 2px; }
   .person-acts > * { flex: 1; }
   body.typing .tabbar { display: none; }  /* never cover the field being typed in */
 }
+
+/* ---- Pipeline ---- */
+.pipe-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.stage-chips { display: none; }
+.columns { display: grid; grid-auto-flow: column; grid-auto-columns: 272px; gap: 12px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x proximity; }
+.column { background: rgba(244, 244, 240, .6); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 10px; display: grid; gap: 10px;
+  align-content: start; scroll-snap-align: start; min-height: 160px; }
+.column-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px; }
+.column .empty { padding: 18px 8px; font-size: 13px; }
+.kcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 6px; box-shadow: var(--shadow-1); min-width: 0; }
+.kcard:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
+.kcard.due { border-color: var(--good-line); background: var(--good-bg); }
+.kcard-top { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+.kcard-title { color: var(--text); font-weight: 500; overflow-wrap: anywhere; min-width: 0; }
+.kcard p { margin: 0; font-size: 13px; }
+.kmove > summary { list-style: none; cursor: pointer; font-size: 13px; color: var(--text-2); width: fit-content; padding: 2px 0; }
+.kmove > summary::-webkit-details-marker { display: none; }
+.kmove[open] > summary { margin-bottom: 6px; }
+.kcard .move { display: flex; gap: 6px; }
+.kcard .move select { flex: 1; min-width: 0; min-height: 36px; padding: 4px 8px; font-size: 13px; text-transform: capitalize; }
+.kcard .move button { min-height: 36px; font-size: 13px; }
+@media (prefers-color-scheme: dark) { .column { background: var(--muted-bg); } }
+@media (max-width: 640px) {
+  .pipe-stats { display: flex; overflow-x: auto; margin: 0 -16px 14px; padding: 0 16px 2px; scrollbar-width: none; }
+  .pipe-stats::-webkit-scrollbar { display: none; }
+  .pipe-stats .stat { flex: 0 0 128px; }
+  .stage-chips { display: flex; margin: 0 -16px 12px; padding: 0 16px 2px; }
+  .columns { display: block; overflow: visible; padding: 0; }
+  .column { background: transparent; border: 0; padding: 0; min-height: 0; }
+  .column.is-hidden { display: none; }
+  .column-head { display: none; }
+  .kcard .move select { font-size: 16px; min-height: 44px; }
+  .kcard .move button { min-height: 44px; }
+  .kmove > summary { min-height: 32px; display: flex; align-items: center; }
+}

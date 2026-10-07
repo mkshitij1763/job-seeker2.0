@@ -68,6 +68,7 @@ def application_detail(conn: sqlite3.Connection, app_id: int) -> dict | None:
 def pipeline(conn: sqlite3.Connection, now: datetime) -> dict[str, list[dict]]:
     rows = conn.execute(
         f"""SELECT a.id AS app_id, a.status, a.followups_sent, j.title, j.company, s.score,
+                   (SELECT COUNT(*) FROM application_contacts ac WHERE ac.application_id = a.id) AS people,
                    (SELECT at FROM events e WHERE e.application_id = a.id ORDER BY e.id DESC LIMIT 1) AS last_at
             FROM applications a JOIN jobs j ON j.id = a.job_id JOIN scores s ON {_LATEST_SCORE}
             WHERE a.status IN ({','.join('?' * len(PIPELINE_COLUMNS))})

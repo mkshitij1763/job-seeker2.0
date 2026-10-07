@@ -23,7 +23,7 @@ def test_pipeline_board_and_followup_flag(settings, seeded):
 
     r = TestClient(create_app(settings)).get("/pipeline")
     assert r.status_code == 200
-    assert "follow up" in r.text and "Senior Product Analyst 0" in r.text
+    assert "Follow up" in r.text and "Senior Product Analyst 0" in r.text
 
 
 def test_stats_ignore_undone_transitions(settings, seeded):

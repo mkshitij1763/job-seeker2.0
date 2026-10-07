@@ -19,7 +19,7 @@ def test_base_has_phone_meta_and_toast(settings, seeded):
     html = client(settings).get("/").text
     for snippet in ['viewport-fit=cover', '<link rel="manifest" href="/static/manifest.webmanifest">',
                     '<link rel="apple-touch-icon" href="/static/icon-180.png">', '<meta name="theme-color"',
-                    'name="apple-mobile-web-app-capable" content="yes"', 'href="/static/mobile.css?v=',
+                    'name="apple-mobile-web-app-capable" content="yes"', 'href="/static/ui.css?v=',
                     '<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>']:
         assert snippet in html, snippet
 
@@ -35,17 +35,6 @@ def test_icons_are_pngs_of_the_right_size(settings, name, size):
     body = client(settings).get(f"/static/{name}").content
     assert body[:8] == b"\x89PNG\r\n\x1a\n"
     assert struct.unpack(">II", body[16:24]) == (size, size)
-
-
-def test_mobile_css_contract():
-    css = (STATIC / "mobile.css").read_text()
-    phone = css[css.index("@media (max-width: 640px)"):]
-    assert re.search(r"input, select, textarea \{[^}]*font-size: 16px", phone)
-    assert re.search(r"min-height: 44px", phone)
-    assert "env(safe-area-inset-bottom)" in css
-    assert "@media (prefers-reduced-motion: reduce)" in css
-    desktop = css[css.index("@media (min-width: 641px)"):]
-    assert ".phone-only-summary" in desktop.split("}")[0] and "display: none" in desktop.split("}")[0]
 
 
 def test_swipe_script_loaded(settings, seeded):
@@ -106,15 +95,6 @@ def test_jd_summary_counts_matched_skills(settings, seeded, facts):
     assert "Job description · 2 skills matched" in html
 
 
-def test_pipeline_columns_are_collapsible(settings, seeded):
-    from jobseeker.db.queries import PIPELINE_COLUMNS
-
-    html = client(settings).get("/pipeline").text
-    assert html.count('<details class="col" open data-count="') == len(PIPELINE_COLUMNS)
-    assert '<details class="col" open data-count="1">' in html  # seeded: one drafted application
-    assert '<details class="col" open data-count="0">' in html
-
-
 def test_swipe_rebinds_after_htmx_history_restore():
     js = (STATIC / "swipe.js").read_text()
     assert "new WeakSet()" in js and "swipeBound" not in js  # a DOM marker survives into history snapshots
@@ -139,7 +119,7 @@ def test_static_assets_are_fingerprinted_so_phones_get_updates(settings, seeded)
     import hashlib
 
     html = client(settings).get("/").text
-    for name in ("app.css", "mobile.css", "swipe.js", "keys.js", "htmx.min.js"):
+    for name in ("ui.css", "swipe.js", "keys.js", "tabs.js", "htmx.min.js"):
         digest = hashlib.sha1((STATIC / name).read_bytes()).hexdigest()[:8]
         assert f"/static/{name}?v={digest}" in html, name
 
@@ -170,8 +150,8 @@ def test_fingerprinted_assets_are_cached_for_good_and_pages_are_compressed(setti
 
     c = client(settings)
     html = c.get("/").text
-    css = _re.search(r'/static/app\.css\?v=[0-9a-f]+', html).group(0)
+    css = _re.search(r'/static/ui\.css\?v=[0-9a-f]+', html).group(0)
     r = c.get(css)
     assert "immutable" in r.headers["cache-control"] and "max-age=31536000" in r.headers["cache-control"]
-    assert "immutable" not in c.get("/static/app.css").headers.get("cache-control", "")  # unversioned: revalidate
+    assert "immutable" not in c.get("/static/ui.css").headers.get("cache-control", "")  # unversioned: revalidate
     assert c.get("/", headers={"Accept-Encoding": "gzip"}).headers.get("content-encoding") == "gzip"

@@ -1,34 +1,55 @@
 {% extends "base.html" %}
 {% block title %}Pipeline · Job Seeker{% endblock %}
 {% block content %}
-<div class="stats">
-  <div><b>{{ st.drafted }}</b><span>Drafted (30d)</span></div>
-  <div><b>{{ st.sent }}</b><span>Sent</span></div>
-  <div><b>{{ st.replied }}</b><span>Replies</span></div>
-  <div><b>{{ (st.reply_rate * 100)|round|int }}%</b><span>Reply rate</span></div>
-  <div><b>{{ st.interviews }}</b><span>Interviews</span></div>
-  <p class="src">{% for s, n in st.jobs_per_source.items() %}<span>{{ s }}: {{ n }}</span>{% endfor %}</p>
-</div>
-<div class="kanban">
-  {% for status in columns %}
-  <details class="col" open data-count="{{ board[status]|length }}">
-    <summary><h3>{{ status|replace("_", " ") }} <small class="muted">{{ board[status]|length }}</small></h3></summary>
-    {% for c in board[status] %}
-    <article class="kcard{% if c.needs_followup %} due{% endif %}">
-      <a href="/applications/{{ c.app_id }}">{{ c.title }}</a>
-      <p>{{ c.company }} · {{ c.score }}</p>
-      <p class="muted">{{ c.days_since }}d since last action{% if c.third %} · <b>Email #3: {{ c.third.name.split()[0] }} ({{ c.third.label|replace("_", " ") }})</b>{% elif c.needs_followup %} · <b>follow up</b>{% endif %}</p>
-      {% set nexts = allowed_next(c.status) %}
-      {% if nexts %}
-      <form method="post" action="/applications/{{ c.app_id }}/status">
-        <input type="hidden" name="next" value="/pipeline">
-        <select name="status">{% for s in nexts %}<option value="{{ s }}">{{ s|replace("_", " ") }}</option>{% endfor %}</select>
-        <button>Move</button>
-      </form>
-      {% endif %}
-    </article>
-    {% endfor %}
+{% set active = ["shortlisted", "drafted", "approved", "sent", "replied", "interview", "offer"] %}
+{% set empty_text = {"shortlisted": "Nothing shortlisted yet.", "drafted": "No drafts waiting.", "approved": "No Gmail drafts waiting to send.",
+                     "sent": "Nothing sent yet.", "replied": "No replies yet.", "interview": "No interviews yet.", "offer": "No offers yet."} %}
+{% set closed = board.applied_via_portal + board.rejected %}
+{% set due = board.sent|selectattr("needs_followup")|list %}
+{% set default = "sent" if due else "drafted" %}
+{% macro card(c) %}
+<article class="kcard{{ ' due' if c.needs_followup }}">
+  <div class="kcard-top"><a class="kcard-title" href="/applications/{{ c.app_id }}">{{ c.title }}</a><span class="pill tier-{{ tier(c.score) }}">{{ c.score }}</span></div>
+  <p class="muted">{{ c.company }} · <span class="mono">{{ c.days_since }}d</span> since last action</p>
+  {% if c.third %}<p class="warnc"><b>⚠ Email #3: {{ c.third.name.split()[0] }}</b></p>
+  {% elif c.needs_followup %}<p class="warnc"><b>⚠ Follow up</b></p>
+  {% elif c.status == "drafted" and c.people %}<span class="next-step ready">Ready to approve →</span>
+  {% elif c.status == "drafted" %}<span class="next-step find">Find contacts →</span>
+  {% elif c.status == "approved" %}<span class="next-step find">Send in Gmail →</span>{% endif %}
+  {% set nexts = allowed_next(c.status) %}
+  {% if nexts %}
+  <details class="kmove"><summary>Move…</summary>
+  <form method="post" action="/applications/{{ c.app_id }}/status" class="move">
+    <input type="hidden" name="next" value="/pipeline">
+    <select name="status" aria-label="Move to">{% for s in nexts %}<option value="{{ s }}">{{ s|replace("_", " ") }}</option>{% endfor %}</select>
+    <button>Move</button>
+  </form>
   </details>
+  {% endif %}
+</article>
+{% endmacro %}
+<header class="page-head"><h1>Pipeline</h1><p class="muted">Every application after the inbox, by stage.</p></header>
+<div class="stats pipe-stats">
+  {% for n, label in [(st.drafted, "Drafted (30d)"), (st.sent, "Sent"), (st.replied, "Replies"), ((st.reply_rate * 100)|round|int ~ "%", "Reply rate"), (st.interviews, "Interviews")] %}
+  <div class="stat card"><b>{{ n }}</b><span class="stat-label">{{ label }}</span></div>
   {% endfor %}
+</div>
+<div class="board" data-tabs data-default="{{ default }}">
+  <div class="chips stage-chips" role="tablist">
+    {% for s in active %}<button type="button" class="chip" data-tab="{{ s }}" role="tab">{{ s|capitalize }} <span class="count">{{ board[s]|length }}</span></button>{% endfor %}
+    <button type="button" class="chip" data-tab="closed" role="tab">Closed <span class="count">{{ closed|length }}</span></button>
+  </div>
+  <div class="columns">
+    {% for s in active %}
+    <section class="column" data-panel="{{ s }}">
+      <h3 class="column-head label">{{ s }} <span class="count mono">{{ board[s]|length }}</span></h3>
+      {% for c in board[s] %}{{ card(c) }}{% else %}<p class="empty">{{ empty_text[s] }}</p>{% endfor %}
+    </section>
+    {% endfor %}
+    <section class="column column-closed" data-panel="closed">
+      <h3 class="column-head label">Closed <span class="count mono">{{ closed|length }}</span></h3>
+      {% for c in closed %}{{ card(c) }}{% else %}<p class="empty">Nothing closed yet.</p>{% endfor %}
+    </section>
+  </div>
 </div>
 {% endblock %}

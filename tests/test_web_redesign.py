@@ -198,3 +198,54 @@ def test_people_card_restyled_with_rank_and_status_pills(settings, seeded):
     assert card.count('<article class="person">') == 2
     assert '<span class="rank mono">#1</span>' in card and '<span class="pill tier-strong">verified</span>' in card
     assert '<span class="pill tier-good">likely</span>' in card
+
+
+def test_pipeline_columns_chips_and_default_stage(settings, seeded):
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE applications SET status = 'drafted' WHERE id = ?", (a,))
+    conn.commit()
+    html = client(settings).get("/pipeline").text
+    assert '<div class="board" data-tabs data-default="drafted">' in html
+    for stage in ("shortlisted", "drafted", "approved", "sent", "replied", "interview", "offer", "closed"):
+        assert f'data-tab="{stage}"' in html and f'data-panel="{stage}"' in html, stage
+    col = html.split('data-panel="drafted"', 1)[1].split("</section>", 1)[0]
+    assert f'href="/applications/{a}"' in col and 'class="pill tier-good"' in col
+    assert '<span class="next-step find">Find contacts →</span>' in col
+    assert 'name="next" value="/pipeline"' in col  # Move keeps you on the board
+
+
+def test_pipeline_opens_on_sent_when_a_follow_up_is_due(settings, seeded):
+    from datetime import UTC, datetime, timedelta
+
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    then = (datetime.now(UTC) - timedelta(days=6)).isoformat(timespec="seconds")
+    conn.execute("UPDATE applications SET status = 'sent' WHERE id = ?", (a,))
+    conn.execute("UPDATE events SET at = ? WHERE application_id = ?", (then, a))
+    conn.commit()
+    html = client(settings).get("/pipeline").text
+    assert 'data-tabs data-default="sent"' in html and 'class="kcard due"' in html
+
+
+def test_pipeline_closed_group_and_empty_columns(settings, seeded):
+    from jobseeker.db.core import connect
+
+    a = seeded[0]
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE applications SET status = 'rejected' WHERE id = ?", (a,))
+    conn.commit()
+    html = client(settings).get("/pipeline").text
+    closed = html.split('data-panel="closed"', 1)[1].split("</section>", 1)[0]
+    assert f'href="/applications/{a}"' in closed
+    assert "Nothing offer yet." not in html and "No offers yet." in html
+
+
+def test_legacy_stylesheets_are_gone(settings, seeded):
+    html = client(settings).get("/today").text
+    assert "app.css" not in html and "mobile.css" not in html
+    assert not (STATIC / "app.css").exists() and not (STATIC / "mobile.css").exists()
