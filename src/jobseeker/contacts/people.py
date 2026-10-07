@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from jobseeker.llm import LLM
+from jobseeker.llm import LLM, fence
 from jobseeker.pipeline.normalize import normalize_company, normalize_title
 
 ROLE_WORDS = {"senior_product_analyst": "product analyst", "product_analyst": "product analyst",
@@ -82,7 +82,7 @@ def rank(llm: LLM, model: str, title: str, company: str, jd: str,
     if not candidates:
         return []
     listing = "\n".join(f"{i}. {c.name} — {c.headline}" for i, c in enumerate(candidates))
-    jd_block = jd[:1500].replace("</job_posting>", "</ job_posting>")
+    jd_block = fence(jd[:1500])
     out = llm.json(model=model, system=RANK_SYSTEM, schema=Picks, effort="low",
                    prompt=f"Job: {title} at {company}\n\n<job_posting>\n{jd_block}\n</job_posting>\n\n"
                           f"Candidates:\n{listing}")

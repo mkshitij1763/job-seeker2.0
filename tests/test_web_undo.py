@@ -94,3 +94,11 @@ def test_undoing_an_approval_warns_about_the_gmail_draft(settings, seeded):
     client = TestClient(create_app(settings), follow_redirects=False)
     r = client.post(f"/applications/{a}/undo")
     assert "Gmail" in r.headers["location"] and "delete" in r.headers["location"].lower()
+
+
+@pytest.mark.parametrize("bad", ["//evil.example/x", "/\\evil.example", "https://evil.example"])
+def test_next_must_be_a_local_path(settings, seeded, bad):
+    a = seeded[0]
+    client = TestClient(create_app(settings), follow_redirects=False)
+    r = client.post(f"/applications/{a}/status", data={"status": "skipped", "next": bad})
+    assert r.headers["location"].startswith(f"/applications/{a}?")

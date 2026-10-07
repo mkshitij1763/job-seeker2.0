@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from typing import Protocol, TypeVar
@@ -12,6 +13,14 @@ MAX_WAITS = 4            # per call, for short per-minute 429s
 MAX_WAIT_SECONDS = 65.0  # one token-per-minute window
 QUOTA_THRESHOLD = 120.0  # a longer retry-after means the daily quota is gone
 CONNECTION_RETRIES = 3  # dropped connections are retried after 2, 4 and 8 seconds
+
+
+_FENCE_CLOSE = re.compile(r"<\s*/\s*job_posting\s*>", re.I)
+
+
+def fence(text: str) -> str:
+    """Untrusted job text can't close the <job_posting> fence, whatever its case or spacing."""
+    return _FENCE_CLOSE.sub("[/job_posting]", text)
 
 
 class LLMError(Exception):

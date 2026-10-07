@@ -93,7 +93,7 @@ def test_approve_gmail_unavailable_keeps_state(settings, seeded, facts):
     client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",
                                                     "email": "a@x.com", "email_status": "verified"})
     r = client.post(f"/applications/{a}/approve")
-    assert "Reconnect" in r.headers["location"] or "auth-gmail" in r.headers["location"]
+    assert "draft%20not%20created" in r.headers["location"] or "auth-gmail" in r.headers["location"]
     conn = db(settings)
     assert get_status(conn, a) == "drafted"
     assert get_drafts(conn, a)["email"]["body"] == "Email body citing 67%."

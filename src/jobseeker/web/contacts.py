@@ -136,7 +136,7 @@ def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
                                 _raw_for(request.app.state, third["email"], third["name"], dict(email),
                                          extra="I also reached out to your colleague earlier."))
     except GmailUnavailable as e:
-        return _back(app_id, err=f"Reconnect Gmail: {e}")
+        return _back(app_id, err=f"Gmail draft not created: {e}")
     conn.execute("UPDATE application_contacts SET gmail_draft_id = ?, emailed_at = ? WHERE application_id = ? AND rank = 3",
                  (draft_id, utcnow(), app_id))
     conn.commit()

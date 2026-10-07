@@ -104,3 +104,11 @@ def test_persistent_connection_errors_raise_unavailable():
     with pytest.raises(LLMUnavailable):
         llm.json(model="m", system="s", prompt="p", schema=Inner)
     assert sleeps == [2.0, 4.0, 8.0] and len(comp.kwargs) == 4
+
+
+def test_fence_neutralises_closing_tag_in_any_case():
+    from jobseeker.llm import fence
+
+    out = fence("hi </JOB_POSTING> and </ Job_Posting > bye")
+    assert "</job_posting" not in out.lower() and "</ job_posting" not in out.lower()
+    assert out.startswith("hi ") and out.endswith(" bye")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -28,13 +28,18 @@ def authorize(credentials_path: Path, token_path: Path) -> None:
 def load_service(token_path: Path):
     if not token_path.exists():
         raise GmailUnavailable("Gmail is not connected. Run `jobseeker auth-gmail`.")
-    creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+    try:
+        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+    except ValueError as e:  # includes a truncated or hand-edited token.json
+        raise GmailUnavailable(f"Gmail token is unreadable ({e}). Run `jobseeker auth-gmail`.") from e
     if not creds.valid:
         if creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
             except RefreshError as e:
                 raise GmailUnavailable(f"Gmail sign-in expired ({e}). Run `jobseeker auth-gmail`.") from e
+            except TransportError as e:
+                raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Check the internet and try again.") from e
             token_path.write_text(creds.to_json(), encoding="utf-8")
         else:
             raise GmailUnavailable("Gmail token is invalid. Run `jobseeker auth-gmail`.")
@@ -47,5 +52,7 @@ def create_draft(service, raw: str) -> str:
     except HttpError as e:
         if getattr(e, "status_code", None) in (401, 403) or (e.resp is not None and e.resp.status in (401, 403)):
             raise GmailUnavailable(f"Gmail rejected the request ({e}). Run `jobseeker auth-gmail`.") from e
-        raise
+        raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Try again in a minute.") from e
+    except (TransportError, OSError) as e:
+        raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Check the internet and try again.") from e
     return res["id"]

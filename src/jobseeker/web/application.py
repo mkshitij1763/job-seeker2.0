@@ -28,7 +28,8 @@ REGENERATABLE = {"new", "shortlisted", "drafted", "approved"}
 
 
 def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err: str | None = None):
-    target = next_ if next_ and next_.startswith("/") else f"/applications/{app_id}"
+    local = next_ and next_.startswith("/") and not next_.startswith(("//", "/\\"))  # "//host" leaves the site
+    target = next_ if local else f"/applications/{app_id}"
     if msg or err:
         sep = "&" if "?" in target else "?"
         target += f"{sep}{'msg' if msg else 'err'}={quote(msg or err)}"
@@ -176,7 +177,7 @@ def _approve(state, conn, app_id: int, form):
     if skipped:
         parts.append(f"skipped {', '.join(skipped)} (no usable email)")
     if failure:
-        return _back(app_id, err="; ".join(parts + [f"Reconnect Gmail: {failure}"]))
+        return _back(app_id, err="; ".join(parts + [f"Gmail draft not created: {failure}"]))
     return _back(app_id, msg="; ".join(parts) + ". Review and press Send in Gmail")
 
 
@@ -200,7 +201,7 @@ def _approve_single(state, conn, app_id: int, d: dict, email: dict, confirm_unve
     try:
         draft_id = create_draft(state.gmail_factory(), _raw_for(state, contact["email"], contact["name"], email))
     except GmailUnavailable as e:
-        return _back(app_id, err=f"Reconnect Gmail: {e}")
+        return _back(app_id, err=f"Gmail draft not created: {e}")
     previous = email["gmail_draft_id"]
     set_gmail_draft_id(conn, app_id, draft_id)
     transition(conn, app_id, "approved", {"gmail_draft_id": draft_id})

@@ -25,23 +25,30 @@ _TITLE_ABBREV = [
 ]
 _COMPANY_STOP = {"pvt", "private", "ltd", "limited", "inc", "llp", "technologies", "technology", "india", "labs"}
 _BLOCK_TAGS = {"p", "div", "br", "li", "ul", "ol", "h1", "h2", "h3", "h4", "tr", "section"}
+_HIDDEN_TAGS = {"script", "style", "noscript", "template"}
 
 
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
+        self.hidden = 0
 
     def handle_starttag(self, tag, attrs):
-        if tag in _BLOCK_TAGS:
+        if tag in _HIDDEN_TAGS:
+            self.hidden += 1
+        elif tag in _BLOCK_TAGS:
             self.parts.append("\n")
 
     def handle_endtag(self, tag):
-        if tag in _BLOCK_TAGS:
+        if tag in _HIDDEN_TAGS:
+            self.hidden = max(0, self.hidden - 1)
+        elif tag in _BLOCK_TAGS:
             self.parts.append("\n")
 
     def handle_data(self, data):
-        self.parts.append(data)
+        if not self.hidden:
+            self.parts.append(data)
 
 
 def html_to_text(s: str) -> str:

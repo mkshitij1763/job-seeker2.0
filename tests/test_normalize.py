@@ -40,3 +40,8 @@ def test_normalize_detects_remote():
     job = normalize(raw)
     assert job.is_remote is True and job.location_city is None
     assert job.fingerprint == fingerprint("Sarvam AI", "PM", None)
+
+
+def test_html_to_text_drops_style_and_script():
+    s = "<style>.a{color:red}</style><p>Own the funnel</p><script>track()</script><noscript>x</noscript>"
+    assert html_to_text(s) == "Own the funnel"

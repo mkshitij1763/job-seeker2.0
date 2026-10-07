@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
+from jobseeker.llm import fence
 from jobseeker.pipeline.normalize import normalize_company
 
 _SKIP_HOSTS = ("linkedin.", "naukri.", "indeed.", "glassdoor.", "lever.co", "greenhouse.io", "ashbyhq.com",
@@ -83,7 +84,7 @@ def pick_domain(llm, model: str, company: str, title: str, city: str | None, jd:
     if not cands:
         return None
     listing = "\n".join(f"{i}. {d} — {desc}" for i, (d, desc) in enumerate(cands))
-    jd_block = jd[:600].replace("</job_posting>", "</ job_posting>")
+    jd_block = fence(jd[:600])
     out = llm.json(model=model, system=DOMAIN_SYSTEM, schema=DomainPick, effort="low",
                    prompt=f"Employer: {company}\nJob: {title} ({city or 'India'})\n\n<job_posting>\n{jd_block}\n"
                           f"</job_posting>\n\nWebsites:\n{listing}")

@@ -40,3 +40,28 @@ def test_create_draft_returns_id():
     service = SimpleNamespace(users=lambda: SimpleNamespace(drafts=lambda: Drafts()))
     assert create_draft(service, "cmF3") == "r-123"
     assert calls["body"] == {"message": {"raw": "cmF3"}}
+
+
+def test_load_service_with_corrupt_token(tmp_path):
+    token = tmp_path / "token.json"
+    token.write_text("{not json", encoding="utf-8")
+    with pytest.raises(GmailUnavailable):
+        load_service(token)
+
+
+@pytest.mark.parametrize("error", [OSError("network down"), "transport"])
+def test_create_draft_network_failure_is_unavailable(error):
+    from google.auth.exceptions import TransportError
+
+    exc = TransportError("offline") if error == "transport" else error
+
+    def boom():
+        raise exc
+
+    class Drafts:
+        def create(self, userId, body):
+            return SimpleNamespace(execute=boom)
+
+    service = SimpleNamespace(users=lambda: SimpleNamespace(drafts=lambda: Drafts()))
+    with pytest.raises(GmailUnavailable, match="reach Gmail"):
+        create_draft(service, "cmF3")

@@ -96,7 +96,7 @@ def test_approve_gmail_fails_midway_keeps_first_draft(settings, seeded):
     link_three(settings, a)
     gmail = FakeGmail(fail_after=1)
     r = client(settings, gmail).post(f"/applications/{a}/approve")
-    assert "Asha" in r.headers["location"] and "Reconnect" in r.headers["location"]
+    assert "Asha" in r.headers["location"] and "draft%20not%20created" in r.headers["location"]
     conn = connect(settings.db_path)
     assert people(conn, a)[0]["gmail_draft_id"] == "d1" and get_status(conn, a) == "approved"
 
