@@ -351,6 +351,42 @@ def test_colliding_guesses_never_share_an_email(prefs):
     assert ps[0]["contact_id"] != ps[1]["contact_id"] and ps[0]["email"] != ps[1]["email"]
 
 
+def _cached_refusal(conn, age):
+    from jobseeker.db.contacts_repo import save_domain
+    save_domain(conn, "zepto", domain="zeptonow.com", pattern="first.last", catch_all=2, mx_host="mx")
+    conn.execute("UPDATE company_domains SET catch_all_at = ?, checked_at = ? WHERE name_norm = 'zepto'",
+                 ((NOW - age).isoformat(timespec="seconds"),) * 2)
+    conn.commit()
+
+
+def test_remembered_refusal_skips_checks_while_fresh(prefs):
+    conn, app = setup_app()
+    _cached_refusal(conn, timedelta(days=5))
+    d, server = deps(FakeSMTP({"asha.rao@zeptonow.com": 250}))
+    find_contacts(conn, app, prefs, d)
+    assert server.rcpts == [] and get_domain(conn, "zepto")["catch_all"] == 2
+
+
+def test_remembered_refusal_expires_after_30_days(prefs):
+    conn, app = setup_app()
+    _cached_refusal(conn, timedelta(days=31))
+    d, server = deps(FakeSMTP({"asha.rao@zeptonow.com": 250}))
+    find_contacts(conn, app, prefs, d)
+    assert server.rcpts  # checked again: refusals depend on the network we were on
+    row = get_domain(conn, "zepto")
+    assert row["catch_all"] == 0 and row["catch_all_at"] > (NOW - timedelta(days=1)).isoformat()
+    assert people(conn, app)[0]["email_status"] == "verified"
+
+
+def test_pre_migration_refusal_keeps_its_age_when_saved_again():
+    from jobseeker.db.contacts_repo import save_domain
+    conn, _ = setup_app()
+    _cached_refusal(conn, timedelta(days=31))
+    conn.execute("UPDATE company_domains SET catch_all_at = NULL")
+    save_domain(conn, "zepto", pattern="first")  # e.g. a pattern learned later must not make the refusal look new
+    assert get_domain(conn, "zepto")["catch_all_at"] == (NOW - timedelta(days=31)).isoformat(timespec="seconds")
+
+
 def test_rerun_refused_once_people_were_emailed(prefs):
     conn, app = setup_app()
     find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])

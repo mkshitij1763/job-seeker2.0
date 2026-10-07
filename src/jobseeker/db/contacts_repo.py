@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from jobseeker.db.core import iso, utcnow
 from jobseeker.pipeline.normalize import normalize_company
 
+CATCH_ALL_TTL = timedelta(days=30)
 STALE_AFTER = timedelta(minutes=20)  # worst case: Apify search + 3 profile lookups at 180 s each, plus SMTP
 
 
@@ -87,16 +88,31 @@ def get_domain(conn: sqlite3.Connection, name_norm: str) -> dict | None:
 
 
 def save_domain(conn: sqlite3.Connection, name_norm: str, **fields) -> None:
+    """Pass catch_all_at only when catch_all was just learned from the mail server."""
     current = get_domain(conn, name_norm) or {}
-    merged = {k: fields.get(k, current.get(k)) for k in ("domain", "pattern", "catch_all", "mx_host")}
+    merged = {k: fields.get(k, current.get(k)) for k in ("domain", "pattern", "catch_all", "mx_host", "catch_all_at")}
+    if merged["catch_all"] is None:
+        merged["catch_all_at"] = None
+    elif not merged["catch_all_at"]:  # pre-migration rows: date the answer from the last check, not from now on
+        merged["catch_all_at"] = current.get("checked_at") or utcnow()
     conn.execute(
-        """INSERT INTO company_domains (name_norm, domain, pattern, catch_all, mx_host, checked_at)
-           VALUES (?,?,?,?,?,?)
+        """INSERT INTO company_domains (name_norm, domain, pattern, catch_all, mx_host, checked_at, catch_all_at)
+           VALUES (?,?,?,?,?,?,?)
            ON CONFLICT (name_norm) DO UPDATE SET domain = excluded.domain, pattern = excluded.pattern,
-             catch_all = excluded.catch_all, mx_host = excluded.mx_host, checked_at = excluded.checked_at""",
+             catch_all = excluded.catch_all, mx_host = excluded.mx_host, checked_at = excluded.checked_at,
+             catch_all_at = excluded.catch_all_at""",
         (name_norm, merged["domain"], merged["pattern"],
-         None if merged["catch_all"] is None else int(merged["catch_all"]), merged["mx_host"], utcnow()))
+         None if merged["catch_all"] is None else int(merged["catch_all"]), merged["mx_host"], utcnow(),
+         merged["catch_all_at"]))
     conn.commit()
+
+
+def known_catch_all(dom: dict, now: datetime) -> int | None:
+    """The remembered catch-all/refusal answer, or None once it is a month old (servers and our IP change)."""
+    if dom.get("catch_all") is None:
+        return None
+    at = dom.get("catch_all_at") or dom.get("checked_at")
+    return dom["catch_all"] if at and at >= iso(now - CATCH_ALL_TTL) else None
 
 
 def emailed_count(conn: sqlite3.Connection, app_id: int) -> int:

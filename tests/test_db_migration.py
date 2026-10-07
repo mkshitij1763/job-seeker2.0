@@ -47,3 +47,13 @@ def test_migration_adds_jd_attempts(tmp_path):
     conn.close()
     conn = connect(path)
     assert "jd_attempts" in _columns(conn, "jobs")
+
+
+def test_migration_adds_catch_all_at(tmp_path):
+    path = tmp_path / "db.sqlite"
+    conn = connect(path)
+    conn.execute("ALTER TABLE company_domains DROP COLUMN catch_all_at") if "catch_all_at" in _columns(
+        conn, "company_domains") else None
+    conn.commit()
+    conn.close()
+    assert "catch_all_at" in _columns(connect(path), "company_domains")

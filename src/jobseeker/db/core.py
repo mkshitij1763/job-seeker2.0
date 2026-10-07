@@ -12,6 +12,7 @@ NEW_COLUMNS = {
     "jobs": {"prescore": "INTEGER", "jd_attempts": "INTEGER NOT NULL DEFAULT 0"},
     "applications": {"find_status": "TEXT NOT NULL DEFAULT 'idle'", "find_error": "TEXT NOT NULL DEFAULT ''",
                      "find_started_at": "TEXT"},
+    "company_domains": {"catch_all_at": "TEXT"},
 }
 
 

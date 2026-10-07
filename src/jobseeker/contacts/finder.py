@@ -14,10 +14,10 @@ from jobseeker.contacts.domains import FREE_MAIL, domain_from_text, mx_host, pic
 from jobseeker.contacts.people import from_results, rank, role_words, search_queries
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
-    blocked_names, blocked_profile_urls, bounced_emails, emailed_count, get_domain, link_contact, save_candidates,
-    save_domain, set_find_status, upsert_contact,
+    blocked_names, blocked_profile_urls, bounced_emails, emailed_count, get_domain, known_catch_all, link_contact,
+    save_candidates, save_domain, set_find_status, upsert_contact,
 )
-from jobseeker.db.core import connect
+from jobseeker.db.core import connect, iso
 from jobseeker.db.jobs import get_job
 from jobseeker.db.applications import get_application
 from jobseeker.db.usage import Budget
@@ -117,7 +117,8 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     # 3. SMTP verification
     results: dict[int, tuple[str, str, str]] = {}
     taken = set(bounced_emails(conn, company))  # one address per person, never a bounced one
-    catch_all = dom.get("catch_all")
+    catch_all = known_catch_all(dom, deps.now())
+    learned_at = None  # set when this run asked the mail server
     if domain and mx:
         sender = prefs.contacts.sender_email or prefs.email
         try:
@@ -126,6 +127,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                               spend=lambda: budget.spend("smtp")) as v:
                 if catch_all is None:
                     catch_all = v.is_catch_all(domain)
+                    learned_at = iso(deps.now())
                 if not catch_all:
                     for i, nm in enumerate(person_names):
                         if not nm:
@@ -145,8 +147,9 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             notes.append(f"{domain}'s mail server refused verification; emails left as likely ({e})")
             if "refused" in str(e):
                 catch_all = 2  # remembered: skip checks for this domain next time
+                learned_at = iso(deps.now())
         save_domain(conn, norm, domain=domain, mx_host=mx, catch_all=catch_all,
-                    pattern=hints[0] if hints else None)
+                    pattern=hints[0] if hints else None, **({"catch_all_at": learned_at} if learned_at else {}))
 
     # 4. fallbacks
     for i, (c, _, _) in enumerate(top):

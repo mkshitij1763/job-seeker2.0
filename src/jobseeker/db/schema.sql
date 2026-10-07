@@ -154,7 +154,8 @@ CREATE TABLE IF NOT EXISTS company_domains (
   pattern TEXT,
   catch_all INTEGER,
   mx_host TEXT,
-  checked_at TEXT NOT NULL
+  checked_at TEXT NOT NULL,
+  catch_all_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS usage (
