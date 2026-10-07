@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     jobseeker_home: Path = Path(".")
     groq_api_key: str = ""
+    tavily_api_key: str = ""
+    apify_api_token: str = ""
+    hunter_api_key: str = ""
 
     @property
     def data_dir(self) -> Path:
@@ -82,6 +85,15 @@ class SearchConfig(BaseModel):
     linkedin_descriptions_per_run: int = 15
 
 
+class ContactsConfig(BaseModel):
+    tavily_monthly_limit: int = 950
+    apify_monthly_usd_limit: float = 4.5
+    hunter_monthly_limit: int = 45
+    smtp_daily_limit: int = 60
+    smtp_pause_seconds: float = 2.0
+    sender_email: str = ""  # SMTP MAIL FROM only (nothing is sent); defaults to Preferences.email
+
+
 class Preferences(BaseModel):
     name: str
     email: str
@@ -104,6 +116,7 @@ class Preferences(BaseModel):
     models: Models = Models()
     search: SearchConfig = SearchConfig()
     min_prescore: int = 30
+    contacts: ContactsConfig = ContactsConfig()
 
 
 class Company(BaseModel):

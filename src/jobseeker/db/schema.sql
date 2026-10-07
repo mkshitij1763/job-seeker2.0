@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS applications (
   suggested_contact_reason TEXT NOT NULL DEFAULT '',
   linkedin_search_url TEXT NOT NULL DEFAULT '',
   draft_warnings TEXT NOT NULL DEFAULT '[]',
+  find_status TEXT NOT NULL DEFAULT 'idle',
+  find_error TEXT NOT NULL DEFAULT '',
+  find_started_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -115,4 +118,48 @@ CREATE TABLE IF NOT EXISTS discovered_companies (
   status TEXT NOT NULL CHECK (status IN ('active', 'none', 'inactive')),
   checked_at TEXT NOT NULL,
   jobs_seen INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS application_contacts (
+  id INTEGER PRIMARY KEY,
+  application_id INTEGER NOT NULL REFERENCES applications (id),
+  contact_id INTEGER NOT NULL REFERENCES contacts (id),
+  rank INTEGER NOT NULL CHECK (rank BETWEEN 1 AND 3),
+  label TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  wave INTEGER NOT NULL DEFAULT 1,
+  email_source TEXT NOT NULL DEFAULT '',
+  gmail_draft_id TEXT,
+  emailed_at TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE (application_id, rank)
+);
+
+CREATE TABLE IF NOT EXISTS contact_candidates (
+  id INTEGER PRIMARY KEY,
+  application_id INTEGER NOT NULL REFERENCES applications (id),
+  position INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  headline TEXT NOT NULL DEFAULT '',
+  linkedin_url TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  used INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (application_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS company_domains (
+  name_norm TEXT PRIMARY KEY,
+  domain TEXT,
+  pattern TEXT,
+  catch_all INTEGER,
+  mx_host TEXT,
+  checked_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS usage (
+  period TEXT NOT NULL,
+  service TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (period, service)
 );

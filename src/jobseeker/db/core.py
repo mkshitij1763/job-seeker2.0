@@ -5,8 +5,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 SCHEMA = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
-# Columns added after the MVP; connect() adds them to older databases.
-NEW_JOB_COLUMNS = {"prescore": "INTEGER", "jd_attempts": "INTEGER NOT NULL DEFAULT 0"}
+# Tables/columns added after the MVP; connect() adds them to older databases.
+REQUIRED_TABLES = {"runs", "discovered_companies", "application_contacts", "contact_candidates",
+                   "company_domains", "usage"}
+NEW_COLUMNS = {
+    "jobs": {"prescore": "INTEGER", "jd_attempts": "INTEGER NOT NULL DEFAULT 0"},
+    "applications": {"find_status": "TEXT NOT NULL DEFAULT 'idle'", "find_error": "TEXT NOT NULL DEFAULT ''",
+                     "find_started_at": "TEXT"},
+}
 
 
 def connect(path: Path | str) -> sqlite3.Connection:
@@ -18,15 +24,17 @@ def connect(path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     # Only touch the schema when something is missing, so a reader never needs a write lock while the daily run writes.
-    if conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'discovered_companies'"
-    ).fetchone() is None:
-        conn.executescript(SCHEMA)  # every statement is IF NOT EXISTS: creates a fresh DB or adds new tables
-    columns = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
-    missing = [(name, ddl) for name, ddl in NEW_JOB_COLUMNS.items() if name not in columns]
-    for name, ddl in missing:
-        conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
-    if missing:
+    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if not REQUIRED_TABLES <= tables:
+        conn.executescript(SCHEMA)  # every statement is IF NOT EXISTS
+    changed = False
+    for table, columns in NEW_COLUMNS.items():
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, ddl in columns.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                changed = True
+    if changed:
         conn.commit()
     return conn
 
