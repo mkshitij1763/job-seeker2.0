@@ -69,3 +69,40 @@ def test_keys_js_folds_for_phone_and_copies_without_opening():
     assert "details[data-phone-closed]" in js and 'details.col[data-count="0"]' in js
     assert "dataset.open" not in js and "Copied ✓" in js
     assert 'classList.add("typing")' in js
+
+
+def test_job_page_blocks_and_more_menu(settings, seeded):
+    a = seeded[0]
+    html = client(settings).get(f"/applications/{a}").text
+    for hook in ['class="block head"', 'class="card block drafts"', 'class="card block contact"',
+                 '<details class="block jd-box" open data-phone-closed>', 'class="card block history"',
+                 'class="card block actions"']:
+        assert hook in html, hook
+    actions = html.split('class="card block actions"', 1)[1]
+    assert actions.index("Approve → Gmail draft") < actions.index('<details class="more" open>')
+    more = actions.split('<details class="more" open>', 1)[1].split("</details>", 1)[0]
+    assert 'aria-label="More actions"' in more
+    for label in ("Mark sent", "Applied via portal", "Skip", "Snooze 3d", "Not interested", "Regenerate all",
+                  "Undo last change"):
+        assert label in more, label
+
+
+def test_copy_note_and_open_linkedin_are_separate(settings, seeded):
+    html = client(settings).get(f"/applications/{seeded[0]}").text
+    assert "data-open=" not in html
+    assert '<button type="button" data-copy="#li_note">Copy note</button>' in html
+    assert '<a class="btn" href="https://www.linkedin.com/search/x" target="_blank" rel="noopener">Open LinkedIn ↗</a>' in html
+
+
+def test_contact_inputs_are_phone_friendly(settings, seeded):
+    html = client(settings).get(f"/applications/{seeded[0]}").text
+    assert '<input name="linkedin_url" type="url" inputmode="url" autocapitalize="off" autocorrect="off"' in html
+    assert '<input name="email" type="email" inputmode="email" autocapitalize="off" autocorrect="off"' in html
+
+
+def test_jd_summary_counts_matched_skills(settings, seeded, facts):
+    import json as _json
+    settings.facts_path.write_text(_json.dumps({"resume_sha256": "x", "facts": facts.model_dump()}))
+    html = client(settings).get(f"/applications/{seeded[0]}").text
+    # seeded JD: "We want SQL and A/B Testing skills." -> SQL and A/B Testing are among the facts' skills
+    assert "Job description · 2 skills matched" in html

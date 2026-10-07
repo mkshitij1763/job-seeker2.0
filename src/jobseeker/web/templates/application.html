@@ -2,40 +2,45 @@
 {% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
 {% block content %}
 <div class="detail">
-  <section>
-    <h1>{{ job.title }}</h1>
-    <p class="meta">{{ job.company }} · {{ job.location or "location not stated" }}{% if job.remote %} · remote{% endif %} · {{ job.source }} · posted {{ (job.posted_at or job.first_seen_at)|age }}{% if job.salary_text %} · {{ job.salary_text }}{% endif %}</p>
-    <p><a href="{{ job.apply_url }}" target="_blank" rel="noopener">Open posting ↗</a> · status <span class="tag">{{ app.status|replace("_", " ") }}</span></p>
-    {% if score %}
-    <div class="scorebox">
-      <span class="big">{{ score.score }}</span>
-      <div>
-        <ul>{% for k, v in (score.breakdown|fromjson).items() %}<li>{{ k|replace("_", " ") }}: {{ v }}</li>{% endfor %}</ul>
-        <p>{% for m in score.matches|fromjson %}<span class="m">✓ {{ m }}</span> {% endfor %}{% for g in score.gaps|fromjson %}<span class="g">✗ {{ g }}</span> {% endfor %}</p>
+  <section class="col-main">
+    <div class="block head">
+      <h1>{{ job.title }}</h1>
+      <p class="meta">{{ job.company }} · {{ job.location or "location not stated" }}{% if job.remote %} · remote{% endif %} · {{ job.source }} · posted {{ (job.posted_at or job.first_seen_at)|age }}{% if job.salary_text %} · {{ job.salary_text }}{% endif %}</p>
+      <p><a href="{{ job.apply_url }}" target="_blank" rel="noopener">Open posting ↗</a> · status <span class="tag">{{ app.status|replace("_", " ") }}</span></p>
+      {% if score %}
+      <div class="scorebox">
+        <span class="big">{{ score.score }}</span>
+        <div>
+          <ul>{% for k, v in (score.breakdown|fromjson).items() %}<li>{{ k|replace("_", " ") }}: {{ v }}</li>{% endfor %}</ul>
+          <p>{% for m in score.matches|fromjson %}<span class="m">✓ {{ m }}</span> {% endfor %}{% for g in score.gaps|fromjson %}<span class="g">✗ {{ g }}</span> {% endfor %}</p>
+        </div>
       </div>
+      {% endif %}
     </div>
-    {% endif %}
-    <article class="jd">{{ job.jd_text|highlight(terms) }}</article>
+    <details class="block jd-box" open data-phone-closed>
+      <summary class="phone-only-summary">Job description · {{ matched_skills }} skills matched</summary>
+      <article class="jd">{{ job.jd_text|highlight(terms) }}</article>
+    </details>
   </section>
 
-  <section>
-    <div class="card">
+  <section class="col-side">
+    <div class="card block contact">
       <h2>Contact</h2>
       {% if app.suggested_contact_role %}
       <p>Suggested: <strong>{{ app.suggested_contact_role }}</strong>. {{ app.suggested_contact_reason }}
         <a href="{{ app.linkedin_search_url }}" target="_blank" rel="noopener">Search LinkedIn ↗</a></p>
       {% endif %}
       <form method="post" action="/applications/{{ app.id }}/contact" class="grid">
-        <input name="name" placeholder="Name" value="{{ contact.name if contact else '' }}">
+        <input name="name" placeholder="Name" autocomplete="off" value="{{ contact.name if contact else '' }}">
         <input name="role" placeholder="Role" value="{{ contact.role if contact else app.suggested_contact_role }}">
-        <input name="linkedin_url" placeholder="LinkedIn URL" value="{{ contact.linkedin_url if contact else '' }}">
-        <input name="email" type="email" placeholder="Email" value="{{ contact.email if contact else '' }}">
+        <input name="linkedin_url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="LinkedIn URL" value="{{ contact.linkedin_url if contact else '' }}">
+        <input name="email" type="email" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="Email" value="{{ contact.email if contact else '' }}">
         <select name="email_status">{% for s in ["unverified", "verified", "bounced"] %}<option {% if contact and contact.email_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
         <button>Save contact</button>
       </form>
     </div>
 
-    <div class="card">
+    <div class="card block drafts">
       <h2>Drafts</h2>
       {% if warnings %}<p class="warn">Check before sending: {{ warnings|join("; ") }}</p>{% endif %}
       {% if not drafts %}
@@ -53,7 +58,8 @@
           <form method="post" action="/applications/{{ app.id }}/drafts/li_note">
             <textarea id="li_note" name="body" rows="4" data-limit="300" data-unit="chars" data-counter="#c_note">{{ drafts.li_note.body }}</textarea>
             <small id="c_note"></small> <button>Save</button>
-            <button type="button" data-copy="#li_note" data-open="{{ contact.linkedin_url if contact and contact.linkedin_url else app.linkedin_search_url }}">Copy &amp; open LinkedIn</button>
+            <button type="button" data-copy="#li_note">Copy note</button>
+            <a class="btn" href="{{ contact.linkedin_url if contact and contact.linkedin_url else app.linkedin_search_url }}" target="_blank" rel="noopener">Open LinkedIn ↗</a>
           </form>
         </details>
         <details><summary>LinkedIn DM</summary>
@@ -63,32 +69,35 @@
             <button type="button" data-copy="#li_dm">Copy</button>
           </form>
         </details>
-        {% if app.status in ["new", "shortlisted", "drafted", "approved"] %}<form method="post" action="/applications/{{ app.id }}/draft"><button>Regenerate all</button></form>{% endif %}
       {% endif %}
     </div>
 
-    <div class="card actions">
-      <form method="post" action="/applications/{{ app.id }}/approve">
+    <div class="card block actions">
+      <form method="post" action="/applications/{{ app.id }}/approve" class="approve">
         {% if contact and contact.email and contact.email_status != "verified" %}
-        <label><input type="checkbox" name="confirm_unverified" value="true"> Email is unverified, draft anyway</label><br>
+        <label><input type="checkbox" name="confirm_unverified" value="true"> Email is unverified, draft anyway</label>
         {% endif %}
         {% if drafts.email and drafts.email.gmail_draft_id %}<p class="warn">A Gmail draft already exists (id {{ drafts.email.gmail_draft_id }}). Approving again creates a new one; delete the old one in Gmail.</p>{% endif %}
         <button class="primary">Approve → Gmail draft</button>
       </form>
-      {% if drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
-      {% for s, label in [("sent", "Mark sent"), ("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
-      <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button>{{ label }}</button></form>
-      {% endfor %}
-      <form method="post" action="/applications/{{ app.id }}/snooze"><button>Snooze 3d</button></form>
-      {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button>Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
-      {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button>Undo last change</button></form>{% endif %}
-      <form method="post" action="/applications/{{ app.id }}/not-interested">
-        <label><input type="checkbox" name="block_company" value="true"> also block company</label>
-        <button>Not interested</button>
-      </form>
+      <details class="more" open>
+        <summary class="phone-only-summary" aria-label="More actions">More</summary>
+        {% if drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
+        {% for s, label in [("sent", "Mark sent"), ("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
+        <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button>{{ label }}</button></form>
+        {% endfor %}
+        <form method="post" action="/applications/{{ app.id }}/snooze"><button>Snooze 3d</button></form>
+        {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button>Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
+        {% if drafts and app.status in ["new", "shortlisted", "drafted", "approved"] %}<form method="post" action="/applications/{{ app.id }}/draft"><button>Regenerate all</button></form>{% endif %}
+        {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button>Undo last change</button></form>{% endif %}
+        <form method="post" action="/applications/{{ app.id }}/not-interested">
+          <label><input type="checkbox" name="block_company" value="true"> also block company</label>
+          <button>Not interested</button>
+        </form>
+      </details>
     </div>
 
-    <div class="card">
+    <div class="card block notes">
       <h2>Notes</h2>
       <form method="post" action="/applications/{{ app.id }}/notes">
         <textarea name="notes" rows="4" placeholder="Referral source, call notes…">{{ app.notes }}</textarea>
@@ -96,10 +105,10 @@
       </form>
     </div>
 
-    <div class="card">
-      <h2>History</h2>
+    <details class="card block history" open data-phone-closed>
+      <summary><h2>History</h2></summary>
       <ul class="events">{% for e in events %}<li>{{ e.at[:16]|replace("T", " ") }} · {{ e.type }} {{ e.payload }}</li>{% endfor %}</ul>
-    </div>
+    </details>
   </section>
 </div>
 {% endblock %}

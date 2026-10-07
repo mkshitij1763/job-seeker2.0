@@ -40,7 +40,10 @@ def detail(request: Request, app_id: int, conn=Depends(get_conn)):
         raise HTTPException(404)
     settings = request.app.state.settings
     terms = load_facts(settings.facts_path).skills if settings.facts_path.exists() else []
-    return render(request, conn, "application.html", terms=terms, can_undo=can_undo(conn, app_id), **d)
+    jd = (d["job"]["jd_text"] or "").lower()
+    matched = sum(1 for t in terms if t and t.lower() in jd)
+    return render(request, conn, "application.html", terms=terms, matched_skills=matched,
+                  can_undo=can_undo(conn, app_id), **d)
 
 
 @router.post("/{app_id}/status")
