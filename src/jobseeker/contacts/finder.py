@@ -89,7 +89,8 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
         query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
         domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
-                             job["jd_text"], _search(deps, budget, notes, query, max_results=8))
+                             job["jd_text"], _search(deps, budget, notes, query, max_results=8),
+                             has_mail=lambda d: deps.resolver(d) is not None)
         if not domain:
             notes.append(f"Couldn't tell which website is {company}'s; set the email domain on the card")
     mx = deps.resolver(domain) if domain else None
@@ -143,10 +144,10 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             break
         budget.spend("apify", deps.apify.PROFILE_EMAIL_USD)
         email = deps.apify.profile_email(c.linkedin_url)
-        if email and (not domain or email.lower().endswith("@" + domain)):
+        if email and (not domain or not mx or email.lower().endswith("@" + domain)):
             results[i] = (email.lower(), "verified", "apify")
     missing = [i for i in range(len(top)) if i not in results]
-    if domain and missing and deps.hunter is not None and not hints:
+    if domain and mx and missing and deps.hunter is not None and not hints:
         if budget.can("hunter"):
             budget.spend("hunter")
             found = deps.hunter.domain_search(domain)
@@ -165,7 +166,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     verified = 0
     for i, (c, label, reason) in enumerate(top):
         email, status, source = results.get(i, ("", "not_found", ""))
-        if status == "not_found" and domain and person_names[i]:
+        if status == "not_found" and domain and mx and person_names[i]:
             guesses = names.candidates(person_names[i], domain, hints)
             if guesses:
                 email, status, source = guesses[0], "likely", "pattern"

@@ -44,3 +44,15 @@ def test_pick_domain_uses_llm_index_or_none():
     assert pick_domain(*args, results) is None
     assert llm.calls[0]["schema"] is DomainPick and "untrusted" in llm.calls[0]["system"].lower()
     assert pick_domain(FakeLLM([]), "m", "x", "t", None, "", []) is None
+
+
+def test_pick_domain_only_offers_domains_that_receive_mail():
+    from jobseeker.contacts.domains import pick_domain
+    from tests.fakes import FakeLLM
+
+    results = [{"url": "https://slice.careers", "title": "slice careers", "content": ""},
+               {"url": "https://www.sliceit.com", "title": "slice", "content": "fintech"}]
+    llm = FakeLLM([{"index": 0}])
+    picked = pick_domain(llm, "m", "slice", "PA", "bengaluru", "", results,
+                         has_mail=lambda d: d == "sliceit.com")
+    assert picked == "sliceit.com" and "slice.careers" not in llm.calls[0]["prompt"]

@@ -218,3 +218,19 @@ def test_website_search_uses_city_and_india(prefs):
     d, _ = deps(tavily=tavily)
     find_contacts(conn, app, prefs, d)
     assert '"Zepto" bengaluru India official website' in tavily.queries
+
+
+def test_domain_without_mail_server_builds_no_emails(prefs):
+    conn, app = setup_app()
+
+    class Hunter:
+        calls = 0
+
+        def domain_search(self, domain):
+            Hunter.calls += 1
+            return {"pattern": "first", "emails": []}
+    d, _ = deps(hunter=Hunter())
+    d.resolver = lambda domain: None  # nothing receives mail
+    summary = find_contacts(conn, app, prefs, d)
+    assert {p["email"] for p in people(conn, app)} == {""} and Hunter.calls == 0
+    assert summary["people"] == 3

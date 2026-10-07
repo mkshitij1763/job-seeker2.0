@@ -69,8 +69,8 @@ def domain_candidates(results: list[dict]) -> list[tuple[str, str]]:
 
 
 def pick_domain(llm, model: str, company: str, title: str, city: str | None, jd: str,
-                results: list[dict]) -> str | None:
-    cands = domain_candidates(results)
+                results: list[dict], has_mail=lambda d: True) -> str | None:
+    cands = [(d, desc) for d, desc in domain_candidates(results) if has_mail(d)]  # careers sites often have no MX
     if not cands:
         return None
     listing = "\n".join(f"{i}. {d} — {desc}" for i, (d, desc) in enumerate(cands))
