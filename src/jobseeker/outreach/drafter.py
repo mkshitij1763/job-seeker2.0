@@ -11,7 +11,6 @@ from jobseeker.llm import LLM, fence
 from jobseeker.models import Job
 from jobseeker.outreach.guards import EMAIL_MAX_WORDS, LI_DM_MAX_CHARS, LI_NOTE_MAX_CHARS, check_bundle
 from jobseeker.profile.facts import Facts
-from jobseeker.scoring.scorer import MAX_JD_CHARS
 
 
 class DraftBundle(BaseModel):
@@ -38,6 +37,7 @@ def signature(prefs: Preferences) -> str:
     return f"\n\n{prefs.name}\n{prefs.linkedin}"
 
 
+MAX_JD_CHARS = 8000  # drafting is capped at 10 a run, so it keeps the full posting
 _GREETED = re.compile(r"\s*(hi|hello|hey|dear)\b", re.I)
 
 

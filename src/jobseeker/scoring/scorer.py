@@ -9,7 +9,7 @@ from jobseeker.llm import LLM, fence
 from jobseeker.models import Job, ScoreResult
 from jobseeker.profile.facts import Facts
 
-MAX_JD_CHARS = 8000  # keeps one scoring call well under Groq's 8K tokens/min
+MAX_JD_CHARS = 5000  # the role's substance is near the top; fewer tokens = more jobs scored per daily quota
 
 
 class LLMScore(BaseModel):

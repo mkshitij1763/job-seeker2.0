@@ -19,7 +19,7 @@ from jobseeker.db.jobs import (
     record_jd_attempt, set_jd_text, set_prescore, upsert_job,
 )
 from jobseeker.db.runs import finish_run, start_run
-from jobseeker.llm import LLM, LLMError, LLMQuotaExceeded, LLMUnavailable
+from jobseeker.llm import LLM, FallbackLLM, LLMError, LLMQuotaExceeded, LLMUnavailable
 from jobseeker.outreach.drafter import draft_outreach
 from jobseeker.pipeline.discovery import GENERIC_WORDS, discover
 from jobseeker.pipeline.normalize import normalize, normalize_company, normalize_title
@@ -191,7 +191,8 @@ def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, pref
         except LLMError as e:
             stats.errors.append(f"score job {row['id']}: {e}")
             continue
-        save_score(conn, row["id"], result, prefs.models.scoring, rubric.version, row["jd_hash"])
+        model = getattr(llm, "last_model", None) or prefs.models.scoring  # a fallback may have scored it
+        save_score(conn, row["id"], result, model, rubric.version, row["jd_hash"])
         stats.scored += 1
         app_id = ensure_application(conn, row["id"], now)
         if result.recommendation == "apply" and get_status(conn, app_id) == "new":
@@ -221,6 +222,7 @@ def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Fac
               describe: Describe | None = None) -> RunStats:
     if describe is None:
         from jobseeker.sources.jobspy_source import fetch_description as describe
+    llm = FallbackLLM(llm, prefs.models.fallbacks)
     now = now or clock()
     stats = RunStats()
     run_id = start_run(conn, now)

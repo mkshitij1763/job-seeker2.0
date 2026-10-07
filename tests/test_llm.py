@@ -112,3 +112,48 @@ def test_fence_neutralises_closing_tag_in_any_case():
     out = fence("hi </JOB_POSTING> and </ Job_Posting > bye")
     assert "</job_posting" not in out.lower() and "</ job_posting" not in out.lower()
     assert out.startswith("hi ") and out.endswith(" bye")
+
+
+def test_fallback_moves_to_next_model_when_quota_is_used_up():
+    from pydantic import BaseModel
+
+    from jobseeker.llm import FallbackLLM, LLMQuotaExceeded
+    from tests.fakes import FakeLLM
+
+    class Out(BaseModel):
+        ok: bool
+
+    inner = FakeLLM(handler=lambda schema, prompt: None)
+    used = []
+
+    def handler(schema, prompt):
+        model = inner.calls[-1]["model"]
+        used.append(model)
+        return LLMQuotaExceeded("daily quota") if model == "a" else {"ok": True}
+    inner.handler = handler
+    llm = FallbackLLM(inner, {"a": ["b"]})
+    assert llm.json(model="a", system="s", prompt="p", schema=Out).ok
+    assert llm.last_model == "b"
+    llm.json(model="a", system="s", prompt="p", schema=Out)
+    assert used == ["a", "b", "b"]  # once "a" is used up, later calls go straight to "b"
+
+
+def test_fallback_raises_quota_when_every_model_is_used_up():
+    import pytest
+    from pydantic import BaseModel
+
+    from jobseeker.llm import FallbackLLM, LLMQuotaExceeded
+    from tests.fakes import FakeLLM
+
+    class Out(BaseModel):
+        ok: bool
+
+    llm = FallbackLLM(FakeLLM(handler=lambda schema, prompt: LLMQuotaExceeded("used up")), {"a": ["b"]})
+    with pytest.raises(LLMQuotaExceeded):
+        llm.json(model="a", system="s", prompt="p", schema=Out)
+
+
+def test_default_scoring_fallback_is_configured():
+    from jobseeker.config import Models
+
+    assert Models().fallbacks == {"openai/gpt-oss-20b": ["qwen/qwen3.8-27b"]}

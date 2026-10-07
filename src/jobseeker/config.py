@@ -72,6 +72,8 @@ class Models(BaseModel):
     scoring: str = "openai/gpt-oss-20b"
     drafting: str = "openai/gpt-oss-120b"
     facts: str = "openai/gpt-oss-120b"
+    # Used in order once a model's free daily quota is gone (Groq quotas are per model).
+    fallbacks: dict[str, list[str]] = {"openai/gpt-oss-20b": ["qwen/qwen3.8-27b"]}
 
 
 class SearchConfig(BaseModel):

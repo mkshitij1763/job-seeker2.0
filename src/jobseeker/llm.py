@@ -113,3 +113,29 @@ class GroqLLM:
             return schema.model_validate_json(text)
         except ValidationError as e:
             raise LLMError(f"invalid structured output: {e}") from e
+
+
+class FallbackLLM:
+    """Groq's free daily quota is per model: when one is used up, carry on with the next model in its chain.
+    A used-up model is skipped for the rest of this object's life (one run, one web request)."""
+
+    def __init__(self, llm: LLM, fallbacks: dict[str, list[str]]):
+        self._llm, self._fallbacks = llm, fallbacks
+        self._used_up: set[str] = set()
+        self.last_model: str | None = None
+
+    def json(self, *, model: str, system: str, prompt: str, schema: type[T],
+             effort: str = "low", max_tokens: int = 8000) -> T:
+        chain = [m for m in [model, *self._fallbacks.get(model, [])] if m not in self._used_up]
+        error: LLMQuotaExceeded | None = None
+        for m in chain:
+            try:
+                out = self._llm.json(model=m, system=system, prompt=prompt, schema=schema, effort=effort,
+                                     max_tokens=max_tokens)
+            except LLMQuotaExceeded as e:
+                self._used_up.add(m)
+                error = e
+                continue
+            self.last_model = m
+            return out
+        raise error or LLMQuotaExceeded(f"daily quota used up for {model} and its fallbacks")

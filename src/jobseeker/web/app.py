@@ -29,7 +29,7 @@ def asset(name: str) -> str:
 
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
-    from jobseeker.llm import GroqLLM
+    from jobseeker.llm import FallbackLLM, GroqLLM
     from jobseeker.web import application, contacts, inbox, pipeline
 
     app = FastAPI(title="Job Seeker", docs_url=None, redoc_url=None)
@@ -40,7 +40,8 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.state.settings = settings
     app.state.prefs = load_preferences(settings.preferences_path)
     app.state.templates = templates
-    app.state.llm_factory = llm_factory or (lambda: GroqLLM(settings.groq_api_key))
+    app.state.llm_factory = llm_factory or (
+        lambda: FallbackLLM(GroqLLM(settings.groq_api_key), app.state.prefs.models.fallbacks))
     app.state.gmail_factory = gmail_factory or (lambda: load_service(settings.secrets_dir / "token.json"))
     app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory))
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")

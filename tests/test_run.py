@@ -89,8 +89,20 @@ def test_quota_exhausted_stops_llm_work(prefs, rubric, facts):
     llm = FakeLLM(handler=lambda schema, prompt: LLMQuotaExceeded("daily quota used up"))
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
     stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
-    assert len(llm.calls) == 1 and stats.scored == 0 and stats.new == 3
+    assert len(llm.calls) == 2 and stats.scored == 0 and stats.new == 3  # the scoring model, then its fallback
     assert any("quota" in e for e in stats.errors)
+
+
+def test_scoring_continues_on_fallback_model_and_records_it(prefs, rubric, facts):
+    conn = connect(":memory:")
+    llm = FakeLLM(handler=lambda schema, prompt: (LLMQuotaExceeded("used up")
+                                                  if llm.calls[-1]["model"] == prefs.models.scoring
+                                                  else handler(schema, prompt)))
+    jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(2)]
+    stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
+    fallback = prefs.models.fallbacks[prefs.models.scoring][0]
+    assert stats.scored == 2
+    assert {r[0] for r in conn.execute("SELECT model FROM scores")} == {fallback}
 
 
 def test_budget_limits_scoring(prefs, rubric, facts):
