@@ -131,9 +131,17 @@ async def approve(request: Request, app_id: int, conn=Depends(get_conn)):
         return _back(app_id, err="No email draft yet")
     if get_status(conn, app_id) != "drafted":
         return _back(app_id, err=f"Can't approve from status '{get_status(conn, app_id)}'")
-    linked = [p for p in people(conn, app_id) if p["wave"] == 1]
-    if not linked:
+    everyone = people(conn, app_id)
+    if not everyone:
         return _approve_single(state, conn, app_id, d, email, bool(form.get("confirm_unverified")))
+    linked = [p for p in everyone if p["wave"] == 1]
+    manual = d["contact"]  # "Add someone myself" while people are linked: emailed now too, as rank 0
+    if manual and manual["id"] not in {p["contact_id"] for p in everyone}:
+        linked.append({"rank": 0, "name": manual["name"] or manual["email"], "email": manual["email"],
+                       "email_status": manual["email_status"], "contact_id": manual["id"]})
+    if not linked:
+        return _back(app_id, err="No one to email now: #1 and #2 were removed. Add someone yourself or run "
+                                 "Find contacts again")
     targets, skipped = [], []
     for p in linked:
         if not p["email"] or p["email_status"] == "bounced":
@@ -144,21 +152,21 @@ async def approve(request: Request, app_id: int, conn=Depends(get_conn)):
             targets.append(p)
     if not targets:
         return _back(app_id, err="No usable email for #1 or #2. Edit the people or add an email first")
-    created, failure = [], None
+    created, failure, first_draft_id = [], None, None
     for p in targets:
         try:
             draft_id = create_draft(state.gmail_factory(), _raw_for(state, p["email"], p["name"], email))
         except GmailUnavailable as e:
             failure = e
             break
-        conn.execute("""UPDATE application_contacts SET gmail_draft_id = ?, emailed_at = ?
-                        WHERE application_id = ? AND rank = ?""", (draft_id, utcnow(), app_id, p["rank"]))
+        if p["rank"]:
+            conn.execute("""UPDATE application_contacts SET gmail_draft_id = ?, emailed_at = ?
+                            WHERE application_id = ? AND rank = ?""", (draft_id, utcnow(), app_id, p["rank"]))
         conn.commit()
         created.append(p["name"])
+        first_draft_id = first_draft_id or draft_id
     if created:
-        set_gmail_draft_id(conn, app_id, draft_id if not failure else conn.execute(
-            "SELECT gmail_draft_id FROM application_contacts WHERE application_id = ? AND rank = ?",
-            (app_id, targets[0]["rank"])).fetchone()["gmail_draft_id"])
+        set_gmail_draft_id(conn, app_id, first_draft_id)
         transition(conn, app_id, "approved", {"drafts_for": created})
     parts = [f"Gmail drafts created for {', '.join(created)}"] if created else []
     if skipped:

@@ -141,3 +141,37 @@ def test_not_interested_blocks_all_linked_people(settings, seeded):
     conn = link_three(settings, a)
     mark_not_interested(conn, a, block_company=False)
     assert len(blocked_profile_urls(conn, "CRED")) == 3
+
+
+def test_removing_top_two_does_not_draft_removed_person(settings, seeded):
+    a = seeded[0]
+    link_three(settings, a)
+    gmail = FakeGmail()
+    c = client(settings, gmail)
+    c.post(f"/applications/{a}/contacts/1/remove")
+    c.post(f"/applications/{a}/contacts/2/remove")
+    r = c.post(f"/applications/{a}/approve")
+    assert "err=" in r.headers["location"] and gmail.raws == []
+
+
+def test_manual_contact_is_included_when_people_exist(settings, seeded):
+    a = seeded[0]
+    link_three(settings, a)
+    gmail = FakeGmail()
+    c = client(settings, gmail)
+    c.post(f"/applications/{a}/contact", data={"name": "Meera Iyer", "role": "Founder", "linkedin_url": "",
+                                                "email": "meera@cred.club", "email_status": "verified"})
+    c.post(f"/applications/{a}/approve")
+    assert sorted(to_and_body(raw)[0] for raw in gmail.raws) == ["asha@cred.club", "meera@cred.club", "vikram@cred.club"]
+
+
+def test_third_button_waits_five_days(settings, seeded):
+    a = seeded[0]
+    conn = link_three(settings, a)
+    gmail = FakeGmail()
+    c = client(settings, gmail)
+    c.post(f"/applications/{a}/approve")
+    transition(conn, a, "sent")
+    assert "Draft email to #3" not in c.get(f"/applications/{a}").text
+    r = c.post(f"/applications/{a}/contacts/3/email")
+    assert "err=" in r.headers["location"] and len(gmail.raws) == 2

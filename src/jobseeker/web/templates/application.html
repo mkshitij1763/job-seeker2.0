@@ -76,6 +76,10 @@
     <div class="card block actions">
       <form method="post" action="/applications/{{ app.id }}/approve" class="approve">
         {% set wave1 = people|selectattr("wave", "equalto", 1)|list %}
+        {% set linked_ids = people|map(attribute="contact_id")|list %}
+        {% if people and contact and contact.id not in linked_ids and contact.email and contact.email_status == "unverified" %}
+        <label><input type="checkbox" name="confirm_0" value="true"> {{ contact.name or contact.email }}'s email is unverified, draft anyway</label>
+        {% endif %}
         {% if wave1 %}
           {% for p in wave1 if p.email and p.email_status == "unverified" %}
           <label><input type="checkbox" name="confirm_{{ p.rank }}" value="true"> {{ p.name }}'s email is unverified, draft anyway</label>

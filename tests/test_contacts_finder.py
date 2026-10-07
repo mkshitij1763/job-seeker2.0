@@ -274,3 +274,91 @@ def test_guesses_follow_pattern_of_verified_addresses(prefs):
     assert ps["Vikram Singh"]["email"] == "vikram@zeptonow.com" and ps["Vikram Singh"]["email_status"] == "verified"
     assert ps["Asha Rao"]["email"] == "asha@zeptonow.com"  # follows the verified 'first' pattern, not the hint
     assert get_domain(conn, "zepto")["pattern"] == "first"
+
+
+# ---- final-review fixes ----
+
+class _ApifyEmails:
+    SEARCH_PAGE_USD, PROFILE_EMAIL_USD = 0.10, 0.01
+
+    def __init__(self, emails=None, fail=False):
+        self.emails, self.fail = emails or {}, fail
+
+    def search_people(self, company, words, location):
+        return []
+
+    def profile_email(self, url):
+        if self.fail:
+            import httpx
+            raise httpx.ReadTimeout("apify timed out")
+        return self.emails.get(url)
+
+
+def test_personal_email_from_apify_never_becomes_company_domain(prefs):
+    conn, app = setup_app()
+    d, _ = deps(llm=llm_for(domain_index=-1), apify=_ApifyEmails({"https://www.linkedin.com/in/asharao": "asha.rao@gmail.com"}))
+    d.resolver = lambda domain: "mx.google.com"
+    find_contacts(conn, app, prefs, d)
+    assert get_domain(conn, "zepto") is None or get_domain(conn, "zepto")["domain"] != "gmail.com"
+    assert all("gmail.com" not in p["email"] for p in people(conn, app))
+
+
+def test_colliding_guesses_never_share_an_email(prefs):
+    team = [{"title": "Rahul Sharma - PM @ Zepto", "url": "https://in.linkedin.com/in/rsharma", "content": ""},
+            {"title": "Rahul Verma - PM @ Zepto", "url": "https://in.linkedin.com/in/rverma", "content": ""}]
+
+    class T(FakeTavily):
+        def search(self, query, include_domains=None, max_results=10):
+            if query.startswith('"@'):
+                return []
+            if "official website" in query:
+                return SITE
+            return [] if "talent acquisition" in query else team
+    conn, app = setup_app()
+    from jobseeker.db.contacts_repo import save_domain
+    save_domain(conn, "zepto", domain="zeptonow.com", pattern="first", catch_all=1, mx_host="mx")
+    picks = {"picks": [{"index": 0, "label": "hiring_manager", "reason": "a"}, {"index": 1, "label": "peer", "reason": "b"}]}
+    d, _ = deps(llm=llm_for(picks), tavily=T())
+    find_contacts(conn, app, prefs, d)
+    ps = people(conn, app)
+    assert [p["name"] for p in ps] == ["Rahul Sharma", "Rahul Verma"]
+    assert ps[0]["contact_id"] != ps[1]["contact_id"] and ps[0]["email"] != ps[1]["email"]
+
+
+def test_rerun_refused_once_people_were_emailed(prefs):
+    conn, app = setup_app()
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
+    conn.execute("UPDATE application_contacts SET emailed_at = '2026-10-08T10:00:00+00:00' WHERE application_id = ? AND rank = 1", (app,))
+    conn.commit()
+    with pytest.raises(FinderError, match="already emailed"):
+        find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
+
+
+def test_rerun_with_fewer_people_removes_stale_ranks(prefs):
+    conn, app = setup_app()
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
+    one = {"picks": [{"index": 0, "label": "hiring_manager", "reason": "a"}]}
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250), llm=llm_for(one))[0])
+    assert [p["rank"] for p in people(conn, app)] == [1]
+
+
+def test_rerun_keeps_verified_and_bounced_marks(prefs):
+    conn, app = setup_app()
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])  # catch-all: likely first.last guesses
+    ps = people(conn, app)
+    conn.execute("UPDATE contacts SET email_status = 'bounced' WHERE id = ?", (ps[0]["contact_id"],))
+    conn.execute("UPDATE contacts SET email = 'vikram@zeptonow.com', email_status = 'verified' WHERE id = ?", (ps[1]["contact_id"],))
+    conn.commit()
+    find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
+    ps = people(conn, app)
+    assert ps[0]["email"] != "asha.rao@zeptonow.com"  # never re-offer a bounced guess
+    assert (ps[1]["email"], ps[1]["email_status"]) == ("vikram@zeptonow.com", "verified")
+
+
+def test_fallback_errors_keep_verified_results(prefs):
+    conn, app = setup_app()
+    smtp = FakeSMTP({"asha.rao@zeptonow.com": 250})
+    d, _ = deps(smtp, apify=_ApifyEmails(fail=True))
+    summary = find_contacts(conn, app, prefs, d)
+    ps = people(conn, app)
+    assert ps[0]["email_status"] == "verified" and any("Apify" in n for n in summary["notes"])

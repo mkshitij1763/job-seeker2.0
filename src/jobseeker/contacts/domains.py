@@ -14,6 +14,9 @@ _SKIP_HOSTS = ("linkedin.", "naukri.", "indeed.", "glassdoor.", "lever.co", "gre
                # data brokers and directories describe a company without being its site
                "leadiq.", "zoominfo.", "rocketreach.", "apollo.io", "signalhire.", "contactout.", "lusha.",
                "owler.", "craft.co", "pitchbook.", "tofler.", "dnb.com", "cbinsights.", "tracxn.com/d/")
+FREE_MAIL = {"gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.in", "outlook.com", "hotmail.com", "live.com",
+             "icloud.com", "me.com", "protonmail.com", "proton.me", "rediffmail.com", "aol.com", "zoho.com",
+             "yandex.com", "gmx.com"}
 DOMAIN_SYSTEM = """You identify the employer's own website for a job posting.
 From the numbered list only, return the number of the site that belongs to this exact employer
 (same company, consistent with the job's city/country and industry). Many companies share a name:

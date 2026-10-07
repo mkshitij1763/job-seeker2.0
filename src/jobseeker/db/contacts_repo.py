@@ -90,6 +90,30 @@ def save_domain(conn: sqlite3.Connection, name_norm: str, **fields) -> None:
     conn.commit()
 
 
+def emailed_count(conn: sqlite3.Connection, app_id: int) -> int:
+    return conn.execute("""SELECT COUNT(*) FROM application_contacts WHERE application_id = ?
+                           AND (emailed_at IS NOT NULL OR gmail_draft_id IS NOT NULL)""", (app_id,)).fetchone()[0]
+
+
+def bounced_emails(conn: sqlite3.Connection, company: str) -> set[str]:
+    norm = normalize_company(company)
+    rows = conn.execute("SELECT company, email FROM contacts WHERE email_status = 'bounced' AND email != ''").fetchall()
+    return {r["email"].lower() for r in rows if normalize_company(r["company"]) == norm}
+
+
+def third_due(conn: sqlite3.Connection, app_id: int, now: datetime) -> bool:
+    """#3 is offered only when sent, 5+ days with no newer event, fewer than 2 follow-ups, and #3 has an email."""
+    app = conn.execute("SELECT status, followups_sent FROM applications WHERE id = ?", (app_id,)).fetchone()
+    if not app or app["status"] != "sent" or app["followups_sent"] >= 2:
+        return False
+    last = conn.execute("SELECT at FROM events WHERE application_id = ? ORDER BY id DESC LIMIT 1", (app_id,)).fetchone()
+    if not last or datetime.fromisoformat(last["at"]) > now - timedelta(days=5):
+        return False
+    return conn.execute("""SELECT 1 FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
+                           WHERE ac.application_id = ? AND ac.rank = 3 AND ac.emailed_at IS NULL
+                           AND c.email != '' AND c.email_status != 'bounced'""", (app_id,)).fetchone() is not None
+
+
 def blocked_profile_urls(conn: sqlite3.Connection, company: str) -> set[str]:
     norm = normalize_company(company)
     rows = conn.execute("""SELECT c.company, c.linkedin_url FROM blocklist b JOIN contacts c ON c.id = b.contact_id
@@ -99,13 +123,18 @@ def blocked_profile_urls(conn: sqlite3.Connection, company: str) -> set[str]:
 
 def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str, linkedin_url: str, email: str,
                    email_status: str) -> int | None:
-    row = conn.execute("SELECT id FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",
+    row = conn.execute("SELECT id, email, email_status FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",
                        (linkedin_url,)).fetchone()
-    if not row and email:
-        row = conn.execute("SELECT id FROM contacts WHERE lower(email) = lower(?)", (email,)).fetchone()
+    if not row and email:  # only adopt an email-matched row that isn't someone else's profile
+        row = conn.execute("""SELECT id, email, email_status FROM contacts
+                              WHERE lower(email) = lower(?) AND linkedin_url = ''""", (email,)).fetchone()
     if row:
         if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ?", (row["id"],)).fetchone():
             return None
+        if row["email_status"] == "verified" and email_status != "verified" and row["email"]:
+            email, email_status = row["email"], "verified"  # never downgrade a verified address
+        elif row["email_status"] == "bounced" and email.lower() == (row["email"] or "").lower():
+            email_status = "bounced"
         conn.execute("UPDATE contacts SET name=?, role=?, linkedin_url=?, email=?, email_status=? WHERE id=?",
                      (name, role, linkedin_url, email, email_status, row["id"]))
         conn.commit()

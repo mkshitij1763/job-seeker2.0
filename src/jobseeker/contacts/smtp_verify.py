@@ -59,7 +59,8 @@ class SmtpVerifier:
         except (smtplib.SMTPException, OSError) as e:
             raise VerifyUnavailable(f"mail server dropped the connection ({e})") from e
         self.spend()
-        if code >= 500 and _REFUSAL.search(message or b""):
+        bad_mailbox = re.search(rb"\b5\.1\.\d+\b", message or b"")  # e.g. Postfix "User unknown in relay ..."
+        if code >= 500 and not bad_mailbox and _REFUSAL.search(message or b""):
             raise VerifyUnavailable(f"mail server refused verification ({message[:80].decode(errors='replace')})")
         self.sleep(self.pause)
         return code

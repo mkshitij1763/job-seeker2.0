@@ -7,7 +7,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from jobseeker.contacts import names
 from jobseeker.contacts.finder import run_find
 from jobseeker.db.contacts_repo import (
-    find_state, get_domain, link_contact, next_candidate, people, set_find_status, upsert_contact,
+    emailed_count, find_state, get_domain, link_contact, next_candidate, people, set_find_status, third_due,
+    upsert_contact,
 )
 from jobseeker.db.usage import Budget
 from jobseeker.pipeline.normalize import normalize_company
@@ -26,6 +27,8 @@ def card_context(request: Request, conn, app_id: int) -> dict:
     state = request.app.state
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
             "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
+            "third_due": third_due(conn, app_id, datetime.now(UTC)),
+            "already_emailed": emailed_count(conn, app_id) > 0,
             "usage": Budget(conn, state.prefs.contacts, datetime.now(UTC)).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
 
@@ -39,6 +42,8 @@ def find(request: Request, app_id: int, background: BackgroundTasks, conn=Depend
     probe = deps_factory()
     if probe.tavily is None:
         return _back(app_id, err="Add TAVILY_API_KEY to .env to find contacts")
+    if emailed_count(conn, app_id):
+        return _back(app_id, err="People were already emailed for this job; edit or remove them individually")
     if find_state(conn, app_id, datetime.now(UTC))["status"] == "running":
         return _back(app_id, msg="Already finding contacts")
     set_find_status(conn, app_id, "running")
@@ -72,7 +77,13 @@ def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
 @router.post("/{app_id}/contacts/{rank}/remove")
 def remove(app_id: int, rank: int, conn=Depends(get_conn)):
     nxt = next_candidate(conn, app_id)
+    removed = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND rank = ?",
+                           (app_id, rank)).fetchone()
     conn.execute("DELETE FROM application_contacts WHERE application_id = ? AND rank = ?", (app_id, rank))
+    if removed:  # the app's main contact must never stay pointed at a removed person
+        conn.execute("""UPDATE applications SET contact_id = (SELECT contact_id FROM application_contacts
+                        WHERE application_id = ? ORDER BY rank LIMIT 1) WHERE id = ? AND contact_id = ?""",
+                     (app_id, app_id, removed["contact_id"]))
     conn.commit()
     if not nxt:
         return _back(app_id, msg="Removed. No more candidates; run Find contacts again for more")
@@ -110,13 +121,13 @@ def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
 
 @router.post("/{app_id}/contacts/3/email")
 def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
-    from jobseeker.db.applications import get_status, record_followup
+    from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
     from jobseeker.web.application import _raw_for
 
-    if get_status(conn, app_id) != "sent":
-        return _back(app_id, err="Email #3 is for applications marked sent")
+    if not third_due(conn, app_id, datetime.now(UTC)):
+        return _back(app_id, err="Email #3 is offered 5 days after Mark sent with no reply")
     third = next((p for p in people(conn, app_id) if p["rank"] == 3), None)
     if not third or not third["email"] or third["email_status"] == "bounced" or third["emailed_at"]:
         return _back(app_id, err="No usable email for #3")

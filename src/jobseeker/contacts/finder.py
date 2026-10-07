@@ -10,11 +10,12 @@ from pathlib import Path
 
 from jobseeker.config import Preferences
 from jobseeker.contacts import names
-from jobseeker.contacts.domains import domain_from_text, mx_host, pick_domain
+from jobseeker.contacts.domains import FREE_MAIL, domain_from_text, mx_host, pick_domain
 from jobseeker.contacts.people import from_results, rank, role_words, search_queries
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
-    blocked_profile_urls, get_domain, link_contact, save_candidates, save_domain, set_find_status, upsert_contact,
+    blocked_profile_urls, bounced_emails, emailed_count, get_domain, link_contact, save_candidates, save_domain,
+    set_find_status, upsert_contact,
 )
 from jobseeker.db.core import connect
 from jobseeker.db.jobs import get_job
@@ -51,6 +52,8 @@ def _search(deps: Deps, budget: Budget, notes: list[str], query: str, **kw) -> l
 def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, deps: Deps) -> dict:
     if deps.tavily is None:
         raise FinderError("Add TAVILY_API_KEY to .env to find contacts")
+    if emailed_count(conn, app_id):
+        raise FinderError("People were already emailed for this job; edit or remove them individually instead")
     app = get_application(conn, app_id)
     job = get_job(conn, app["job_id"])
     company, norm = job["company"], normalize_company(job["company"])
@@ -68,7 +71,12 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     if len(cands) < 3 and deps.apify is not None:
         if budget.can("apify", deps.apify.SEARCH_PAGE_USD):
             budget.spend("apify", deps.apify.SEARCH_PAGE_USD)
-            for c in deps.apify.search_people(company, role_words(job["title"], family), job["location_city"]):
+            try:
+                found_people = deps.apify.search_people(company, role_words(job["title"], family), job["location_city"])
+            except Exception as e:  # a fallback failing must not lose the run
+                notes.append(f"Apify people search failed ({type(e).__name__})")
+                found_people = []
+            for c in found_people:
                 if c.linkedin_url not in seen:
                     seen.add(c.linkedin_url)
                     cands.append(c)
@@ -105,6 +113,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
 
     # 3. SMTP verification
     results: dict[int, tuple[str, str, str]] = {}
+    taken = set(bounced_emails(conn, company))  # one address per person, never a bounced one
     catch_all = dom.get("catch_all")
     if domain and mx:
         sender = prefs.contacts.sender_email or prefs.email
@@ -118,9 +127,10 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                     for i, nm in enumerate(person_names):
                         if not nm:
                             continue
-                        email = v.check(names.candidates(nm, domain, hints))
+                        email = v.check([e for e in names.candidates(nm, domain, hints) if e not in taken])
                         if email:
                             results[i] = (email, "verified", "smtp")
+                            taken.add(email)
                             learned = names.pattern_of(email, nm)
                             if learned:
                                 hints = [learned] + [h for h in hints if h != learned]
@@ -143,13 +153,20 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             notes.append(f"Apify budget used for {budget.month}")
             break
         budget.spend("apify", deps.apify.PROFILE_EMAIL_USD)
-        email = deps.apify.profile_email(c.linkedin_url)
-        if email and (not domain or not mx or email.lower().endswith("@" + domain)):
-            results[i] = (email.lower(), "verified", "apify")
+        try:
+            email = (deps.apify.profile_email(c.linkedin_url) or "").lower()
+        except Exception as e:  # keep what SMTP already verified
+            notes.append(f"Apify email lookup failed ({type(e).__name__}); kept the other results")
+            break
+        if not email or email in taken or email.split("@", 1)[-1] in FREE_MAIL:
+            continue  # personal addresses never become work emails
+        if not domain or not mx or email.endswith("@" + domain):
+            results[i] = (email, "verified", "apify")
+            taken.add(email)
     if not (domain and mx):  # an Apify-verified address reveals the real email domain: remember it for free reuse
         found = next(((results[i][0], person_names[i]) for i in sorted(results)
                       if results[i][2] == "apify" and person_names[i]), None)
-        if found and deps.resolver(found[0].split("@", 1)[1]):
+        if found and found[0].split("@", 1)[1] not in FREE_MAIL and deps.resolver(found[0].split("@", 1)[1]):
             domain = found[0].split("@", 1)[1]
             mx = deps.resolver(domain)
             learned = names.pattern_of(found[0], found[1])
@@ -159,15 +176,20 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     if domain and mx and missing and deps.hunter is not None and not hints:
         if budget.can("hunter"):
             budget.spend("hunter")
-            found = deps.hunter.domain_search(domain)
+            try:
+                found = deps.hunter.domain_search(domain)
+            except Exception as e:
+                notes.append(f"Hunter lookup failed ({type(e).__name__})")
+                found = {"pattern": None, "emails": []}
             if found["pattern"]:
                 hints.insert(0, found["pattern"])
                 save_domain(conn, norm, pattern=found["pattern"])
             listed = {(f.lower(), l.lower()): e for f, l, e in found["emails"]}
             for i in missing:
                 nm = person_names[i]
-                if nm and (nm.first, nm.last) in listed:
+                if nm and (nm.first, nm.last) in listed and listed[(nm.first, nm.last)].lower() not in taken:
                     results[i] = (listed[(nm.first, nm.last)].lower(), "verified", "hunter")
+                    taken.add(results[i][0])
         else:
             notes.append(f"Hunter budget used for {budget.month}")
 
@@ -180,19 +202,25 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             break
 
     # 5. best guesses, then save
-    verified = 0
+    verified, linked = 0, set()
     for i, (c, label, reason) in enumerate(top):
         email, status, source = results.get(i, ("", "not_found", ""))
         if status == "not_found" and domain and mx and person_names[i]:
-            guesses = names.candidates(person_names[i], domain, hints)
+            guesses = [e for e in names.candidates(person_names[i], domain, hints) if e not in taken]
             if guesses:
                 email, status, source = guesses[0], "likely", "pattern"
+                taken.add(email)
         cid = upsert_contact(conn, company, c.name, c.headline, c.linkedin_url, email,
                              "verified" if status == "verified" else "unverified")
         if cid is None:
             continue
         verified += status == "verified"
         link_contact(conn, app_id, i + 1, cid, label, reason, source)
+        linked.add(i + 1)
+    stale = [r for r in (1, 2, 3) if r not in linked]  # an earlier run's people this run didn't refill
+    conn.executemany("DELETE FROM application_contacts WHERE application_id = ? AND rank = ?",
+                     [(app_id, r) for r in stale])
+    conn.commit()
     return {"people": len(top), "verified": verified, "notes": notes}
 
 

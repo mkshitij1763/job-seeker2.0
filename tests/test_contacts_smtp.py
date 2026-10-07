@@ -106,3 +106,10 @@ def test_bad_mailbox_reply_is_just_not_found():
     with verifier(server) as v:
         assert v.is_catch_all("x.com") is False
         assert v.check(["asha.rao@x.com", "asha@x.com"]) == "asha@x.com"
+
+
+def test_postfix_user_unknown_with_relay_word_is_not_a_refusal():
+    server = ScriptedSMTP(default=(550, b"5.1.1 <x@y.com>: Recipient address rejected: User unknown in relay recipient table"))
+    with verifier(server) as v:
+        assert v.is_catch_all("y.com") is False
+        assert v.check(["a@y.com"]) is None
