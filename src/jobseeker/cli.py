@@ -64,6 +64,26 @@ def rescore() -> None:
 
 
 @app.command()
+def refilter(apply: bool = typer.Option(False, "--apply", help="Write the changes (default: only list them).")) -> None:
+    """Re-apply preferences.yaml filters to stored jobs (after changing title, city or experience rules)."""
+    from datetime import UTC, datetime
+
+    from jobseeker.pipeline.refilter import refilter as run_refilter
+
+    settings, prefs, _ = _load()
+    changes = run_refilter(connect(settings.db_path), prefs, datetime.now(UTC), apply=apply)
+    for c in changes:
+        effect = "-> skipped" if c["skips"] else f"(kept {c['status']})" if c["status"] else ""
+        typer.echo(f"  {c['title'][:40]:<41}{c['company'][:24]:<25}{c['reason']:<34}{effect}")
+    skipped = sum(c["skips"] for c in changes)
+    if apply:
+        typer.echo(f"Filtered {len(changes)} jobs; skipped {skipped} applications (Undo works on each).")
+    else:
+        typer.echo(f"{len(changes)} jobs would be filtered, {skipped} applications skipped. "
+                   "Run again with --apply to do it.")
+
+
+@app.command()
 def companies() -> None:
     """List companies discovered automatically from job-site results."""
     from jobseeker.db.companies import list_companies

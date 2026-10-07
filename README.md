@@ -36,7 +36,7 @@ A personal job-search assistant that runs locally. Every morning it finds new jo
 - **On your iPhone:** open the Tailscale address (see Setup step 7) and Add to Home Screen. In the inbox, swipe a card left to **Skip** or right to **Snooze** (Undo appears for 6 seconds). On a job page, **Approve** is pinned to the bottom; everything else is under **More**.
 
 ## Tuning
-- `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models.
+- `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models. Filters apply to new jobs; to apply changed rules to jobs already stored, run `uv run jobseeker refilter` (lists the changes) and then `uv run jobseeker refilter --apply`. Unapproved applications it removes are skipped, so Undo still works.
 - `rubric.yaml`: scoring weights. Bump `version`, then run `uv run jobseeker rescore`.
 - `profile/preferences.yaml` → `search:` the roles and cities searched every morning on LinkedIn, Naukri and Indeed India. Companies found there that use Greenhouse, Lever or Ashby are discovered automatically and fetched from their own boards afterwards; see them with `uv run jobseeker companies`.
 - `companies.yaml`: optional favourites that are always fetched. Check a slug with `uv run python scripts/verify_companies.py <slug>`.
