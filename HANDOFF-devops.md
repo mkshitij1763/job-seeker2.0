@@ -25,10 +25,11 @@
 | `bec17b5` | extras T3, backup/s3.py SigV4 PUT |
 | `9312de4` | extras T4, backup/archive.py + db.backup.snapshot |
 | `4f02f27` | extras T5, `jobseeker restore` |
-| (this commit) | extras T6, push/send.py |
+| `d3915b6` | extras T6, push/send.py |
+| (this commit) | pipeline T2, profile_hash |
 
-- **Tests after extras T6:** 469 pytest, 19 node.
-- **NEXT:** pipeline **T2** (profile_hash), then **T6** (build_plan + plan-driven JobSpy sources) in `docs/superpowers/plans/2026-10-08-mu-per-user-pipeline.md`. Then report to `manager` and stand by. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge.
+- **Tests after pipeline T2:** 472 pytest, 19 node.
+- **NEXT:** pipeline **T6** (build_plan + plan-driven JobSpy sources) in `docs/superpowers/plans/2026-10-08-mu-per-user-pipeline.md`. Then report to `manager` and stand by. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
