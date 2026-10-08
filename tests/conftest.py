@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from jobseeker.config import Settings, load_preferences, load_rubric
+from jobseeker.config import Settings, UserPrefs, load_preferences, load_rubric
 from jobseeker.profile.facts import Achievement, Facts, Role
 from jobseeker.db.applications import ensure_application, save_draft, set_suggestion, transition
 from jobseeker.db.core import connect
@@ -28,7 +28,16 @@ AUTH_TEST = dict(google_client_id="cid.apps.googleusercontent.com", google_clien
 
 @pytest.fixture
 def settings(home: Path) -> Settings:
-    return Settings(jobseeker_home=home, groq_api_key="test", **AUTH_TEST)
+    from datetime import UTC, datetime
+
+    from jobseeker.profile.importer import import_profile
+    s = Settings(jobseeker_home=home, groq_api_key="test", **AUTH_TEST)
+    shutil.copy(ROOT / "tests" / "fixtures" / "facts.json", home / "profile" / "facts.json")
+    conn = connect(s.db_path)
+    import_profile(conn, 1, home / "profile", home, datetime.now(UTC))
+    conn.commit()
+    conn.close()
+    return s
 
 
 @pytest.fixture
@@ -94,6 +103,9 @@ def seeded_two(settings, seeded):
     conn = connect(settings.db_path)
     j1 = conn.execute("SELECT job_id FROM applications WHERE id = ?", (seeded[0],)).fetchone()[0]
     conn.execute("INSERT INTO users (id, email, name, created_at) VALUES (2, 'roomie@example.com', 'Roomie', 't')")
+    roomie = UserPrefs(roles=["Growth Analyst"], cities=["Pune"], drop_if_min_years_at_least=5, experience_summary="x")
+    conn.execute("""INSERT INTO user_prefs (user_id, data, version, onboarding_step, onboarded_at, updated_at)
+                    VALUES (2, ?, 1, NULL, 't', 't')""", (roomie.model_dump_json(),))
     save_score(conn, 2, j1, ScoreResult(score=91, breakdown={}, matches=["Excel"], gaps=[], recommendation="apply",
                                         role_family="growth_analyst"), "m", "v1", "h")
     app2 = ensure_application(conn, 2, j1)

@@ -242,6 +242,7 @@ class UserPrefs(BaseModel):
     custom_role: str = ""
     cities: list[str] = []
     remote_india_ok: bool = True
+    where_confirmed: bool = False  # set when the Where step is saved: remote-only counts only once chosen there
     experience_years: float | None = None
     drop_if_min_years_at_least: float | None = None
     max_age_days: int = 7
@@ -262,7 +263,7 @@ class UserPrefs(BaseModel):
         missing = []
         if not (self.roles or self.custom_role.strip()):
             missing.append("roles")
-        if not (self.cities or self.remote_india_ok):
+        if not (self.cities or (self.where_confirmed and self.remote_india_ok)):
             missing.append("where")
         t = self.drop_if_min_years_at_least
         if t is None or (self.experience_years is not None and t <= self.experience_years) \

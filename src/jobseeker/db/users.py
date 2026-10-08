@@ -56,6 +56,8 @@ def resolve_sign_in(conn: sqlite3.Connection, sub: str, email: str, name: str, n
         cur = conn.execute("INSERT INTO users (google_sub, email, name, created_at) VALUES (?, ?, ?, ?)",
                            (sub, email, name, iso(now)))
         conn.execute("UPDATE invites SET accepted_at = ? WHERE email = ?", (iso(now), email))
+        conn.execute("""INSERT INTO user_prefs (user_id, data, version, onboarding_step, updated_at)
+                        VALUES (?, '{}', 1, 'roles', ?)""", (cur.lastrowid, iso(now)))
         row = conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
     if row["disabled_at"]:
         conn.commit()

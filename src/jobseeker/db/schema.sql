@@ -207,3 +207,22 @@ CREATE TABLE IF NOT EXISTS usage (
   amount REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, period, service)
 );
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id INTEGER PRIMARY KEY REFERENCES users (id),
+  data TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  onboarding_step TEXT,
+  onboarded_at TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS user_facts (
+  user_id INTEGER PRIMARY KEY REFERENCES users (id),
+  resume_sha256 TEXT,
+  facts TEXT,
+  edited INTEGER NOT NULL DEFAULT 0,
+  extract_status TEXT NOT NULL DEFAULT 'idle' CHECK (extract_status IN ('idle', 'running', 'done', 'failed')),
+  extract_error TEXT NOT NULL DEFAULT '',
+  extract_started_at TEXT,
+  resume_uploaded_at TEXT,
+  updated_at TEXT NOT NULL
+);

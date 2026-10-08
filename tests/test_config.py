@@ -86,12 +86,13 @@ def test_effective_prefs_maps_roles_and_defaults():
 
 
 def test_complete_lists_missing_steps_in_order():
-    assert UserPrefs(remote_india_ok=False).complete() == ["roles", "where", "experience"]
-    assert UserPrefs().complete() == ["roles", "experience"]  # remote_india_ok defaults on, which satisfies "where"
-    up = UserPrefs(roles=["Product Analyst"], remote_india_ok=True, drop_if_min_years_at_least=2.5,
-                   experience_summary="x")
+    assert UserPrefs().complete() == ["roles", "where", "experience"]  # remote on by default is not a choice yet
+    assert UserPrefs(cities=["Pune"]).complete() == ["roles", "experience"]
+    assert UserPrefs(remote_india_ok=False, where_confirmed=True).complete() == ["roles", "where", "experience"]
+    up = UserPrefs(roles=["Product Analyst"], remote_india_ok=True, where_confirmed=True,
+                   drop_if_min_years_at_least=2.5, experience_summary="x")
     assert up.complete() == []
-    assert UserPrefs(roles=["x"], experience_years=3, drop_if_min_years_at_least=2.5,
+    assert UserPrefs(roles=["x"], cities=["Pune"], experience_years=3, drop_if_min_years_at_least=2.5,
                      experience_summary="x").complete() == ["experience"]  # threshold must exceed years
 
 
@@ -99,3 +100,8 @@ def test_scorer_prompt_says_not_given_for_missing_ctc(facts, rubric, prefs):
     from jobseeker.scoring.scorer import _system
     text = _system(facts, prefs.model_copy(update={"current_ctc_lpa": None, "target_base_lpa": None}), rubric)
     assert "CTC not given" in text
+
+
+def test_explicit_title_allow_extra_is_used_as_is():
+    up = UserPrefs(title_allow_extra=["product"], roles=["Data Analyst"])
+    assert effective_prefs(up, _cfg(), name="A", email="a@example.com").title_allow == ["product"]

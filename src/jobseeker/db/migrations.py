@@ -247,3 +247,39 @@ def migrate_v1(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
 
 
 MIGRATIONS.append(Migration(1, "users and scoping", migrate_v1))
+
+
+V2_DDL = """
+CREATE TABLE user_prefs (
+  user_id INTEGER PRIMARY KEY REFERENCES users (id),
+  data TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  onboarding_step TEXT,
+  onboarded_at TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE user_facts (
+  user_id INTEGER PRIMARY KEY REFERENCES users (id),
+  resume_sha256 TEXT,
+  facts TEXT,
+  edited INTEGER NOT NULL DEFAULT 0,
+  extract_status TEXT NOT NULL DEFAULT 'idle' CHECK (extract_status IN ('idle', 'running', 'done', 'failed')),
+  extract_error TEXT NOT NULL DEFAULT '',
+  extract_started_at TEXT,
+  resume_uploaded_at TEXT,
+  updated_at TEXT NOT NULL
+);
+"""
+
+
+def migrate_v2(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
+    """Per-user preferences and facts; the owner's profile/ files are imported (golden-checked) when present."""
+    from jobseeker.profile.importer import import_profile  # the importer needs MigrationError from here
+
+    for stmt in V2_DDL.split(";"):
+        if stmt.strip():
+            conn.execute(stmt)
+    import_profile(conn, 1, ctx.home / "profile", ctx.home, ctx.now)
+
+
+MIGRATIONS.append(Migration(2, "preferences, facts and resume", migrate_v2))

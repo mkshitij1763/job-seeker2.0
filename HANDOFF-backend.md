@@ -29,11 +29,12 @@
 
   | Task | Commit |
   |---|---|
-  | P3-T1 UserPrefs, AppConfig, effective_prefs, fixtures | `this commit` |
+  | P3-T1 UserPrefs, AppConfig, effective_prefs, fixtures | `0f773be` |
+  | P3-T2 migration v2, profile importer (+ where_confirmed) | `this commit` |
 
-- **Tests at `P3-T1`:** 554 pytest, 19 node. `git status` is clean.
+- **Tests at `P3-T2`:** 561 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 3 **Task 2** (migration v2 and the profile importer), then T3–T9. Plan 2 security review: findings go to `manager`, and nothing gets fixed until `manager` rules. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** merge `origin/build/devops2` (from `manager`), then one "fix(auth): security review" commit (rulings in §3), then plan 3 **Task 3**, then T4–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -49,6 +50,8 @@
 - T10: no deviations. `admin.html` is a plain three-card page (Invites, Users, Usage); no new CSS (`.topbar-signout` has no rule yet).
 - T11: the T8 guard tests passed vacuously. FastAPI 0.142 keeps included routers as `_IncludedRouter` in `app.routes`, so the `isinstance(r, APIRoute)` walks saw zero routes. The walk now uses `fastapi.routing.iter_route_contexts`, which gives effective paths plus router-level deps, and asserts it finds more than 20 routes. The real guards were already correct: all pass, and an unguarded `/leak` probe now fails. Acceptance on a live-DB copy: counts unchanged, fk check empty, the un-migrated copy refuses to start.
 - P3-T1: the spec says "where" is complete with ≥1 city OR `remote_india_ok`, and remote defaults to True, so `UserPrefs().complete() == ["roles", "experience"]`. The plan's test expected all three; I kept the spec. `config/app.example.yaml`'s `default_title_deny` is the owner's full 18-item list. Personal values are gone from test fixtures: `tests/fixtures/preferences.yaml` uses "Asha Owner".
+- P3-T1/T2 (ruling by `manager`, replaces my P3-T1 ruling): "where" is complete only with ≥1 city, or with `remote_india_ok` plus `UserPrefs.where_confirmed`. The Where step sets `where_confirmed` when saved; the importer sets it True for the migrated owner. `UserPrefs().complete() == ["roles", "where", "experience"]`.
+- P3-T2: `tests/fixtures/facts.json` is anonymised (Acme Health, Bigfour Consulting); the conftest literal names real employers. `db/profile.py` starts in T2 with `get_user_prefs`, because T2's test needs it. `import_profile` aborts only on per-user golden fields: `min_prescore`/`thresholds` come from `app.yaml`, and an existing admin `app.yaml` wins. Live-copy acceptance with the REAL owner profile: v1+v2 ok, full golden dict equal, scorer prompt byte-identical, resume 600/700, fk check empty.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

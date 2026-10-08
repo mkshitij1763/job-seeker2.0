@@ -179,3 +179,25 @@ def test_fresh_db_has_placeholder_owner_and_accepts_owner_rows(tmp_path):
     assert tuple(conn.execute("SELECT id, email, is_admin FROM users").fetchone()) == (1, "", 1)
     job_id, _ = upsert_job(conn, make_job())
     assert ensure_application(conn, 1, job_id) > 0
+
+
+def test_v2_imports_profile_and_reruns_as_noop(tmp_path):
+    import shutil
+    db = live_like_v0(tmp_path / "db.sqlite")
+    prof = tmp_path / "profile"
+    prof.mkdir()
+    shutil.copy("tests/fixtures/preferences.yaml", prof / "preferences.yaml")
+    shutil.copy("tests/fixtures/facts.json", prof / "facts.json")
+    m.migrate(db, _ctx(tmp_path), tmp_path / "bk")
+    c = sqlite3.connect(db)
+    assert c.execute("PRAGMA user_version").fetchone()[0] >= 2
+    assert c.execute("SELECT onboarded_at IS NOT NULL FROM user_prefs WHERE user_id = 1").fetchone()[0] == 1
+    assert m.migrate(db, _ctx(tmp_path), tmp_path / "bk")[0].startswith("Already at")
+
+
+def test_v2_without_profile_leaves_owner_unonboarded(tmp_path):
+    db = live_like_v0(tmp_path / "db.sqlite")
+    m.migrate(db, _ctx(tmp_path), tmp_path / "bk")
+    c = sqlite3.connect(db)
+    assert c.execute("SELECT onboarded_at, onboarding_step FROM user_prefs WHERE user_id = 1").fetchone() == (None, "roles")
+    assert (tmp_path / "config" / "app.yaml").exists()

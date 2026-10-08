@@ -1,0 +1,58 @@
+{
+  "resume_sha256": "fixture",
+  "facts": {
+    "headline": "Product Analyst at Acme Health; B.Tech EE 2025",
+    "roles": [
+      {
+        "title": "Product Analyst",
+        "org": "Acme Health",
+        "start": "July 2025",
+        "end": "Present"
+      },
+      {
+        "title": "Technology Consultant Intern",
+        "org": "Bigfour Consulting",
+        "start": "May 2024",
+        "end": "July 2024"
+      }
+    ],
+    "achievements": [
+      {
+        "org": "Acme Health",
+        "text": "Video-led test instructions cut user errors by 67% across 480K+ tests",
+        "metrics": [
+          "67%",
+          "480K+"
+        ]
+      },
+      {
+        "org": "Acme Health",
+        "text": "LightGBM churn model on 30,000+ users with 84% ROC-AUC",
+        "metrics": [
+          "30,000+",
+          "84%"
+        ]
+      },
+      {
+        "org": "Bigfour Consulting",
+        "text": "14-day power demand forecast cut MAPE from 7.84% to 6.33%",
+        "metrics": [
+          "14",
+          "7.84%",
+          "6.33%"
+        ]
+      }
+    ],
+    "skills": [
+      "SQL",
+      "BigQuery",
+      "Amplitude",
+      "A/B Testing",
+      "Python",
+      "Product Discovery"
+    ],
+    "education": [
+      "B.Tech Electrical Engineering, 2021-2025"
+    ]
+  }
+}
