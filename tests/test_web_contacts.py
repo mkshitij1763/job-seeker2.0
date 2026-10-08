@@ -1,12 +1,10 @@
-from fastapi.testclient import TestClient
 
 from jobseeker.config import Settings
 from jobseeker.contacts.finder import Deps
 from jobseeker.db.contacts_repo import people
 from jobseeker.db.core import connect
-from jobseeker.web.app import create_app
 from jobseeker.web.filters import personal_note
-from tests.conftest import AUTH_TEST
+from tests.conftest import AUTH_TEST, signed_in_client
 from tests.fakes import FakeLLM
 from tests.test_contacts_finder import FakeSMTP, FakeTavily, llm_for
 
@@ -17,7 +15,7 @@ def make_client(settings, smtp=None):
     def deps():
         return Deps(tavily=FakeTavily(), llm=llm_for(), resolver=lambda d: f"mx.{d}",
                     smtp_factory=lambda host: server, sleep=lambda s: None)
-    return TestClient(create_app(settings, contacts_deps_factory=deps), follow_redirects=False)
+    return signed_in_client(settings, contacts_deps_factory=deps, follow_redirects=False)
 
 
 def zepto(settings, app_id):
@@ -50,7 +48,7 @@ def test_card_polls_while_running(settings, seeded):
 
 def test_find_without_tavily_key(home, seeded):
     s = Settings(jobseeker_home=home, groq_api_key="test", tavily_api_key="", **AUTH_TEST)
-    client = TestClient(create_app(s), follow_redirects=False)
+    client = signed_in_client(s, follow_redirects=False)
     r = client.post(f"/applications/{seeded[0]}/contacts/find")
     assert "TAVILY_API_KEY" in r.headers["location"]
 

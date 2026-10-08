@@ -57,10 +57,9 @@ def test_nav_counts(settings, seeded):
 
 
 def test_render_context_has_nav(settings, seeded):
-    from fastapi.testclient import TestClient
-
     from jobseeker.web.app import create_app
+    from tests.conftest import signed_in_client
 
     app = create_app(settings)
     assert app.state.rubric.dimensions[0].key == "role_fit"
-    assert TestClient(app).get("/today").status_code == 200
+    assert signed_in_client(settings).get("/today").status_code == 200

@@ -2,7 +2,6 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
 from jobseeker.db.applications import (
     can_undo, get_application, get_events, get_status, mark_not_interested, snooze, transition, undo_last_status,
@@ -10,7 +9,7 @@ from jobseeker.db.applications import (
 )
 from jobseeker.db.core import connect
 from jobseeker.status import InvalidTransition
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 
 
 def test_undo_skip_restores_previous_status(settings, seeded):
@@ -67,7 +66,7 @@ def test_undo_refused_after_wake_from_snooze(settings, seeded):
 
 def test_undo_route_and_button(settings, seeded):
     a = seeded[0]
-    client = TestClient(create_app(settings), follow_redirects=False)
+    client = signed_in_client(settings, follow_redirects=False)
     client.post(f"/applications/{a}/status", data={"status": "skipped"})
     assert "Undo last change" in client.get(f"/applications/{a}").text
     r = client.post(f"/applications/{a}/undo", data={"next": "/"})
@@ -91,7 +90,7 @@ def test_undoing_an_approval_warns_about_the_gmail_draft(settings, seeded):
     a = seeded[0]
     conn = connect(settings.db_path)
     transition(conn, a, "approved", {"gmail_draft_id": "G1"})
-    client = TestClient(create_app(settings), follow_redirects=False)
+    client = signed_in_client(settings, follow_redirects=False)
     r = client.post(f"/applications/{a}/undo")
     assert "Gmail" in r.headers["location"] and "delete" in r.headers["location"].lower()
 
@@ -99,6 +98,6 @@ def test_undoing_an_approval_warns_about_the_gmail_draft(settings, seeded):
 @pytest.mark.parametrize("bad", ["//evil.example/x", "/\\evil.example", "https://evil.example"])
 def test_next_must_be_a_local_path(settings, seeded, bad):
     a = seeded[0]
-    client = TestClient(create_app(settings), follow_redirects=False)
+    client = signed_in_client(settings, follow_redirects=False)
     r = client.post(f"/applications/{a}/status", data={"status": "skipped", "next": bad})
     assert r.headers["location"].startswith(f"/applications/{a}?")

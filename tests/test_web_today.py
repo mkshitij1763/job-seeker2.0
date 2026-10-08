@@ -1,12 +1,11 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi.testclient import TestClient
 
 from jobseeker.db import queries
 from jobseeker.db.applications import transition
 from jobseeker.db.contacts_repo import link_contact, upsert_contact
 from jobseeker.db.core import connect
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 
 
 def _person(conn, app_id, rank, name):
@@ -44,7 +43,7 @@ def test_today_page_nav_and_mark_sent(settings, seeded):
     conn = connect(settings.db_path)
     conn.execute("UPDATE applications SET status = 'approved' WHERE id = ?", (a,))
     conn.commit()
-    c = TestClient(create_app(settings), follow_redirects=False)
+    c = signed_in_client(settings, follow_redirects=False)
     html = c.get("/today").text
     assert 'href="/today"' in html and "Send in Gmail" in html
     assert f'action="/applications/{a}/status"' in html and 'name="next" value="/today"' in html
@@ -53,5 +52,5 @@ def test_today_page_nav_and_mark_sent(settings, seeded):
 
 
 def test_today_empty_state(settings):
-    html = TestClient(create_app(settings)).get("/today").text
+    html = signed_in_client(settings).get("/today").text
     assert "All caught up" in html

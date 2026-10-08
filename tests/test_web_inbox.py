@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
 
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 from jobseeker.web.filters import age, highlight
 
 
@@ -14,7 +13,7 @@ def test_age():
 
 
 def test_inbox_lists_apply_band_by_default(settings, seeded):
-    client = TestClient(create_app(settings))
+    client = signed_in_client(settings)
     r = client.get("/")
     assert r.status_code == 200
     assert "Senior Product Analyst 0" in r.text and "Senior Product Analyst 1" not in r.text
@@ -23,12 +22,12 @@ def test_inbox_lists_apply_band_by_default(settings, seeded):
 
 
 def test_inbox_filter_by_family_and_source(settings, seeded):
-    client = TestClient(create_app(settings))
+    client = signed_in_client(settings)
     assert "Senior Product Analyst 0" not in client.get("/?family=apm").text
     assert "Senior Product Analyst 0" in client.get("/?source=lever").text
 
 
 def test_static_assets_served(settings):
-    client = TestClient(create_app(settings))
+    client = signed_in_client(settings)
     assert client.get("/static/ui.css").status_code == 200
     assert client.get("/static/htmx.min.js").status_code == 200

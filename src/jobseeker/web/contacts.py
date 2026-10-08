@@ -11,10 +11,9 @@ from jobseeker.db.contacts_repo import (
     upsert_contact,
 )
 from jobseeker.db.usage import Budget, contacts_limits
-from jobseeker.db.users import OWNER_ID
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
-from jobseeker.web.deps import get_conn
+from jobseeker.web.deps import current_user, get_conn
 
 router = APIRouter(prefix="/applications")
 
@@ -26,18 +25,18 @@ def _company(conn, app_id: int) -> str:
 
 def card_context(request: Request, conn, app_id: int) -> dict:
     state = request.app.state
-    owner = conn.execute("SELECT user_id FROM applications WHERE id = ?", (app_id,)).fetchone()["user_id"]
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
             "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
             "third_due": third_due(conn, app_id, datetime.now(UTC)),
             "nudge_due": nudge_due(conn, app_id, datetime.now(UTC)),
             "already_emailed": emailed_count(conn, app_id) > 0,
-            "usage": Budget(conn, owner, contacts_limits(state.prefs.contacts), datetime.now(UTC)).summary(),
+            "usage": Budget(conn, request.state.user.id, contacts_limits(state.prefs.contacts), datetime.now(UTC)).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
 
 
 @router.post("/{app_id}/contacts/find")
-def find(request: Request, app_id: int, background: BackgroundTasks, conn=Depends(get_conn)):
+def find(request: Request, app_id: int, background: BackgroundTasks, user=Depends(current_user),
+         conn=Depends(get_conn)):
     state = request.app.state
     if not state.settings.tavily_api_key and state.contacts_deps_factory is None:
         return _back(app_id, err="Add TAVILY_API_KEY to .env to find contacts")
@@ -49,7 +48,7 @@ def find(request: Request, app_id: int, background: BackgroundTasks, conn=Depend
         return _back(app_id, err="People were already emailed for this job; edit or remove them individually")
     if not claim_find(conn, app_id, datetime.now(UTC)):
         return _back(app_id, msg="Already finding contacts")
-    background.add_task(run_find, state.settings.db_path, app_id, state.prefs, deps_factory)
+    background.add_task(run_find, state.settings.db_path, app_id, user.id, state.prefs, deps_factory)
     return _back(app_id)  # the People card shows progress and replaces itself when done
 
 
@@ -77,7 +76,7 @@ def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
 
 
 @router.post("/{app_id}/contacts/{rank}/remove")
-def remove(app_id: int, rank: int, conn=Depends(get_conn)):
+def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_conn)):
     nxt = next_candidate(conn, app_id)
     removed = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND rank = ?",
                            (app_id, rank)).fetchone()
@@ -97,7 +96,7 @@ def remove(app_id: int, rank: int, conn=Depends(get_conn)):
     if dom.get("domain") and nm:
         guesses = names.candidates(nm, dom["domain"], [dom["pattern"]] if dom.get("pattern") else [])
         email, source = (guesses[0], "pattern") if guesses else ("", "")
-    cid = upsert_contact(conn, OWNER_ID, company, nxt["name"], nxt["headline"], nxt["linkedin_url"], email, "unverified")
+    cid = upsert_contact(conn, user.id, company, nxt["name"], nxt["headline"], nxt["linkedin_url"], email, "unverified")
     if cid is None:
         return _back(app_id, err=f"{nxt['name']} said not interested before; run Find contacts again")
     link_contact(conn, app_id, rank, cid, nxt["label"], nxt["reason"], source)

@@ -1,13 +1,12 @@
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 
 from jobseeker.db.applications import get_application, get_drafts, get_status
 from jobseeker.db.core import connect
 from jobseeker.gmail.client import GmailUnavailable
 from jobseeker.outreach.drafter import DraftBundle
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 from tests.fakes import FakeLLM
 
 
@@ -43,7 +42,7 @@ def ctx(settings, seeded, facts):
     llm = FakeLLM(handler=lambda schema, prompt: DraftBundle(
         contact_role="Founder", contact_reason="r", email_subject="New subject",
         email_body="Fresh body citing 67%.", li_note="n", li_dm="d"))
-    client = TestClient(create_app(settings, llm_factory=lambda: llm, gmail_factory=lambda: gmail),
+    client = signed_in_client(settings, llm_factory=lambda: llm, gmail_factory=lambda: gmail,
                         follow_redirects=False)
     return client, settings, seeded, gmail
 
@@ -89,7 +88,7 @@ def test_approve_unverified_needs_confirmation_then_creates_draft(ctx):
 def test_approve_gmail_unavailable_keeps_state(settings, seeded, facts):
     settings.resume_path.write_bytes(b"%PDF fake")
     a = seeded[0]
-    client = TestClient(create_app(settings, gmail_factory=lambda: FakeGmail(fail=True)), follow_redirects=False)
+    client = signed_in_client(settings, gmail_factory=lambda: FakeGmail(fail=True), follow_redirects=False)
     client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",
                                                     "email": "a@x.com", "email_status": "verified"})
     r = client.post(f"/applications/{a}/approve")

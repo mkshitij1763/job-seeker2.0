@@ -1,11 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi.testclient import TestClient
 
 from jobseeker.db import queries
 from jobseeker.db.applications import transition
 from jobseeker.db.core import connect
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 
 
 def test_pipeline_board_and_followup_flag(settings, seeded):
@@ -21,7 +20,7 @@ def test_pipeline_board_and_followup_flag(settings, seeded):
     assert st["sent"] == 1 and st["drafted"] == 1 and st["reply_rate"] == 0.0
     assert st["jobs_per_source"] == {"lever": 2}
 
-    r = TestClient(create_app(settings)).get("/pipeline")
+    r = signed_in_client(settings).get("/pipeline")
     assert r.status_code == 200
     assert "Follow up" in r.text and "Senior Product Analyst 0" in r.text
 

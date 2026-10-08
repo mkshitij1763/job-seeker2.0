@@ -8,7 +8,6 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 
 from jobseeker.db import queries
-from jobseeker.db.users import OWNER_ID
 from jobseeker.db.core import utcnow
 from jobseeker.db.applications import (
     BlockedContact, can_undo, get_status, mark_not_interested, record_followup, save_contact, save_draft,
@@ -22,7 +21,7 @@ from jobseeker.pipeline.run import draft_application
 from jobseeker.profile.facts import load_facts
 from jobseeker.status import InvalidTransition
 from jobseeker.web import oauth
-from jobseeker.web.deps import get_conn, render
+from jobseeker.web.deps import current_user, get_conn, render
 
 router = APIRouter(prefix="/applications")
 KINDS = {"email", "li_note", "li_dm"}
@@ -39,8 +38,8 @@ def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err:
 
 
 @router.get("/{app_id}")
-def detail(request: Request, app_id: int, conn=Depends(get_conn)):
-    d = queries.application_detail(conn, OWNER_ID, app_id)
+def detail(request: Request, app_id: int, user=Depends(current_user), conn=Depends(get_conn)):
+    d = queries.application_detail(conn, user.id, app_id)
     if not d:
         raise HTTPException(404)
     settings = request.app.state.settings
@@ -128,15 +127,15 @@ def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
 
 
 @router.post("/{app_id}/approve")
-async def approve(request: Request, app_id: int, conn=Depends(get_conn)):
+async def approve(request: Request, app_id: int, user=Depends(current_user), conn=Depends(get_conn)):
     form = await request.form()  # the confirm_<rank> boxes are dynamic, so read the form here, then work off-loop
-    return await run_in_threadpool(_approve, request.app.state, conn, app_id, form)
+    return await run_in_threadpool(_approve, request.app.state, conn, user.id, app_id, form)
 
 
-def _approve(state, conn, app_id: int, form):
+def _approve(state, conn, user_id: int, app_id: int, form):
     from jobseeker.db.contacts_repo import people
 
-    d = queries.application_detail(conn, OWNER_ID, app_id)
+    d = queries.application_detail(conn, user_id, app_id)
     if not d:
         raise HTTPException(404)
     email = d["drafts"].get("email")

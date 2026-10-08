@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -14,12 +14,13 @@ from fastapi.templating import Jinja2Templates
 
 from jobseeker.config import Settings, load_preferences, load_rubric
 from jobseeker.status import allowed_next
-from jobseeker.web.deps import NotAuthenticated
+from jobseeker.web.deps import NotAuthenticated, current_user, owned_app
 from jobseeker.web.filters import age, highlight, personal_note
 from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.view import STEPS, TIER_LABELS, tier
 
 HERE = Path(__file__).parent
+PUBLIC = frozenset({"/login", "/auth/callback", "/logout", "/logout/all", "/healthz", "/sw.js"})
 
 
 @lru_cache(maxsize=64)
@@ -75,10 +76,10 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.mount("/static", _Static(directory=HERE / "static"), name="static")
     app.add_middleware(GZipMiddleware, minimum_size=1000)  # the inbox is ~50 KB of HTML, ~8 KB gzipped
     app.include_router(auth.router)
-    app.include_router(inbox.router)
-    app.include_router(application.router)
-    app.include_router(contacts.router)
-    app.include_router(pipeline.router)
+    app.include_router(inbox.router)  # "/" depends on optional_user itself
+    app.include_router(application.router, dependencies=[Depends(owned_app)])
+    app.include_router(contacts.router, dependencies=[Depends(owned_app)])
+    app.include_router(pipeline.router, dependencies=[Depends(current_user)])
 
     @app.exception_handler(NotAuthenticated)
     async def _signed_out(request, exc):

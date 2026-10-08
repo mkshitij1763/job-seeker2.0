@@ -231,10 +231,12 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     return {"people": len(top), "verified": verified, "notes": notes}
 
 
-def run_find(db_path: Path | str, app_id: int, prefs: Preferences, deps_factory: Callable[[], Deps]) -> None:
-    """Background entry point: own connection, status recorded for the page to poll."""
+def run_find(db_path: Path | str, app_id: int, user_id: int, prefs: Preferences, deps_factory: Callable[[], Deps]) -> None:
+    """Background entry point: own connection, ownership re-checked, status recorded for the page to poll."""
     conn = connect(db_path)
     try:
+        if not conn.execute("SELECT 1 FROM applications WHERE id = ? AND user_id = ?", (app_id, user_id)).fetchone():
+            return
         summary = find_contacts(conn, app_id, prefs, deps_factory())
         note = f"Found {summary['people']} people, {summary['verified']} verified emails."
         set_find_status(conn, app_id, "done", " ".join([note, *summary["notes"]]))

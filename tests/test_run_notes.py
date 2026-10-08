@@ -1,8 +1,7 @@
-from fastapi.testclient import TestClient
 
 from jobseeker.db.core import connect
 from jobseeker.db.runs import finish_run, start_run
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 from jobseeker.web.filters import explain_run
 
 
@@ -33,5 +32,5 @@ def test_header_shows_tappable_run_notes(settings, seeded):
     conn = connect(settings.db_path)
     run_id = start_run(conn, datetime.now(UTC))
     finish_run(conn, run_id, {}, ["scoring stopped: Groq daily quota used up for x; retry in 900s"], datetime.now(UTC))
-    html = TestClient(create_app(settings)).get("/").text
+    html = signed_in_client(settings).get("/").text
     assert '<details class="run-notes"' in html and "Daily AI limit reached" in html

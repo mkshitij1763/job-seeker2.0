@@ -2,14 +2,13 @@ import base64
 import email as email_lib
 from datetime import UTC, datetime, timedelta
 
-from fastapi.testclient import TestClient
 
 from jobseeker.db import queries
 from jobseeker.db.applications import get_status, transition
 from jobseeker.db.contacts_repo import link_contact, people, upsert_contact
 from jobseeker.db.core import connect
 from jobseeker.gmail.client import GmailUnavailable
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 
 
 class FakeGmail:
@@ -55,7 +54,7 @@ def link_three(settings, a, statuses=("verified", "verified", "verified")):
 
 def client(settings, gmail):
     settings.resume_path.write_bytes(b"%PDF fake")
-    return TestClient(create_app(settings, gmail_factory=lambda: gmail), follow_redirects=False)
+    return signed_in_client(settings, gmail_factory=lambda: gmail, follow_redirects=False)
 
 
 def test_approve_drafts_top_two_with_own_greetings(settings, seeded):
@@ -192,7 +191,7 @@ def test_approve_does_gmail_work_off_the_event_loop(settings, seeded):
             on_loop.append(False)
         return FakeGmail()
     settings.resume_path.write_bytes(b"%PDF fake")
-    TestClient(create_app(settings, gmail_factory=factory), follow_redirects=False).post(f"/applications/{a}/approve")
+    signed_in_client(settings, gmail_factory=factory, follow_redirects=False).post(f"/applications/{a}/approve")
     assert on_loop and not any(on_loop)  # blocking Gmail/SQLite calls must not stall other requests
 
 
@@ -209,7 +208,7 @@ def test_add_someone_form_is_empty_when_contact_is_a_found_person(settings, seed
     conn.execute("UPDATE applications SET contact_id = (SELECT contact_id FROM application_contacts "
                  "WHERE application_id = ? AND rank = 1) WHERE id = ?", (a, a))  # what Find contacts does
     conn.commit()
-    c = TestClient(create_app(settings), follow_redirects=False)
+    c = signed_in_client(settings, follow_redirects=False)
     form = _own_form(c.get(f"/applications/{a}").text)
     assert "asha@cred.club" not in form and "Asha Rao" not in form
     save_contact(conn, a, name="Meera Iyer", role="PM", linkedin_url="", email="meera@cred.club",

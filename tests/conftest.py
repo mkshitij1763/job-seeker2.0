@@ -104,3 +104,36 @@ def seeded_two(settings, seeded):
     conn.commit()
     conn.close()
     return {"owner_apps": seeded, "roommate_app": app2, "j1": j1}
+
+
+def signed_in_client(settings, user_id: int = 1, *, follow_redirects: bool = True, **app_kwargs):
+    """A TestClient carrying a fresh session for user_id; for helpers that only have `settings`."""
+    from datetime import UTC, datetime
+
+    from fastapi.testclient import TestClient
+
+    from jobseeker.db.sessions import create_session
+    from jobseeker.web.app import create_app
+
+    conn = connect(settings.db_path)
+    token = create_session(conn, user_id, datetime.now(UTC))
+    conn.close()
+    return TestClient(create_app(settings, **app_kwargs), base_url="https://testserver",
+                      follow_redirects=follow_redirects, headers={"Origin": "https://testserver"},
+                      cookies={"__Host-js_session": token})
+
+
+@pytest.fixture
+def client_as(settings):
+    def make(user_id: int = 1, *, follow_redirects: bool = True, **app_kwargs):
+        return signed_in_client(settings, user_id, follow_redirects=follow_redirects, **app_kwargs)
+    return make
+
+
+@pytest.fixture
+def anon_client(settings):
+    from fastapi.testclient import TestClient
+
+    from jobseeker.web.app import create_app
+    return lambda **kw: TestClient(create_app(settings, **kw), base_url="https://testserver", follow_redirects=False,
+                                   headers={"Origin": "https://testserver"})

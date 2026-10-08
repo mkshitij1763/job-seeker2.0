@@ -4,15 +4,14 @@ import struct
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 
 STATIC = Path(__file__).resolve().parents[1] / "src" / "jobseeker" / "web" / "static"
 
 
 def client(settings):
-    return TestClient(create_app(settings))
+    return signed_in_client(settings)
 
 
 def test_base_has_phone_meta_and_toast(settings, seeded):

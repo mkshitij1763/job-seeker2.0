@@ -1,15 +1,14 @@
 import re
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 
-from jobseeker.web.app import create_app
+from tests.conftest import signed_in_client
 
 STATIC = Path(__file__).resolve().parents[1] / "src" / "jobseeker" / "web" / "static"
 
 
 def client(settings):
-    return TestClient(create_app(settings))
+    return signed_in_client(settings)
 
 
 def test_shell_has_sidebar_tabbar_and_active_page(settings, seeded):
@@ -56,6 +55,7 @@ def test_today_dashboard_greets_and_shows_stat_tiles(settings, seeded):
     a, b = seeded
     conn = connect(settings.db_path)
     conn.execute("UPDATE applications SET status = 'drafted' WHERE id IN (?, ?)", (a, b))
+    conn.execute("UPDATE users SET name = 'Kshitij Meshram' WHERE id = 1")
     conn.commit()
     html = client(settings).get("/today").text
     assert re.search(r"Good (morning|afternoon|evening), Kshitij\.", html)
@@ -66,8 +66,12 @@ def test_today_dashboard_greets_and_shows_stat_tiles(settings, seeded):
 
 
 def test_today_greeting_follows_local_hour(settings, seeded, monkeypatch):
+    from jobseeker.db.core import connect
     from jobseeker.web import pipeline as pipeline_routes
 
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE users SET name = 'Kshitij Meshram' WHERE id = 1")
+    conn.commit()
     for hour, word in ((8, "morning"), (14, "afternoon"), (21, "evening")):
         monkeypatch.setattr(pipeline_routes, "_local_hour", lambda h=hour: h)
         assert f"Good {word}, Kshitij." in client(settings).get("/today").text
@@ -287,11 +291,11 @@ def test_tabs_rebind_after_htmx_history_restore():
 
 
 def test_today_greeting_survives_blank_name(settings, seeded):
-    import yaml
+    from jobseeker.db.core import connect
 
-    data = yaml.safe_load(settings.preferences_path.read_text())
-    data["name"] = ""
-    settings.preferences_path.write_text(yaml.safe_dump(data))
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE users SET name = '' WHERE id = 1")  # the greeting reads users.name, not preferences
+    conn.commit()
     r = client(settings).get("/today")
     assert r.status_code == 200 and re.search(r"Good (morning|afternoon|evening)\.", r.text)
 
