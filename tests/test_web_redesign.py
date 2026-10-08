@@ -294,3 +294,9 @@ def test_today_greeting_survives_blank_name(settings, seeded):
     settings.preferences_path.write_text(yaml.safe_dump(data))
     r = client(settings).get("/today")
     assert r.status_code == 200 and re.search(r"Good (morning|afternoon|evening)\.", r.text)
+
+
+def test_skip_and_snooze_keep_the_current_filters(settings, seeded):
+    html = client(settings).get("/?band=all&city=bengaluru&msg=old").text
+    assert 'name="next" value="/?band=all&amp;city=bengaluru"' in html  # filters kept, stale banner dropped
+    assert 'name="next" value="/"' not in html

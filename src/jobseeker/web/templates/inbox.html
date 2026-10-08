@@ -8,6 +8,7 @@
   {%- endfor -%}
   /?{{ parts|join("&") }}
 {%- endmacro %}
+{% set here = q() %}
 {% macro city_of(r) %}{{ (r.location_city|title) if r.location_city else ("Remote" if r.remote else (r.location or "?")) }}{% endmacro %}
 <header class="page-head">
   <h1>Jobs</h1>
@@ -43,8 +44,8 @@
       <td class="mono muted">{{ (r.posted_at or r.first_seen_at)|age }}</td>
       <td class="why">{% for m in (r.matches|fromjson)[:1] %}<span class="ok">✓ {{ m }}</span>{% endfor %}{% for g in (r.gaps|fromjson)[:1] %}<span class="warnc">⚠ {{ g }}</span>{% endfor %}</td>
       <td class="acts">
-        <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="/"><button class="btn-ghost" data-key="s" title="Skip (s)">Skip</button></form>
-        <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="/"><button class="btn-ghost" data-key="z" title="Snooze 3 days (z)">Snooze</button></form>
+        <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="{{ here }}"><button class="btn-ghost" data-key="s" title="Skip (s)">Skip</button></form>
+        <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="{{ here }}"><button class="btn-ghost" data-key="z" title="Snooze 3 days (z)">Snooze</button></form>
       </td>
     </tr>
   {% else %}
@@ -70,8 +71,8 @@
         {% elif r.status == "drafted" %}<span class="next-step find">Find contacts →</span>
         {% else %}<span class="next-step wait">Drafts in next run</span>{% endif %}
         <div class="card-acts">
-          <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="/"><button>Skip</button></form>
-          <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="/"><button>Snooze</button></form>
+          <form method="post" action="/applications/{{ r.app_id }}/status"><input type="hidden" name="status" value="skipped"><input type="hidden" name="next" value="{{ here }}"><button>Skip</button></form>
+          <form method="post" action="/applications/{{ r.app_id }}/snooze"><input type="hidden" name="next" value="{{ here }}"><button>Snooze</button></form>
         </div>
       </div>
     </div>
