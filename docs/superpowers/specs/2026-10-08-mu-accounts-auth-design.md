@@ -73,14 +73,14 @@ New `Settings` fields (`src/jobseeker/config.py:11`), read from the environment.
   1. `users.google_sub = sub`.
   2. Else `users.email = lower(email) AND google_sub IS NULL`: the owner's first login. Set `google_sub`.
   3. Else `invites.email = lower(email)`: insert a `users` row and set `invites.accepted_at`.
-  4. Else render a 403 page: "This app is invite-only. Ask Kshitij for an invite." No row is created.
+  4. Else render a 403 page: "This app is invite-only. Ask Kshitij for an invite." It reuses `landing.html` (sub-project 6) with the invite note in place of the button; until then, a plain card. No row is created.
 - **Login rules:**
   - A user with `disabled_at` set is refused with the same 403 page.
   - Every login updates `last_login_at`, plus `name` from `claims["name"]`.
   - After the first login, identity is `sub`, so a changed Gmail address can't take over an account.
 - **`require_admin`** = `current_user` + `is_admin`, **else 404**.
 - **Admin pages** use the `ui.css` card layout and are reached from a sidebar link shown only to admins:
-  - `GET /admin`: invites (email, invited, accepted) with an add form and Remove buttons; users (email, name, last login, status) with Disable/Enable; and the **usage table**: rows are users, columns are each `usage.service`, showing today's daily services and this month's monthly services. Read-only.
+  - `GET /admin`: invites (email, invited, accepted) with an add form and Remove buttons; users (email, name, last login, status) with Disable/Enable; and the **usage table**: rows are users, columns are each `usage.service`, showing today's daily services and this month's monthly services. Read-only. Sub-project 6 adds a "Backups" card here.
   - `POST /admin/invites` (adds a lower-cased email; ignores duplicates).
   - `POST /admin/invites/{email}/remove` (doesn't affect an existing user).
   - `POST /admin/users/{id}/disable`: sets `disabled_at` and deletes the user's sessions. Refused for the last admin.
@@ -127,7 +127,9 @@ def require_admin(user=Depends(current_user)) -> User                # 404 unles
   - `inbox`, `pipeline` (with `/today`): included with `dependencies=[Depends(current_user)]`;
   - `application` (`web/application.py:25`) and `contacts` (`web/contacts.py:18`): `APIRouter(prefix="/applications", dependencies=[Depends(owned_app)])`;
   - the new `admin` router uses `require_admin`.
-- **Public routes (`PUBLIC`):** `/login`, `/auth/callback`, `/logout`, `/logout/all`, `/healthz`, `/sw.js`, `/static/*`, `/manifest.webmanifest`. `/logout*` require a session but tolerate a missing one. Until sub-project 6, an anonymous `/` redirects to `/login`.
+- **Public routes (`PUBLIC`):** `/login`, `/auth/callback`, `/logout`, `/logout/all`, `/healthz` (GET and HEAD), `/sw.js`, `/static/*`, `/manifest.webmanifest`. `/logout*` require a session but tolerate a missing one.
+- **`/` is the one mixed route.** It depends on `optional_user` (`current_user` that returns `None` instead of raising). A signed-in user gets the Jobs inbox (and `require_onboarded`, sub-project 3). An anonymous visitor gets the public landing page, `landing.html` (sub-project 6), or a 303 to `/login` until that template exists.
+- `/healthz` is defined by sub-project 6. It opens the DB read-only and doesn't use `get_conn`. It returns `200 {"ok": true}` or `503 {"ok": false, "check": "db" | "schema"}`, where `schema` means `user_version != LATEST` (§4.9).
 - **Background work:** `run_find` (`web/contacts.py:50`) receives `user_id`, and re-checks ownership on its own connection before doing anything.
 - **Templates:** `render` (`web/deps.py:21`) adds `user` to every template context. `today.html:6` reads `user.name`.
 
@@ -161,10 +163,10 @@ Every function that touches per-user data gets a required `user_id` parameter. T
 
 ### 4.9 The `jobseeker migrate` framework (`src/jobseeker/db/migrations.py`)
 
-- `MIGRATIONS: list[Migration(version, name, apply)]`, with `LATEST = MIGRATIONS[-1].version`. The versions in this release are v1 (this spec), v2 (sub-project 3), v3 (sub-project 4), v4 (sub-project 5) and v5 (sub-project 6).
-- **`jobseeker migrate [--dry-run] [--import DIR]`** (`--import` is used by v2, sub-project 3):
+- `MIGRATIONS: list[Migration(version, name, apply)]`, with `LATEST = MIGRATIONS[-1].version`. The versions in this release are v1 (this spec), v2 (sub-project 3: onboarding), v3 (sub-project 6: extras), v4 (sub-project 4: pipeline) and v5 (sub-project 5: outreach). The numbers order schema changes only; v3 and v4 don't depend on each other's tables.
+- **`jobseeker migrate [--dry-run]`** (there's no import flag: v2 reads the owner's files from `$JOBSEEKER_HOME/profile/`):
   1. **Exclusive access:** open the DB, `BEGIN IMMEDIATE` with a 5 s busy timeout, then roll back. If it times out: "Database is busy: stop jobseeker-web and the tick timer first". Exit 1.
-  2. **Backup:** write `data/backups/pre-migrate-v<from>-<timestamp>.db` with the SQLite backup API. If that fails, stop.
+  2. **Backup:** write `data/backups/pre-migrate-v<from>-<timestamp>.db` using `db/backup.py`'s snapshot function (unchanged; SQLite backup API). If that fails, stop. The hosting `deploy.sh` stops the web service and the tick timer around `migrate`.
   3. **Each pending version, in order:**
      - `PRAGMA foreign_keys=OFF` (outside a transaction), then `BEGIN IMMEDIATE`, then `apply(conn, ctx)`;
      - `PRAGMA foreign_key_check`: any row → `ROLLBACK`, print the rows, exit 1;
@@ -255,10 +257,10 @@ No network: Google's token endpoint is mocked with `respx`, and `verify_oauth2_t
   - the about 14 web test files switch from `TestClient(create_app(settings))` to `client_as(owner)`.
 - **Guard test** (`tests/test_web_guards.py`):
   - walk `app.routes`, collecting every dependency callable recursively from `route.dependant`;
-  - every `APIRoute` not in `PUBLIC` must include `current_user`;
+  - every `APIRoute` not in `PUBLIC` must include `current_user`, except `/`, which must include `optional_user`;
   - every path containing `{app_id}` must include `owned_app`;
   - every `/admin` path must include `require_admin`;
-  - **behavioural:** `anon_client` requests every non-public route (path params filled from `seeded_two`) and expects 303 to `/login`, or 401 with `HX-Redirect` when sent with `HX-Request`.
+  - **behavioural:** `anon_client` requests every non-public route (path params filled from `seeded_two`) and expects 303 to `/login`, or 401 with `HX-Redirect` when sent with `HX-Request`. An anonymous `/` gets the landing page (200) or a 303 to `/login` before sub-project 6, and never inbox data.
 - **Isolation** (`tests/test_isolation.py`):
   - the roommate gets 404 on every `/applications/{owner_app_id}…` route, GET and POST;
   - `/`, `/pipeline`, `/today`, the nav counts, `stats` and the facets show only the caller's rows;

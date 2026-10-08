@@ -6,7 +6,7 @@
 **Used by:**
 - sub-project 4: `AppConfig`, `effective_prefs`, `evaluate`/`reevaluate`, the role catalog;
 - sub-project 5: `users.outreach_enabled` UI hooks on Settings;
-- sub-project 6: the Settings card for push alerts, and export/delete coverage of its tables.
+- sub-project 6: the "Daily match alerts" Settings card (`UserPrefs.notify_new_matches`), and export/delete coverage of its tables.
 
 Research: `docs/superpowers/research/2026-10-08-onboarding-settings-proposal.md`.
 
@@ -59,6 +59,7 @@ A roommate who has just been invited signs in and is guided through **4 short st
 | `title_allow_extra` | `list[str] = []` | |
 | `experience_summary` | `str = ""` | |
 | `linkedin`, `github` | `str = ""` | |
+| `notify_new_matches` | `bool = True` | read by sub-project 6's daily alert; toggled on its "Daily match alerts" Settings card |
 
 - A separate `UserPrefs.complete()` validator, used at Finish and on Settings saves, requires:
   - ≥ 1 role or a custom role;
@@ -80,7 +81,7 @@ A roommate who has just been invited signs in and is guided through **4 short st
 - `roles`: the catalog, `[{label, query, allow: [keywords]}]`;
 - `companies_path` and `rubric_path`, defaulting to the **code checkout's** `companies.yaml` and `rubric.yaml` (the repo root, found from the package location), not `JOBSEEKER_HOME`.
 
-The last point fixes the server layout from the hosting spec, where `JOBSEEKER_HOME=/srv/jobseeker` and the checkout is `/srv/jobseeker/app`. On the Mac the two paths are the same. `Settings.companies_path` and `Settings.rubric_path` (`config.py:60-66`) are removed in favour of these. A missing `config/app.yaml` stops startup with "Run `jobseeker migrate --import …`, or copy config/app.example.yaml"; an example file ships in the repo.
+The last point fixes the server layout from the hosting spec, where `JOBSEEKER_HOME=/srv/jobseeker` and the checkout is `/srv/jobseeker/app`. On the Mac the two paths are the same. `Settings.companies_path` and `Settings.rubric_path` (`config.py:60-66`) are removed in favour of these. A missing `config/app.yaml` stops startup with "Run `jobseeker migrate` (with the owner's files in $JOBSEEKER_HOME/profile/), or copy config/app.example.yaml"; an example file ships in the repo.
 
 **Catalog seed** (written to `app.yaml` by v2; editable later):
 ```yaml
@@ -184,7 +185,7 @@ The sections are cards, top to bottom:
 1. **Profile:** name and email (read-only, from Google); LinkedIn and GitHub (`POST /settings/profile`).
 2. **What I'm looking for:** the same partial templates as onboarding (`_prefs_roles.html`, `_prefs_where.html`, `_prefs_experience.html`), each posting to `/settings/prefs/<section>`. A save of a **filter-affecting section** (roles, where, or the experience threshold and exclusions) first returns a preview card (§4.6), "This hides 120 jobs, brings back 14 and skips 3 drafted applications", with **Save** and **Cancel**. Save applies it. Scoring-only fields (summary, CTC, must-haves, deal-breakers) save directly, with "Scores refresh over the next runs" (sub-project 4).
 3. **Resume and facts:** file name, upload date, Replace (§4.4), and the facts review form.
-4. **Account:** "Download my data", "Sign out", "Sign out everywhere", "Delete my account". Sub-projects 5 and 6 add Gmail and alert cards here.
+4. **Account:** "Download my data", "Sign out", "Sign out everywhere", "Delete my account". Sub-project 5 adds the Gmail card, and sub-project 6 adds the "Daily match alerts" card.
 
 ### 4.6 Re-evaluation, two-way (`src/jobseeker/pipeline/evaluate.py`)
 
@@ -218,7 +219,7 @@ The sections are cards, top to bottom:
 
 ### 4.8 Migration v2: preferences, facts and resume
 
-`jobseeker migrate --import DIR` (default `JOBSEEKER_HOME/profile`; on the server, `data/import/` per the hosting spec):
+`jobseeker migrate` reads the owner's files from **`DIR = $JOBSEEKER_HOME/profile/`** (there's no import flag). For the move, the hosting runbook copies the Mac's `profile/` there:
 1. `CREATE TABLE user_prefs`, `user_facts` (§5).
 2. Read `DIR/preferences.yaml` with today's `load_preferences`:
    - **Per-user fields** become user 1's `UserPrefs`. `roles` are mapped from `search.queries` to catalog labels by an exact `query` match. Unmatched queries become `title_allow_extra` words, and the first unmatched one becomes `custom_role`. `title_deny` and `experience_summary` are copied verbatim, and `experience_years` is parsed from the summary if a "~N years" pattern is found, otherwise left `None`. `onboarded_at = now`, so the owner never sees onboarding, with the gaps reported.
@@ -257,7 +258,7 @@ A new user gets a `user_prefs` row (`data='{}'`, `version=1`, `onboarding_step='
 | Extraction stuck > 20 min | Shown as failed with "Try again" (stale claim) |
 | Step validation | 422, the same step re-rendered with field messages, data kept |
 | Finish with gaps | 303 to the first incomplete step with "Please finish this step" |
-| Missing `config/app.yaml` | Startup refused with the `migrate --import` / example-file hint |
+| Missing `config/app.yaml` | Startup refused with the `jobseeker migrate` / example-file hint |
 | v2 golden check mismatch | Migration rolled back; a field-by-field diff is printed |
 | Delete with the wrong email | 422 "The email doesn't match" |
 | Last admin deletes | Refused (button disabled; the POST returns 403) |
@@ -302,7 +303,7 @@ A new user gets a `user_prefs` row (`data='{}'`, `version=1`, `onboarding_step='
   - the fixture import produces `user_prefs`, `user_facts`, the resume file and `app.yaml`;
   - an existing `app.yaml` isn't overwritten;
   - a re-run is a no-op;
-  - without `--import`, it creates an empty, un-onboarded `user_prefs(1)`.
+  - with no `$JOBSEEKER_HOME/profile/preferences.yaml`, it creates an empty, un-onboarded `user_prefs(1)`.
 
 ## 8. Acceptance criteria
 
