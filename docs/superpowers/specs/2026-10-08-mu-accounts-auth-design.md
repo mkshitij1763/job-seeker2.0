@@ -73,7 +73,7 @@ New `Settings` fields (`src/jobseeker/config.py:11`), read from the environment.
   1. `users.google_sub = sub`.
   2. Else `users.email = lower(email) AND google_sub IS NULL`: the owner's first login. Set `google_sub`.
   3. Else `invites.email = lower(email)`: insert a `users` row and set `invites.accepted_at`.
-  4. Else render a 403 page: "This app is invite-only. Ask Kshitij for an invite." It reuses `landing.html` (sub-project 6) with the invite note in place of the button; until then, a plain card. No row is created.
+  4. Else render a 403 page: "This app is invite-only. Ask {owner_first_name} for an invite." `{owner_first_name}` comes from the same helper the landing page uses (sub-project 6): the first name of `users.id = 1`, falling back to "the person who shared this link". No owner name is hard-coded. It reuses `landing.html` (sub-project 6) with the invite note in place of the button; until then, a plain card. No row is created.
 - **Login rules:**
   - A user with `disabled_at` set is refused with the same 403 page.
   - Every login updates `last_login_at`, plus `name` from `claims["name"]`.

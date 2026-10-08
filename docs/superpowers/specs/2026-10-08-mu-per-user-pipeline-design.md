@@ -8,7 +8,7 @@
 
 **Used by:**
 - sub-project 5: `drafts_enabled(user)` is replaced by `users.outreach_enabled`;
-- **calls into sub-project 6** (`…-extras` spec, devops-lead): `push.notify_new_matches(conn, user_id, run_started_at, now)` after each user's scoring, and `backup.nightly.nightly_backup(conn, settings, now)` plus the `HEALTHCHECK_PING_URL` ping from `tick`. If this sub-project is built first, both are stubbed with those exact signatures.
+- **calls into sub-project 6** (`…-extras` spec, devops-lead): `push.notify_new_matches(conn, user_id, run_started_at, now)` after each user's scoring, and `backup.nightly.nightly_backup(conn, settings, now, force=False) -> BackupResult(path, ok, uploaded, error, skipped)` plus the `HEALTHCHECK_PING_URL` ping from `tick`. If this sub-project is built first, both are stubbed with those exact signatures.
 
 **Hosting interface (sub-project 1):** systemd `jobseeker-tick.timer` runs **`jobseeker tick`** every 5 minutes (`Type=oneshot`, `TimeoutStartSec=3h`). Research: `docs/superpowers/research/2026-10-08-per-user-pipeline-proposal.md` (audit §5).
 
@@ -175,8 +175,8 @@ WHERE locks.heartbeat_at < :now_minus_takeover
 2. Try the lock. If it isn't free, exit 0 ("run in progress").
 3. **Is the scheduled run due?** `app_now() ≥ today at daily_at`, **and** no `runs` row with `kind='fetch' AND trigger='schedule'` and a non-null `finished_at` started on today's IST date, **and** fewer than `max_attempts_per_day` such rows started today. If due:
    - `run_all(all active users, trigger='schedule', fetch=True, plan_cap=max_searches_per_run)`;
-   - then, **even if the run failed**, `backup.nightly.nightly_backup(conn, settings, now)` (sub-project 6). It's idempotent per IST day, keyed on its `backups` row, so a retried scheduled run doesn't back up twice;
-   - then ping `HEALTHCHECK_PING_URL` (if set) on success, or `<url>/fail` if the run aborted or the backup failed (5 s timeout; a ping failure is only logged);
+   - then, **even if the run failed**, `backup.nightly.nightly_backup(conn, settings, now, force=False)` (sub-project 6). It returns `BackupResult(path, ok, uploaded, error, skipped)` and **doesn't raise on a failed B2 upload** (that's `ok=False`). It's idempotent per IST day, keyed on its `backups` row: a retried scheduled run gets `skipped=True` instead of a second backup;
+   - then ping `HEALTHCHECK_PING_URL` (if set): `<url>` on success, or `<url>/fail` if the run aborted, **or** `nightly_backup` raised, **or** it returned `ok=False`. A `skipped=True` result counts as success when the day's earlier backup was ok (5 s timeout; a ping failure is only logged);
    - release and exit.
 
    A crashed attempt (no `finished_at`, lock later taken over) is retried on a later tick, up to `max_attempts_per_day`.
@@ -260,7 +260,7 @@ CREATE INDEX idx_runs_kind ON runs (kind, trigger, started_at);
 | A user's share is used | That user stops (`stopped_by=share`); others continue |
 | Global cap or provider quota | All users stop scoring; drafting follows the `run.py:202-205` rule |
 | `notify_new_matches` raises | Caught; "Couldn't send the match alert" in that user's errors; the run continues |
-| Backup or ping fails | Recorded by sub-project 6's `backups` row; the ping goes to `<url>/fail`; tick still exits 0 |
+| Backup fails (raises, or returns `ok=False`, e.g. a failed B2 upload) or ping fails | Recorded by sub-project 6's `backups` row; the ping goes to `<url>/fail`; tick still exits 0 |
 | Fetch-now limits | Refused with a reason and the next possible time |
 | `tzdata` missing | Impossible once it's a dependency; `clock.py` imports `ZoneInfo("Asia/Kolkata")` at import time, so a broken install fails loudly at startup |
 
@@ -302,7 +302,8 @@ No network. JobSpy (`scrape`), `describe`, the ATS clients and the LLM are faked
   - `notify_new_matches` is called once per user per scheduled or Fetch-now run (never for `cli`), with that user run's `started_at`, after scoring and before drafting, with no open transaction (`conn.in_transaction` is False);
   - a raising stub adds the error line and doesn't fail the run;
   - `nightly_backup` is called after every scheduled-run attempt, including a failed one, and never after Fetch-now or CLI runs;
-  - the ping goes to `<url>` on success and to `<url>/fail` when the run aborted or the backup raised.
+  - the ping goes to `<url>` on success, and to `<url>/fail` when the run aborted, when the backup raised, or when it returned `BackupResult(ok=False)` (e.g. a failed upload);
+  - a second scheduled attempt the same IST day gets `skipped=True` and doesn't count as a failure.
 - **Runs and notes:**
   - user runs link to their fetch run; the roommate never sees the owner's run errors;
   - each `stopped_by` and the trimmed-search note render;

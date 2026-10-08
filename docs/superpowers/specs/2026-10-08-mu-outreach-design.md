@@ -72,7 +72,7 @@ Keep the owner's full outreach flow (Find contacts, AI drafts, Approve → Gmail
 - **Reconnect UX:** when an approve, Email #3 or follow-up route gets `GmailUnavailable(reconnect=True)`, it redirects back with `err="Gmail needs reconnecting"`, and the flash area renders a **Reconnect Gmail** button linking to `/gmail/connect?next=/applications/<id>`. After consent the user is back on the job and taps Approve again. Drafts already created in that request are kept and named, as today (`web/application.py:179-186`).
 - **Settings → Account** gains a Gmail card (only when outreach is on):
   - "Drafts go to x@gmail.com · connected 3 days ago · Reconnect", or "Not connected · Connect Gmail";
-  - a note before the first connect: "Google will warn that this app isn't verified. It's Kshitij's personal app: tap Advanced → Continue."
+  - a note before the first connect: "Google will warn that this app isn't verified. It's {owner_first_name}'s personal app: tap Advanced → Continue." `{owner_first_name}` uses the landing page's owner-first-name helper (sub-project 6), with the same fallback.
 - **Testing mode:** ≤ 100 test users. Each outreach user's Gmail address must be added as a test user in Google Cloud → OAuth consent screen before connecting, otherwise Google answers "access blocked". The admin toggle shows this as a checklist (§4.2).
 
 ### 4.2 The `outreach_enabled` gate

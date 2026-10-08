@@ -208,7 +208,7 @@ The sections are cards, top to bottom:
   - `job_verdicts.csv`: `job_id, title, company, filter_reason, prescore`.
 
   It contains no other user's data and no shared data beyond what's linked from the user's own applications.
-- **`GET /settings/delete`:** a confirm card. "Type your email to confirm. Shared job listings stay. Backups keep copies for up to 7 days." For the last admin, the button is disabled with "You're the only admin".
+- **`GET /settings/delete`:** a confirm card. "Type your email to confirm. Shared job listings stay. Backups keep copies for up to 4 weeks." For the last admin, the button is disabled with "You're the only admin".
 - **`POST /settings/delete`** (email must match): one transaction deleting, in order:
   1. `drafts`, `events`, `application_contacts` and `contact_candidates` for the user's applications;
   2. `applications`, `scores`, `user_jobs`, `blocklist`, `usage`, `runs WHERE user_id`, `user_prefs`, `user_facts`, `sessions`, and the user's `invites` row (re-entry needs a new invite);
