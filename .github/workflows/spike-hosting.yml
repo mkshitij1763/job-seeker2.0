@@ -1,10 +1,16 @@
 # THROWAWAY: hosting feasibility spike. No secrets used. Branch spike/hosting only.
 name: spike-hosting
-on: workflow_dispatch
+on:
+  push:
+    branches: [spike/hosting]
 jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
