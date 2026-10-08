@@ -21,6 +21,7 @@ from jobseeker.outreach.drafter import greeting, signature
 from jobseeker.pipeline.run import draft_application
 from jobseeker.profile.facts import load_facts
 from jobseeker.status import InvalidTransition
+from jobseeker.web import oauth
 from jobseeker.web.deps import get_conn, render
 
 router = APIRouter(prefix="/applications")
@@ -29,7 +30,7 @@ REGENERATABLE = {"new", "shortlisted", "drafted", "approved"}
 
 
 def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err: str | None = None):
-    local = next_ and next_.startswith("/") and not next_.startswith(("//", "/\\"))  # "//host" leaves the site
+    local = oauth.local_path(next_) is not None
     target = next_ if local else f"/applications/{app_id}"
     if msg or err:
         sep = "&" if "?" in target else "?"

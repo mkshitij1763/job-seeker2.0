@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     apify_api_token: str = ""
     hunter_api_key: str = ""
     owner_email: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    base_url: str = ""
+    secret_key: str = ""
+    cookie_secure: bool = True
     gemini_api_key: str = ""
     cloudflare_api_token: str = ""
     cloudflare_account_id: str = ""
