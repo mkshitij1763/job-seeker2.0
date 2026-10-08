@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Run the jobseeker CLI on the server as the service user with .env loaded: js migrate --dry-run, js tick, ...
+set -euo pipefail
+HOME_DIR=${HOME_DIR:-/srv/jobseeker}
+exec sudo -u jobseeker -H env JOBSEEKER_HOME="$HOME_DIR" bash -c \
+  'set -a; . "$JOBSEEKER_HOME/.env"; set +a; cd "$JOBSEEKER_HOME/app" && exec ~/.local/bin/uv run --frozen --no-sync jobseeker "$@"' \
+  _ "$@"
