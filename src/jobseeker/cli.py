@@ -142,3 +142,30 @@ def auth_gmail() -> None:
     settings = Settings()
     authorize(settings.secrets_dir / "credentials.json", settings.secrets_dir / "token.json")
     typer.echo("Gmail connected (drafts only).")
+
+
+@app.command("gen-key")
+def gen_key() -> None:
+    """Print 32 random bytes as base64 (SECRET_KEY, TOKEN_KEY, BACKUP_KEY)."""
+    import base64
+    import secrets
+
+    typer.echo(base64.b64encode(secrets.token_bytes(32)).decode())
+
+
+@app.command("vapid-keys")
+def vapid_keys() -> None:
+    """Print a new VAPID key pair for .env (rotating it invalidates every push subscription)."""
+    from cryptography.hazmat.primitives import serialization
+    from py_vapid import Vapid02
+
+    from jobseeker.b64 import urlsafe_encode
+
+    v = Vapid02()
+    v.generate_keys()
+    private = v.private_key.private_numbers().private_value.to_bytes(32, "big")
+    public = v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    owner = Settings().model_dump().get("owner_email") or "you@example.com"
+    typer.echo(f"VAPID_PRIVATE_KEY={urlsafe_encode(private)}")
+    typer.echo(f"VAPID_PUBLIC_KEY={urlsafe_encode(public)}")
+    typer.echo(f"VAPID_SUBJECT=mailto:{owner}")

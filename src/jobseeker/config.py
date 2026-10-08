@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     cloudflare_api_token: str = ""
     cloudflare_account_id: str = ""
     backup_dir: Path | None = None
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_subject: str = ""
+    backup_key: str = ""
+    backup_s3_endpoint: str = ""
+    backup_s3_region: str = ""
+    backup_s3_bucket: str = ""
+    backup_s3_key_id: str = ""
+    backup_s3_secret: str = ""
+    healthcheck_ping_url: str = ""
 
     @property
     def backup_path(self) -> Path:
