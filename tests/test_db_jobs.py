@@ -53,7 +53,7 @@ def test_jobs_needing_score_respects_filter_hash_and_version():
     assert [r["id"] for r in jobs_needing_score(conn, "v1", 10)] == [a]
     result = ScoreResult(score=80, breakdown={"role_fit": 30}, matches=["SQL"], gaps=[],
                          recommendation="apply", role_family="senior_product_analyst")
-    save_score(conn, a, result, "openai/gpt-oss-20b", "v1", get_job(conn, a)["jd_hash"])
+    save_score(conn, 1, a, result, "openai/gpt-oss-20b", "v1", get_job(conn, a)["jd_hash"])
     assert jobs_needing_score(conn, "v1", 10) == []
     assert [r["id"] for r in jobs_needing_score(conn, "v2", 10)] == [a]
     assert [r["id"] for r in jobs_needing_score(conn, "v1", 10, force=True)] == [a]
@@ -133,7 +133,7 @@ def test_expire_unscored_and_missing_prescore():
     old, _ = upsert_job(conn, make_job(source_job_id="old", fingerprint="fo", posted_at=now - timedelta(days=9)))
     fresh, _ = upsert_job(conn, make_job(source_job_id="new", fingerprint="fn", posted_at=now - timedelta(days=1)))
     scored, _ = upsert_job(conn, make_job(source_job_id="s", fingerprint="fs", posted_at=now - timedelta(days=9)))
-    save_score(conn, scored, ScoreResult(score=80, breakdown={}, matches=[], gaps=[], recommendation="apply",
+    save_score(conn, 1, scored, ScoreResult(score=80, breakdown={}, matches=[], gaps=[], recommendation="apply",
                                          role_family="other"), "m", "v1", "h")
     assert expire_unscored(conn, now, 7) == 1
     assert get_job(conn, old)["filter_reason"] == "stale: never scored"

@@ -20,7 +20,7 @@ from jobseeker.db.contacts_repo import (
 from jobseeker.db.core import connect, iso
 from jobseeker.db.jobs import get_job
 from jobseeker.db.applications import get_application
-from jobseeker.db.usage import Budget
+from jobseeker.db.usage import Budget, contacts_limits
 from jobseeker.llm import LLM
 from jobseeker.pipeline.normalize import normalize_company
 
@@ -55,9 +55,10 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     if emailed_count(conn, app_id):
         raise FinderError("People were already emailed for this job; edit or remove them individually instead")
     app = get_application(conn, app_id)
+    user_id = app["user_id"]
     job = get_job(conn, app["job_id"])
     company, norm = job["company"], normalize_company(job["company"])
-    budget = Budget(conn, prefs.contacts, deps.now())
+    budget = Budget(conn, user_id, contacts_limits(prefs.contacts), deps.now())
     notes: list[str] = []
     family = (conn.execute("SELECT role_family FROM scores WHERE job_id = ? ORDER BY id DESC LIMIT 1",
                            (job["id"],)).fetchone() or {"role_family": ""})["role_family"]

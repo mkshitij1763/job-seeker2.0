@@ -153,3 +153,29 @@ def test_v1_requires_owner_email(tmp_path):
     with pytest.raises(m.MigrationError, match="OWNER_EMAIL"):
         m.migrate(db, ctx, tmp_path / "bk", migrations=[m.Migration(1, "users", m.migrate_v1)])
     assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 0
+
+
+def _table_shape(conn):
+    shape = {}
+    for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"):
+        cols = sorted((r[1], r[2].upper(), r[3], r[4], r[5]) for r in conn.execute(f"PRAGMA table_info({name})"))
+        fks = sorted((r[2], r[3], r[4]) for r in conn.execute(f"PRAGMA foreign_key_list({name})"))
+        shape[name] = (cols, fks)
+    return shape
+
+
+def test_fresh_schema_matches_migrated_v0(tmp_path):
+    fresh = connect(tmp_path / "fresh.sqlite")
+    db = live_like_v0(tmp_path / "old.sqlite")
+    m.migrate(db, _ctx(tmp_path), tmp_path / "bk")
+    assert _table_shape(fresh) == _table_shape(connect(db))
+
+
+def test_fresh_db_has_placeholder_owner_and_accepts_owner_rows(tmp_path):
+    from jobseeker.db.applications import ensure_application
+    from jobseeker.db.jobs import upsert_job
+    from tests.factories import make_job
+    conn = connect(tmp_path / "db.sqlite")
+    assert tuple(conn.execute("SELECT id, email, is_admin FROM users").fetchone()) == (1, "", 1)
+    job_id, _ = upsert_job(conn, make_job())
+    assert ensure_application(conn, 1, job_id) > 0

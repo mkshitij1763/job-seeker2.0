@@ -244,3 +244,6 @@ def migrate_v1(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
         raise MigrationError("v1: user_jobs doesn't mirror jobs")
     if conn.execute("SELECT COUNT(*) FROM applications WHERE user_id != 1").fetchone()[0]:
         raise MigrationError("v1: an application isn't owned by user 1")
+
+
+MIGRATIONS.append(Migration(1, "users and scoping", migrate_v1))

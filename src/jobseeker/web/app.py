@@ -44,6 +44,12 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     from jobseeker.llm import FallbackLLM, build_llm
     from jobseeker.web import application, contacts, inbox, pipeline
 
+    from jobseeker.db.core import connect
+    from jobseeker.db.users import ensure_owner
+
+    boot = connect(settings.db_path)  # raises SchemaOutOfDate on an un-migrated database: fail at startup
+    ensure_owner(boot, settings.owner_email)
+    boot.close()
     app = FastAPI(title="Job Seeker", docs_url=None, redoc_url=None)
     templates = Jinja2Templates(directory=HERE / "templates")
     templates.env.filters.update(highlight=highlight, age=age, fromjson=json.loads, personal_note=personal_note)

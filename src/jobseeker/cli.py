@@ -12,7 +12,12 @@ app = typer.Typer(no_args_is_help=True, help="Personal job search and outreach a
 
 
 def _load():
+    from jobseeker.db.users import ensure_owner
+
     settings = Settings()
+    conn = connect(settings.db_path)
+    ensure_owner(conn, settings.owner_email)
+    conn.close()
     return settings, load_preferences(settings.preferences_path), load_rubric(settings.rubric_path)
 
 
@@ -36,6 +41,7 @@ def init() -> None:
 
 def _run(fetch: bool, force: bool) -> None:
     from jobseeker.db.companies import active_companies
+    from jobseeker.db.users import OWNER_ID
     from jobseeker.pipeline.run import run_daily
     from jobseeker.profile.facts import load_facts
     from jobseeker.sources.http import make_client
@@ -46,7 +52,7 @@ def _run(fetch: bool, force: bool) -> None:
     facts = load_facts(settings.facts_path)
     sources = build_sources(load_companies(settings.companies_path), active_companies(conn), prefs.search)
     with make_client() as client:
-        stats = run_daily(conn, sources=sources, client=client, llm=build_llm(settings),
+        stats = run_daily(conn, user_id=OWNER_ID, sources=sources, client=client, llm=build_llm(settings),
                           facts=facts, prefs=prefs, rubric=rubric, fetch=fetch, force_rescore=force)
     typer.echo(json.dumps(stats.__dict__, indent=2))
 

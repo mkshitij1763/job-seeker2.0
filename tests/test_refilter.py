@@ -23,9 +23,9 @@ def test_refilter_applies_current_rules_to_stored_jobs(prefs):
     senior = _job(conn, 2, jd_text="Needs 4+ years of experience.")
     approved = _job(conn, 3, jd_text="Needs 6+ years of experience.")
     old = _job(conn, 4, jd_text="Fine.", posted_at=datetime(2025, 1, 1, tzinfo=UTC))
-    a_senior = ensure_application(conn, senior, NOW)
+    a_senior = ensure_application(conn, 1, senior, NOW)
     transition(conn, a_senior, "drafted", now=NOW)
-    a_approved = ensure_application(conn, approved, NOW)
+    a_approved = ensure_application(conn, 1, approved, NOW)
     transition(conn, a_approved, "drafted", now=NOW)
     transition(conn, a_approved, "approved", now=NOW)
 

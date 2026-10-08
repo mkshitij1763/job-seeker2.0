@@ -1,3 +1,38 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY,
+  google_sub TEXT UNIQUE,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  disabled_at TEXT,
+  created_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+CREATE TABLE IF NOT EXISTS invites (
+  email TEXT PRIMARY KEY,
+  invited_by INTEGER REFERENCES users (id),
+  created_at TEXT NOT NULL,
+  accepted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+CREATE TABLE IF NOT EXISTS user_jobs (
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  job_id INTEGER NOT NULL REFERENCES jobs (id),
+  filter_reason TEXT,
+  prescore INTEGER,
+  jd_hash TEXT NOT NULL,
+  evaluated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, job_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_jobs_open ON user_jobs (user_id, filter_reason);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER PRIMARY KEY,
   source TEXT NOT NULL,
@@ -24,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs (fingerprint);
 
 CREATE TABLE IF NOT EXISTS scores (
   id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
   job_id INTEGER NOT NULL REFERENCES jobs (id),
   score INTEGER NOT NULL,
   breakdown TEXT NOT NULL,
@@ -36,7 +72,7 @@ CREATE TABLE IF NOT EXISTS scores (
   jd_hash TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_scores_job ON scores (job_id);
+CREATE INDEX IF NOT EXISTS idx_scores_user_job ON scores (user_id, job_id, id);
 
 CREATE TABLE IF NOT EXISTS contacts (
   id INTEGER PRIMARY KEY,
@@ -53,7 +89,8 @@ CREATE TABLE IF NOT EXISTS contacts (
 
 CREATE TABLE IF NOT EXISTS applications (
   id INTEGER PRIMARY KEY,
-  job_id INTEGER NOT NULL UNIQUE REFERENCES jobs (id),
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  job_id INTEGER NOT NULL REFERENCES jobs (id),
   contact_id INTEGER REFERENCES contacts (id),
   status TEXT NOT NULL DEFAULT 'new',
   snoozed_until TEXT,
@@ -69,7 +106,8 @@ CREATE TABLE IF NOT EXISTS applications (
   find_error TEXT NOT NULL DEFAULT '',
   find_started_at TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  UNIQUE (user_id, job_id)
 );
 
 CREATE TABLE IF NOT EXISTS drafts (
@@ -95,6 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_events_app ON events (application_id);
 
 CREATE TABLE IF NOT EXISTS blocklist (
   id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
   contact_id INTEGER REFERENCES contacts (id),
   company TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
@@ -106,7 +145,9 @@ CREATE TABLE IF NOT EXISTS runs (
   started_at TEXT NOT NULL,
   finished_at TEXT,
   stats TEXT NOT NULL DEFAULT '{}',
-  errors TEXT NOT NULL DEFAULT '[]'
+  errors TEXT NOT NULL DEFAULT '[]',
+  user_id INTEGER REFERENCES users (id),
+  kind TEXT NOT NULL DEFAULT 'legacy'
 );
 
 CREATE TABLE IF NOT EXISTS discovered_companies (
@@ -160,8 +201,9 @@ CREATE TABLE IF NOT EXISTS company_domains (
 );
 
 CREATE TABLE IF NOT EXISTS usage (
+  user_id INTEGER NOT NULL REFERENCES users (id),
   period TEXT NOT NULL,
   service TEXT NOT NULL,
   amount REAL NOT NULL DEFAULT 0,
-  PRIMARY KEY (period, service)
+  PRIMARY KEY (user_id, period, service)
 );

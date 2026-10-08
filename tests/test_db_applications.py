@@ -19,13 +19,13 @@ NOW = datetime(2026, 10, 7, 2, 0, tzinfo=UTC)
 def app_id():
     conn = connect(":memory:")
     job_id, _ = upsert_job(conn, make_job())
-    return conn, ensure_application(conn, job_id, NOW)
+    return conn, ensure_application(conn, 1, job_id, NOW)
 
 
 def test_ensure_application_idempotent(app_id):
     conn, a = app_id
     job_id = get_application(conn, a)["job_id"]
-    assert ensure_application(conn, job_id) == a
+    assert ensure_application(conn, 1, job_id) == a
 
 
 def test_transition_logs_event_and_rejects_invalid(app_id):
@@ -76,7 +76,7 @@ def test_contact_reuse_and_blocklist(app_id):
     assert get_status(conn, a) == "not_interested"
     assert "cred" in blocked_companies(conn)
     job2, _ = upsert_job(conn, make_job(source_job_id="other", fingerprint="fp-other"))
-    a2 = ensure_application(conn, job2)
+    a2 = ensure_application(conn, 1, job2)
     with pytest.raises(BlockedContact):
         save_contact(conn, a2, name="Asha", role="PM", linkedin_url="",
                      email="asha@cred.club", email_status="verified")

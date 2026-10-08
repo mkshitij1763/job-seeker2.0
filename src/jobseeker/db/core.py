@@ -60,7 +60,8 @@ def connect(path: Path | str, *, check_version: bool = True) -> sqlite3.Connecti
 
 
 def _seed_fresh(conn: sqlite3.Connection) -> None:
-    """Rows a brand-new database needs."""
+    """A new database starts with its owner (user 1); ensure_owner() fills the email from OWNER_EMAIL."""
+    conn.execute("INSERT INTO users (id, email, name, is_admin, created_at) VALUES (1, '', '', 1, ?)", (utcnow(),))
 
 
 def iso(dt: datetime) -> str:

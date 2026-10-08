@@ -173,8 +173,8 @@ def _fill_linkedin_descriptions(conn, stats: RunStats, candidates: list[dict], f
         stats.errors.append(f"linkedin descriptions: {failures} failed (last: {last_error})")
 
 
-def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, prefs: Preferences, rubric: Rubric,
-         now: datetime, fetch: bool, force_rescore: bool, describe: Describe) -> None:
+def _run(conn, stats: RunStats, *, user_id: int, sources, client, llm: LLM, facts: Facts, prefs: Preferences,
+         rubric: Rubric, now: datetime, fetch: bool, force_rescore: bool, describe: Describe) -> None:
     wake_snoozed(conn, now)
     if fetch:
         _fetch(conn, stats, sources, client, facts, prefs, now)
@@ -192,9 +192,9 @@ def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, pref
             stats.errors.append(f"score job {row['id']}: {e}")
             continue
         model = getattr(llm, "last_model", None) or prefs.models.scoring  # a fallback may have scored it
-        save_score(conn, row["id"], result, model, rubric.version, row["jd_hash"])
+        save_score(conn, user_id, row["id"], result, model, rubric.version, row["jd_hash"])
         stats.scored += 1
-        app_id = ensure_application(conn, row["id"], now)
+        app_id = ensure_application(conn, user_id, row["id"], now)
         if result.recommendation == "apply" and get_status(conn, app_id) == "new":
             transition(conn, app_id, "shortlisted", {"score": result.score}, now)
             stats.shortlisted += 1
@@ -215,7 +215,7 @@ def _run(conn, stats: RunStats, *, sources, client, llm: LLM, facts: Facts, pref
             stats.errors.append(f"draft application {app_id}: {e}")
 
 
-def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Facts, prefs: Preferences,
+def run_daily(conn: sqlite3.Connection, *, user_id: int, sources, client, llm: LLM, facts: Facts, prefs: Preferences,
               rubric: Rubric, now: datetime | None = None, fetch: bool = True,
               force_rescore: bool = False,
               clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -227,7 +227,7 @@ def run_daily(conn: sqlite3.Connection, *, sources, client, llm: LLM, facts: Fac
     stats = RunStats()
     run_id = start_run(conn, now)
     try:
-        _run(conn, stats, sources=sources, client=client, llm=llm, facts=facts, prefs=prefs, rubric=rubric,
+        _run(conn, stats, user_id=user_id, sources=sources, client=client, llm=llm, facts=facts, prefs=prefs, rubric=rubric,
              now=now, fetch=fetch, force_rescore=force_rescore, describe=describe)
     except Exception as e:  # the run log must always be closed
         stats.errors.append(f"run aborted: {type(e).__name__}: {e}")

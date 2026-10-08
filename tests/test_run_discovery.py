@@ -47,7 +47,7 @@ def raw(**kw):
 
 def run(conn, sources, prefs, rubric, facts, llm=None, **kw):
     kw.setdefault("now", NOW)
-    return run_daily(conn, sources=sources, client=kw.pop("client", None), llm=llm or FakeLLM(handler=handler),
+    return run_daily(conn, user_id=1, sources=sources, client=kw.pop("client", None), llm=llm or FakeLLM(handler=handler),
                      facts=facts, prefs=prefs, rubric=rubric, **kw)
 
 

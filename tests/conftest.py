@@ -66,10 +66,10 @@ def seeded(settings):
         job_id, _ = upsert_job(conn, make_job(source_job_id=f"s{i}", fingerprint=f"fp{i}",
                                               title=f"Senior Product Analyst {i}",
                                               jd_text="We want SQL and A/B Testing skills."))
-        save_score(conn, job_id, ScoreResult(score=score, breakdown={"role_fit": 30}, matches=["SQL", "A/B"],
+        save_score(conn, 1, job_id, ScoreResult(score=score, breakdown={"role_fit": 30}, matches=["SQL", "A/B"],
                                              gaps=["Tableau"], recommendation=rec, role_family="senior_product_analyst"),
                    "m", "v1", "h")
-        app_id = ensure_application(conn, job_id)
+        app_id = ensure_application(conn, 1, job_id)
         if rec == "apply":
             transition(conn, app_id, "shortlisted")
             save_draft(conn, app_id, "email", "Subject", "Email body citing 67%.")

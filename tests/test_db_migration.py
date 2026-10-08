@@ -20,7 +20,7 @@ def test_migrates_mvp_database(tmp_path):
     raw = sqlite3.connect(path)
     raw.executescript(SCHEMA_V0)
     raw.close()
-    conn = connect(path)
+    conn = connect(path, check_version=False)
     job_id, _ = upsert_job(conn, make_job())
     # Turn it back into an MVP-era database.
     conn.execute("ALTER TABLE jobs DROP COLUMN prescore")
@@ -28,7 +28,7 @@ def test_migrates_mvp_database(tmp_path):
     conn.commit()
     conn.close()
 
-    conn = connect(path)
+    conn = connect(path, check_version=False)
     assert "prescore" in _columns(conn, "jobs")
     assert "status" in _columns(conn, "discovered_companies")
     assert conn.execute("SELECT title FROM jobs WHERE id = ?", (job_id,)).fetchone()[0] == "Senior Product Analyst"
@@ -44,19 +44,25 @@ def test_reconnect_does_not_alter_again(tmp_path):
 
 def test_migration_adds_jd_attempts(tmp_path):
     path = tmp_path / "db.sqlite"
-    conn = connect(path)
+    raw = sqlite3.connect(path)
+    raw.executescript(SCHEMA_V0)
+    raw.close()
+    conn = connect(path, check_version=False)
     conn.execute("ALTER TABLE jobs DROP COLUMN jd_attempts") if "jd_attempts" in _columns(conn, "jobs") else None
     conn.commit()
     conn.close()
-    conn = connect(path)
+    conn = connect(path, check_version=False)
     assert "jd_attempts" in _columns(conn, "jobs")
 
 
 def test_migration_adds_catch_all_at(tmp_path):
     path = tmp_path / "db.sqlite"
-    conn = connect(path)
+    raw = sqlite3.connect(path)
+    raw.executescript(SCHEMA_V0)
+    raw.close()
+    conn = connect(path, check_version=False)
     conn.execute("ALTER TABLE company_domains DROP COLUMN catch_all_at") if "catch_all_at" in _columns(
         conn, "company_domains") else None
     conn.commit()
     conn.close()
-    assert "catch_all_at" in _columns(connect(path), "company_domains")
+    assert "catch_all_at" in _columns(connect(path, check_version=False), "company_domains")

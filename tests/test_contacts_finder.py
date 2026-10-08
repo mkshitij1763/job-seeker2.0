@@ -64,7 +64,7 @@ def setup_app():
     conn = connect(":memory:")
     job_id, _ = upsert_job(conn, make_job(company="Zepto", title="Associate Product Manager",
                                           jd_text="Own the funnel. 1-2 years of experience."))
-    return conn, ensure_application(conn, job_id, NOW)
+    return conn, ensure_application(conn, 1, job_id, NOW)
 
 
 def llm_for(picks=PICKS, domain_index=0):
@@ -123,11 +123,11 @@ def test_blocked_people_are_excluded(prefs):
     d, _ = deps(FakeSMTP(default=250))
     find_contacts(conn, app, prefs, d)
     for p in people(conn, app):  # all three said not interested (Task 8 makes Not interested do this)
-        conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
+        conn.execute("INSERT INTO blocklist (user_id, contact_id, company, reason, at) VALUES (1, ?, '', 'not interested', ?)",
                      (p["contact_id"], NOW.isoformat()))
     conn.commit()
     job2, _ = upsert_job(conn, make_job(company="Zepto", title="Product Manager", source_job_id="z2", fingerprint="z2"))
-    app2 = ensure_application(conn, job2, NOW)
+    app2 = ensure_application(conn, 1, job2, NOW)
     d2, _ = deps(FakeSMTP(default=250), llm=llm_for({"picks": [{"index": 0, "label": "peer", "reason": "r"}]}))
     with pytest.raises(FinderError):
         find_contacts(conn, app2, prefs, d2)  # every Zepto person found is blocked -> nobody left
@@ -137,7 +137,7 @@ def test_blocked_contact_without_linkedin_url_is_excluded_by_name(prefs):
     conn, app = setup_app()
     cid = conn.execute("""INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source)
                           VALUES ('Zepto', 'Dr. Asha Rao', '', '', 'asha@zeptonow.com', 'unverified', 'manual')""").lastrowid
-    conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
+    conn.execute("INSERT INTO blocklist (user_id, contact_id, company, reason, at) VALUES (1, ?, '', 'not interested', ?)",
                  (cid, NOW.isoformat()))
     conn.commit()
     d, _ = deps(FakeSMTP(default=250))

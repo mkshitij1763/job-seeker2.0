@@ -28,14 +28,15 @@ def get_events(conn: sqlite3.Connection, app_id: int) -> list[dict]:
     return [dict(r) for r in rows.fetchall()]
 
 
-def ensure_application(conn: sqlite3.Connection, job_id: int, now: datetime | None = None) -> int:
+def ensure_application(conn: sqlite3.Connection, user_id: int, job_id: int, now: datetime | None = None) -> int:
     ts = _now(now)
     conn.execute(
-        "INSERT OR IGNORE INTO applications (job_id, created_at, updated_at) VALUES (?,?,?)",
-        (job_id, ts, ts),
+        "INSERT OR IGNORE INTO applications (user_id, job_id, created_at, updated_at) VALUES (?,?,?,?)",
+        (user_id, job_id, ts, ts),
     )
     conn.commit()
-    return conn.execute("SELECT id FROM applications WHERE job_id = ?", (job_id,)).fetchone()["id"]
+    return conn.execute("SELECT id FROM applications WHERE user_id = ? AND job_id = ?",
+                        (user_id, job_id)).fetchone()["id"]
 
 
 def get_application(conn: sqlite3.Connection, app_id: int) -> dict | None:
@@ -159,19 +160,20 @@ def save_contact(conn: sqlite3.Connection, app_id: int, *, name: str, role: str,
 def mark_not_interested(conn: sqlite3.Connection, app_id: int, block_company: bool,
                         now: datetime | None = None) -> None:
     app = get_application(conn, app_id)
+    user_id = app["user_id"]
     company = normalize_company(_company_of(conn, app_id))
     transition(conn, app_id, "not_interested", {"block_company": block_company}, now)
     if app["contact_id"]:
-        conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
-                     (app["contact_id"], _now(now)))
+        conn.execute("""INSERT INTO blocklist (user_id, contact_id, company, reason, at)
+                        VALUES (?, ?, '', 'not interested', ?)""", (user_id, app["contact_id"], _now(now)))
     linked = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND contact_id != ?",
                           (app_id, app["contact_id"] or -1)).fetchall()
     for r in linked:
-        conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (?, '', 'not interested', ?)",
-                     (r["contact_id"], _now(now)))
+        conn.execute("""INSERT INTO blocklist (user_id, contact_id, company, reason, at)
+                        VALUES (?, ?, '', 'not interested', ?)""", (user_id, r["contact_id"], _now(now)))
     if block_company:
-        conn.execute("INSERT INTO blocklist (contact_id, company, reason, at) VALUES (NULL, ?, 'not interested', ?)",
-                     (company, _now(now)))
+        conn.execute("""INSERT INTO blocklist (user_id, contact_id, company, reason, at)
+                        VALUES (?, NULL, ?, 'not interested', ?)""", (user_id, company, _now(now)))
     conn.commit()
 
 

@@ -10,7 +10,7 @@ from jobseeker.db.contacts_repo import (
     claim_find, emailed_count, find_state, get_domain, link_contact, next_candidate, nudge_due, people, third_due,
     upsert_contact,
 )
-from jobseeker.db.usage import Budget
+from jobseeker.db.usage import Budget, contacts_limits
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
 from jobseeker.web.deps import get_conn
@@ -25,12 +25,13 @@ def _company(conn, app_id: int) -> str:
 
 def card_context(request: Request, conn, app_id: int) -> dict:
     state = request.app.state
+    owner = conn.execute("SELECT user_id FROM applications WHERE id = ?", (app_id,)).fetchone()["user_id"]
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
             "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
             "third_due": third_due(conn, app_id, datetime.now(UTC)),
             "nudge_due": nudge_due(conn, app_id, datetime.now(UTC)),
             "already_emailed": emailed_count(conn, app_id) > 0,
-            "usage": Budget(conn, state.prefs.contacts, datetime.now(UTC)).summary(),
+            "usage": Budget(conn, owner, contacts_limits(state.prefs.contacts), datetime.now(UTC)).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
 
 

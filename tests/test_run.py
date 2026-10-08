@@ -43,7 +43,7 @@ def handler(schema, prompt):
 
 
 def _run(conn, sources, llm, prefs, rubric, facts):
-    return run_daily(conn, sources=sources, client=None, llm=llm, facts=facts, prefs=prefs, rubric=rubric, now=NOW)
+    return run_daily(conn, user_id=1, sources=sources, client=None, llm=llm, facts=facts, prefs=prefs, rubric=rubric, now=NOW)
 
 
 def test_full_run_scores_shortlists_and_drafts(prefs, rubric, facts):
@@ -119,7 +119,7 @@ def test_run_records_actual_finish_time(prefs, rubric, facts):
 
     conn = connect(":memory:")
     times = iter([NOW, NOW + timedelta(minutes=5)])
-    run_daily(conn, sources=[], client=None, llm=FakeLLM(handler=handler), facts=facts, prefs=prefs,
+    run_daily(conn, user_id=1, sources=[], client=None, llm=FakeLLM(handler=handler), facts=facts, prefs=prefs,
               rubric=rubric, clock=lambda: next(times))
     run = last_run(conn)
     assert run["started_at"] == "2026-10-07T02:00:00+00:00"

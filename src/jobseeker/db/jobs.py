@@ -138,12 +138,12 @@ def jobs_needing_score(conn: sqlite3.Connection, rubric_version: str, limit: int
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def save_score(conn: sqlite3.Connection, job_id: int, result: ScoreResult, model: str,
+def save_score(conn: sqlite3.Connection, user_id: int, job_id: int, result: ScoreResult, model: str,
                rubric_version: str, jd_hash_value: str) -> None:
     conn.execute(
-        """INSERT INTO scores (job_id, score, breakdown, matches, gaps, recommendation, role_family,
-           model, rubric_version, jd_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (job_id, result.score, json.dumps(result.breakdown), json.dumps(result.matches),
+        """INSERT INTO scores (user_id, job_id, score, breakdown, matches, gaps, recommendation, role_family,
+           model, rubric_version, jd_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (user_id, job_id, result.score, json.dumps(result.breakdown), json.dumps(result.matches),
          json.dumps(result.gaps), result.recommendation, result.role_family, model,
          rubric_version, jd_hash_value, utcnow()),
     )
