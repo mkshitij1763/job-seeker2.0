@@ -20,9 +20,15 @@
   | `422dbe3` | hosting T2, templates + env.example |
   | `2ace984` | hosting T3, bootstrap/ready/js wrapper |
   | `99b7102` | hosting T4, deploy.sh |
+| `962fcad` | extras T1, settings fields + gen-key/vapid-keys (Step 1 no-op) |
+| `88742e9` | extras T2, backup/crypto.py AES-256-GCM |
+| `bec17b5` | extras T3, backup/s3.py SigV4 PUT |
+| `9312de4` | extras T4, backup/archive.py + db.backup.snapshot |
+| `4f02f27` | extras T5, `jobseeker restore` |
+| (this commit) | extras T6, push/send.py |
 
-- **Tests at `99b7102`:** 443 pytest, 19 node, verified by `manager`. `git status` is clean.
-- **NEXT:** **extras Task 1** in `docs/superpowers/plans/2026-10-08-mu-extras.md`, then T2 crypto, T3 SigV4, T4 archive + retention, T5 restore, T6 push send. Then pipeline **T2** (profile_hash) and **T6** (build_plan + plan-driven JobSpy sources) in `docs/superpowers/plans/2026-10-08-mu-per-user-pipeline.md`. Then report to `manager` and stand by. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge.
+- **Tests after extras T6:** 469 pytest, 19 node.
+- **NEXT:** pipeline **T2** (profile_hash), then **T6** (build_plan + plan-driven JobSpy sources) in `docs/superpowers/plans/2026-10-08-mu-per-user-pipeline.md`. Then report to `manager` and stand by. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
@@ -45,6 +51,9 @@
   - `nightly_backup(conn, settings, now, force=False) -> BackupResult(path, ok, uploaded, error, skipped)` is idempotent per IST day and never raises on a failed upload.
 - The search cap is 60 (provisional). `global_scores_per_day` and `global_drafts_per_day` are "set from the spike".
 - Migration numbers: v1 auth, v2 onboarding, **v3 extras**, v4 pipeline, v5 outreach.
+- Extras T1 commit has no pyproject/uv.lock change (deps already in `1b66009`).
+- Extras T4: the brief's Interfaces block says `archive.MEMBERS_ALLOWED`; the test and code use `member_allowed(name)`, which is what was built. `db.backup.snapshot(db_path, out) -> Path` added and `backup()` now calls it; take plan 2's version at merge.
+- **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops` (that branch only, never force).
 
 ## 4. Gotchas
 - **pytest:** `FORCE_COLOR= uv run pytest --color=no -p no:warnings`. Don't pass `-q`.
