@@ -1,0 +1,22 @@
+{% extends "bare.html" %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="landing">
+  <section class="card landing-card">
+    <h1 class="display">Your daily shortlist of product and analytics roles in India.</h1>
+    <ul class="landing-points">
+      <li>Every morning it searches LinkedIn, Naukri, Indeed and company career pages for your roles and cities.</li>
+      <li>Each job is scored against your resume, with the reasons, so you read 10 jobs, not 600.</li>
+      <li>Built for your phone: add it to your Home Screen.</li>
+    </ul>
+    {% if invite_only %}
+      <p class="landing-note">This app is invite-only. Ask {{ owner_first }} for an invite.</p>
+    {% else %}
+      <a class="btn btn-google" href="/login">{% include "_google_g.svg.html" %}<span>Continue with Google</span></a>
+      <p class="landing-note">Invite-only. If you haven't been invited, ask {{ owner_first }}.</p>
+    {% endif %}
+    <p class="muted">Your resume, preferences and applications are visible only to you. Download or delete them any time in Settings.</p>
+  </section>
+  <footer class="muted landing-footer">A personal project, not affiliated with LinkedIn, Naukri, Indeed or Google.</footer>
+</div>
+{% endblock %}

@@ -3,9 +3,9 @@
 > **START HERE (new session).** You are **devops-lead**, a senior dev on job-seeker2.0's multi-user hosted app. You report to the coordinator session **`manager`** (use `SendMessage` to `manager`), not to the user. Send design questions to `manager`; it makes the calls or passes them to the user. Background on the product: `HANDOFF.md` §1–§3. Treat §8 there as history; this file supersedes it for your work.
 
 ## 1. Where you work
-- **Worktree:** `/Users/user/Desktop/untitled folder/js-build`, branch **`build/devops`** (from `plans/devops` `7136ea9`). You are the only writer on it.
-- **The Bash cwd resets to the MAIN checkout after every call.** That checkout is on `main` and runs the LIVE app. Start every command with `cd "/Users/user/Desktop/untitled folder/js-build" && …`. **Never touch the main checkout or `multi-user`.** backend-lead owns `multi-user`, in `../js-mu-backend`.
-- **Git:** commit per task, ending messages with the attribution lines your session uses. Don't push. `manager` merges `build/devops` into `multi-user` after plan 2 lands.
+- **Worktree:** `/Users/user/Desktop/untitled folder/js-devops2`, branch **`build/devops2`** (from `origin/multi-user` `2f473a9`, the merge of `build/devops` into plan 2). You are the only writer on it. The old `js-build` / `build/devops` is merged and finished.
+- **The Bash cwd resets to the MAIN checkout after every call.** That checkout is on `main` and runs the LIVE app. Start every command with `cd "/Users/user/Desktop/untitled folder/js-devops2" && …`. **Never touch the main checkout or `multi-user`.** backend-lead owns `multi-user`, in `../js-mu-backend`.
+- **Git:** commit per task, ending messages with the attribution lines your session uses. Don't push. Push `build/devops2` only (never force, never main or multi-user); `manager` merges it into `multi-user`.
 - **zsh doesn't word-split `$VAR` commands;** use a shell function. Don't chain `grep … && git commit`, because grep also matches "failed".
 
 ## 2. Status (at pause)
@@ -28,10 +28,14 @@
 | `d3915b6` | extras T6, push/send.py |
 | `d8d5be8` | pipeline T2, profile_hash |
 | `554a847` | pipeline T6, build_plan + plan-driven JobSpy sources |
-| (this commit) | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
+| `16587fd` | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
+| `2f473a9` | `manager` merged `build/devops` into `multi-user` (550 pytest); `build/devops2` starts here |
+| `010f6a9` | extras T9, `/healthz` (GET/HEAD, read-only) |
+| `89cbaa9` | extras T13, public landing + invite-only page |
+| (this commit) | pipeline T7, `fetch_shared` |
 
-- **Tests after pipeline T6:** 478 pytest, 19 node.
-- **NEXT:** batch done (extras T1–T6, pipeline T2 + T6). **Stand by** for `manager`. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge. Then run the executing-plans final whole-branch review.
+- **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
+- **NEXT:** devops2 batch done (extras T9, T13, pipeline T7). **Stand by** until `manager` merges `build/devops2` into `multi-user` after plan 3 lands. Then the WAIT list: extras T7, T8, T10, T11 (incl. sw.js), T12, T14; pipeline T3, T4, T5, T8–T16; hosting T5 (manual, with the user). The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
@@ -56,6 +60,8 @@
 - Migration numbers: v1 auth, v2 onboarding, **v3 extras**, v4 pipeline, v5 outreach.
 - Extras T1 commit has no pyproject/uv.lock change (deps already in `1b66009`).
 - Extras T4: the brief's Interfaces block says `archive.MEMBERS_ALLOWED`; the test and code use `member_allowed(name)`, which is what was built. `db.backup.snapshot(db_path, out) -> Path` added and `backup()` now calls it; take plan 2's version at merge.
+- Extras T9: `test_schema_mismatch_is_503` builds the client BEFORE setting `user_version = 0`, because plan 2's `create_app` refuses an out-of-date DB at startup; the test now models the schema changing under a running app.
+- Extras T13: `landing.html` extends `bare.html` (plan allows it), not `base.html`, so `base.html` is untouched for plan 3; `bare.html` gains one empty `{% block head %}`. The page wrapper is `<div class="landing">`, because `bare.html` already provides `<main>`. CSS uses ui.css's real tokens (`--line-strong`, px spacing): `--space-*`/`--border-strong` don't exist. The test_auth invite line uses the fallback ("Ask the person who shared this link"), because its fixture owner has no name. `test_web_guards` root assertion changed from 303→/login to 200 landing (plan 2's interim behaviour, replaced by this task). Google "G" path data is the standard 18px mark; verify against developers.google.com/identity/branding-guidelines before launch.
 - **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops` (that branch only, never force).
 
 ## 4. Gotchas

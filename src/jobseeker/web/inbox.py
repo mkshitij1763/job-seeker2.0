@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import RedirectResponse
 
 from jobseeker.db import queries
-from jobseeker.web.deps import get_conn, optional_user, render
+from jobseeker.db.users import owner_first_name
+from jobseeker.web.deps import get_conn, optional_user, render, render_public
 
 router = APIRouter()
 
@@ -10,8 +10,8 @@ router = APIRouter()
 @router.get("/")
 def inbox(request: Request, band: str = "apply", family: str = "", city: str = "", source: str = "",
           status: str = "", user=Depends(optional_user), conn=Depends(get_conn)):
-    if user is None:  # sub-project 6 renders landing.html here
-        return RedirectResponse("/login", 303)
+    if user is None:
+        return render_public(request, conn, "landing.html", owner_first=owner_first_name(conn), invite_only=False)
     rows = queries.inbox(conn, user.id, band=band, family=family or None, city=city or None,
                          source=source or None, status=status or None)
     f = {"band": band, "family": family, "city": city, "source": source}

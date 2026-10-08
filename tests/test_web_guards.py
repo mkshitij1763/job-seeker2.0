@@ -36,7 +36,7 @@ def test_every_route_is_guarded(settings):
 def test_anonymous_requests_are_sent_to_login(settings, seeded, anon_client):
     web, app_id = anon_client(), seeded[0]
     root = web.get("/")
-    assert root.status_code == 303 and root.headers["location"] == "/login" and "Senior Product" not in root.text
+    assert root.status_code == 200 and 'class="landing' in root.text and "Senior Product" not in root.text
     for r in _api_routes(create_app(settings)):
         if r.path in PUBLIC or r.path == "/":
             continue

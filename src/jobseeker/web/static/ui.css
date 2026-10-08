@@ -401,3 +401,11 @@ input, select, textarea { min-width: 0; }
   .pipe-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .main { padding: 24px; }
 }
+
+/* ---- public landing ---- */
+.landing { max-width: 480px; margin: 0 auto; padding: 32px 16px; display: grid; gap: 16px; }
+.landing-card { display: grid; gap: 16px; }
+.landing-points { display: grid; gap: 12px; margin: 0; padding-left: 20px; }
+.btn-google { background: #fff; border: 1px solid var(--line-strong); color: #1F1F1F; min-height: 44px; gap: 12px; }
+.btn-google:hover { background: #fff; border-color: var(--text-3); }
+.landing-footer { text-align: center; font-size: 13px; }

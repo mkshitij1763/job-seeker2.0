@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from jobseeker.db.sessions import create_session, delete_session, delete_user_sessions, purge_expired
 from jobseeker.db.users import owner_first_name, resolve_sign_in
-from jobseeker.web.deps import get_conn, optional_user
+from jobseeker.web.deps import get_conn, optional_user, render_public
 from jobseeker.web.oauth import (OAUTH_COOKIE, SESSION_COOKIE, TOKEN_URL, BadSignature, auth_url, local_path,
                                  pkce_pair, sign, unsign)
 
@@ -34,9 +34,11 @@ def verify_id_token(token: str, client_id: str) -> dict:
 
 
 def _page(request, status: int, message: str, conn=None):
-    tpl = "not_invited.html" if status == 403 else "auth_message.html"
-    ctx = {"message": message, "owner": owner_first_name(conn) if conn is not None else ""}
-    return request.app.state.templates.TemplateResponse(request, tpl, ctx, status_code=status)
+    if status == 403:
+        return render_public(request, conn, "landing.html", status_code=403, owner_first=owner_first_name(conn),
+                             invite_only=True)
+    return request.app.state.templates.TemplateResponse(request, "auth_message.html", {"message": message},
+                                                        status_code=status)
 
 
 def _cookie(resp, name: str, value: str, max_age: int, settings) -> None:
