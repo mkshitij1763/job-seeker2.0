@@ -92,20 +92,12 @@ Not done (the user deferred it): the SaaS evaluation, after 2–3 weeks of use b
 - **Mac power (2026-10-08):** the user ran `sudo pmset -a sleep 0`, so the Mac never idle-sleeps while the lid is open, and the dashboard is reachable whenever the lid is open. Closing the lid still sleeps it. The user declined Amphetamine and lid-closed hosting; don't re-propose them. Pages are gzipped and assets are cached as immutable (`deb1441`).
 
 
-## 7. UI REDESIGN — branch `ui-redesign` (NOT merged; 2026-10-08)
-- **What:** the Stitch "Kinetic Horizon" look on Today, Jobs, Job detail and Pipeline. Spec: `docs/superpowers/specs/2026-10-08-ui-redesign-design.md`. Plan: `docs/superpowers/plans/2026-10-08-ui-redesign.md`. No new backend features.
-- **Where:**
-  - worktree `/Users/user/Desktop/untitled folder/job-seeker2.0-ui` (branch `ui-redesign`); the main folder stays on `main`.
-  - Preview: `https://delulu.tail1c97dd.ts.net:8443`, served by launchd `com.kshitij.jobseeker.uipreview` on :8001. It uses the **real** data, .env and Gmail (actions there are real).
-  - Live `main` UI is unchanged on :8000.
-- **Tests:** `cd ../job-seeker2.0-ui && FORCE_COLOR= uv run pytest --color=no` (399 passed) and `NO_COLOR=1 FORCE_COLOR= node --test tests/js/*.test.mjs` (19 passed).
-- **Restart the preview after edits:** `launchctl kickstart -k gui/$(id -u)/com.kshitij.jobseeker.uipreview`.
-- **To merge (only when the user finalises):**
-  1. `cd "/Users/user/Desktop/untitled folder/job-seeker2.0" && git merge ui-redesign && git push`
-  2. `launchctl kickstart -k gui/$(id -u)/com.kshitij.jobseeker.web`
-  3. `../job-seeker2.0-ui/scripts/preview_ui.sh remove && git worktree remove ../job-seeker2.0-ui`
-- **To abandon:**
-  1. `../job-seeker2.0-ui/scripts/preview_ui.sh remove`
-  2. `git worktree remove ../job-seeker2.0-ui`
-  3. `git branch -D ui-redesign && git push origin --delete ui-redesign`
-- **Branch-only fixes found in QA:** the doubled LinkedIn greeting ("Hi Anshu, Hi, …") is fixed in `filters.personal_note`, so `main` still has that bug until the merge.
+## 7. UI REDESIGN — MERGED into `main` (2026-10-08, fast-forward to `324722c`)
+- **What:** the Stitch "Kinetic Horizon" look on Today, Jobs, Job detail and Pipeline. Spec: `docs/superpowers/specs/2026-10-08-ui-redesign-design.md`. Plan: `docs/superpowers/plans/2026-10-08-ui-redesign.md`.
+- **Live:** on :8000 / `https://delulu.tail1c97dd.ts.net`. The preview (:8001/:8443), its launchd agent and the worktree are removed.
+- **Tests:** 400 pytest + 19 node (`NO_COLOR=1 FORCE_COLOR= node --test tests/js/*.test.mjs`).
+- **Styles:** live only in `static/ui.css` (tokens on `:root`, dark mode, a phone section ≤640px, a tablet section 641–1240px). `app.css` and `mobile.css` are deleted. The phone tabs and pipeline chips use `static/tabs.js` (`[data-tabs]` / `[data-tab]` / `[data-panel]`).
+- **Rollback:** the pre-redesign commit is `be39553`, and branch `ui-redesign` is kept on GitHub. To undo the whole redesign: `git revert --no-edit be39553..324722c`, then restart `com.kshitij.jobseeker.web`.
+- **Deferred minors:**
+  - With no `GROQ_API_KEY` at all, Find contacts and Regenerate return a 500 (the Groq client is built eagerly).
+  - `nav_counts` runs the inbox query on every page render (fine at this size).
