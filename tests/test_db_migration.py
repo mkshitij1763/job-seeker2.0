@@ -1,6 +1,6 @@
 import sqlite3
 
-from jobseeker.db.core import connect
+from jobseeker.db.core import SCHEMA_V0, connect
 from jobseeker.db.jobs import upsert_job
 from tests.factories import make_job
 
@@ -17,6 +17,9 @@ def test_fresh_database_has_new_schema(tmp_path):
 
 def test_migrates_mvp_database(tmp_path):
     path = tmp_path / "db.sqlite"
+    raw = sqlite3.connect(path)
+    raw.executescript(SCHEMA_V0)
+    raw.close()
     conn = connect(path)
     job_id, _ = upsert_job(conn, make_job())
     # Turn it back into an MVP-era database.

@@ -74,6 +74,24 @@ def backup() -> None:
 
 
 @app.command()
+def migrate(dry_run: bool = typer.Option(False, "--dry-run", help="Migrate a copy and report; change nothing.")) -> None:
+    """Upgrade the database schema (backs up first; stop the web service and the timer before running)."""
+    from datetime import UTC, datetime
+
+    from jobseeker.db.migrations import DatabaseBusy, MigrationContext, MigrationError
+    from jobseeker.db.migrations import migrate as run_migrate
+
+    settings = Settings()
+    ctx = MigrationContext(owner_email=settings.owner_email, now=datetime.now(UTC), home=settings.jobseeker_home)
+    try:
+        for line in run_migrate(settings.db_path, ctx, settings.data_dir / "backups", dry_run=dry_run):
+            typer.echo(line)
+    except (DatabaseBusy, MigrationError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
 def rescore() -> None:
     """Re-score existing jobs (after editing rubric.yaml or preferences)."""
     _run(fetch=False, force=True)

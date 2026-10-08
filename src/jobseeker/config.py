@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     apify_api_token: str = ""
     hunter_api_key: str = ""
+    owner_email: str = ""
     gemini_api_key: str = ""
     cloudflare_api_token: str = ""
     cloudflare_account_id: str = ""

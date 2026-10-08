@@ -4,8 +4,11 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+from jobseeker.db.migrations import SchemaOutOfDate, latest
+
 SCHEMA = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
-# Tables/columns added after the MVP; connect() adds them to older databases.
+SCHEMA_V0 = (Path(__file__).parent / "schema_v0.sql").read_text(encoding="utf-8")
+# v0 only: tables/columns added after the MVP, so an old database reaches the exact shape migration 1 expects.
 REQUIRED_TABLES = {"runs", "discovered_companies", "application_contacts", "contact_candidates",
                    "company_domains", "usage"}
 NEW_COLUMNS = {
@@ -17,18 +20,9 @@ NEW_COLUMNS = {
 }
 
 
-def connect(path: Path | str) -> sqlite3.Connection:
-    if str(path) != ":memory:":
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=5.0, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
-    # Only touch the schema when something is missing, so a reader never needs a write lock while the daily run writes.
-    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+def _catch_up_v0(conn: sqlite3.Connection, tables: set[str]) -> None:
     if not REQUIRED_TABLES <= tables:
-        conn.executescript(SCHEMA)  # every statement is IF NOT EXISTS
+        conn.executescript(SCHEMA_V0)  # every statement is IF NOT EXISTS
     changed = False
     for table, columns in NEW_COLUMNS.items():
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
@@ -38,7 +32,35 @@ def connect(path: Path | str) -> sqlite3.Connection:
                 changed = True
     if changed:
         conn.commit()
+
+
+def connect(path: Path | str, *, check_version: bool = True) -> sqlite3.Connection:
+    if str(path) != ":memory:":
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path), timeout=5.0, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    # Only touch the schema when something is missing, so a reader never needs a write lock while the daily run writes.
+    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if not tables:
+        conn.executescript(SCHEMA)
+        conn.execute(f"PRAGMA user_version = {latest()}")
+        _seed_fresh(conn)
+        conn.commit()
+        return conn
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version == 0:
+        _catch_up_v0(conn, tables)
+    if check_version and version < latest():
+        conn.close()
+        raise SchemaOutOfDate(f"Database is at v{version}, the app needs v{latest()}. Run `jobseeker migrate`.")
     return conn
+
+
+def _seed_fresh(conn: sqlite3.Connection) -> None:
+    """Rows a brand-new database needs."""
 
 
 def iso(dt: datetime) -> str:
