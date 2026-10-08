@@ -90,3 +90,24 @@ def test_roommate_gets_404_on_outreach_routes_of_their_own_application(seeded_tw
         if _outreach(r):
             path = r.path.replace("{app_id}", str(a)).replace("{kind}", "email").replace("{rank}", "1")
             assert web.post(path).status_code == 404, path
+
+
+OUTREACH_MARKUP = ("/contacts/", "/approve", "/draft", "/contact\"", "/followed-up", "Find contacts", "Gmail",
+                   'data-tab="people"', 'data-tab="draft"', 'value="sent"')
+
+
+def test_roommate_job_page_has_no_outreach_markup_and_can_mark_applied(seeded_two, client_as, settings):
+    from jobseeker.db.applications import get_status
+    from jobseeker.db.core import connect
+    web, a = client_as(2, follow_redirects=False), seeded_two["roommate_app"]
+    html = web.get(f"/applications/{a}").text
+    for bit in OUTREACH_MARKUP:
+        assert bit not in html, bit
+    assert "Open job posting" in html and 'name="status" value="applied_via_portal"' in html and "Mark applied" in html
+    assert web.post(f"/applications/{a}/status", data={"status": "applied_via_portal"}).status_code == 303
+    assert get_status(connect(settings.db_path), a) == "applied_via_portal"
+
+
+def test_owner_job_page_keeps_outreach(seeded, client_as):
+    html = client_as(1).get(f"/applications/{seeded[0]}").text
+    assert "/approve" in html and 'data-tab="people"' in html and "Find contacts" in html

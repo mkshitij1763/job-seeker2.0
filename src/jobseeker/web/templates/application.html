@@ -2,6 +2,25 @@
 {% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
 {% block content %}
 {% from "_icons.html" import icon %}
+{% macro more_menu() %}
+      <details class="more-menu">
+        <summary class="btn" aria-label="More actions">{{ icon("more", 18) }} More</summary>
+        <div class="menu">
+          {% if can_outreach and drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
+          {% for s, label in ([("sent", "Mark sent")] if can_outreach else []) + [("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
+          <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button class="btn-ghost">{{ label }}</button></form>
+          {% endfor %}
+          <form method="post" action="/applications/{{ app.id }}/snooze"><button class="btn-ghost">Snooze 3d</button></form>
+          {% if can_outreach and app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button class="btn-ghost">Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
+          {% if can_outreach and drafts and app.status in ["new", "shortlisted", "drafted", "approved"] %}<form method="post" action="/applications/{{ app.id }}/draft"><button class="btn-ghost">Regenerate all</button></form>{% endif %}
+          {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button class="btn-ghost">Undo last change</button></form>{% endif %}
+          <form method="post" action="/applications/{{ app.id }}/not-interested" class="danger-zone">
+            <label><input type="checkbox" name="block_company" value="true"> also block company</label>
+            <button class="btn-ghost bad">Not interested</button>
+          </form>
+        </div>
+      </details>
+{% endmacro %}
 <div class="job">
   <header class="job-head">
     <a class="back" href="/">{{ icon("back", 18) }} Jobs</a>
@@ -38,7 +57,17 @@
   </section>
   {% endif %}
 
-  {% if step %}
+  {% if not can_outreach %}
+  <section class="card next">
+    <div class="next-action">
+      <a class="btn btn-primary" href="{{ job.apply_url }}" target="_blank" rel="noopener">Open job posting ↗</a>
+      {% if "applied_via_portal" in allowed_next(app.status) %}
+      <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="applied_via_portal"><button>Mark applied</button></form>
+      <p class="muted">Apply on the company's site, then mark it applied so it moves to your Pipeline.</p>
+      {% endif %}
+    </div>
+  </section>
+  {% elif step %}
   <section class="card next">
     <ol class="steps">
       {% for label in STEPS %}
@@ -67,10 +96,12 @@
   {% endif %}
 
 {% set follow_up_due = nudge_due or third_due %}
-<div class="job-body" data-tabs data-default="{{ 'draft' if app.status == 'approved' else ('people' if app.status == 'drafted' or follow_up_due else 'job') }}">
+<div class="job-body" data-tabs data-default="{{ 'job' if not can_outreach else 'draft' if app.status == 'approved' else ('people' if app.status == 'drafted' or follow_up_due else 'job') }}">
   <div class="tab-bar chips" role="tablist">
+    {% if can_outreach %}
     <button type="button" class="chip" data-tab="people" role="tab">{{ icon("people", 16) }} People{% if people %} <span class="count">{{ people|length }}</span>{% endif %}</button>
     <button type="button" class="chip" data-tab="draft" role="tab">{{ icon("draft", 16) }} Draft</button>
+    {% endif %}
     <button type="button" class="chip" data-tab="job" role="tab">{{ icon("job", 16) }} Job</button>
   </div>
 
@@ -92,6 +123,7 @@
     </section>
   </section>
 
+  {% if can_outreach %}
   <section class="panel panel-people" data-panel="people">
     {% include "_people.html" %}
     <details class="add-person">
@@ -166,25 +198,12 @@
         <p class="muted trust">AI prepared this. You approve, Gmail keeps it as a draft, and nothing is sent until you press Send.</p>
         <button class="primary">Approve → Gmail draft</button>
       </form>
-      <details class="more-menu">
-        <summary class="btn" aria-label="More actions">{{ icon("more", 18) }} More</summary>
-        <div class="menu">
-          {% if drafts.email and drafts.email.gmail_draft_id %}<a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" rel="noopener">Open Gmail drafts ↗</a>{% endif %}
-          {% for s, label in [("sent", "Mark sent"), ("applied_via_portal", "Applied via portal"), ("skipped", "Skip")] %}
-          <form method="post" action="/applications/{{ app.id }}/status"><input type="hidden" name="status" value="{{ s }}"><button class="btn-ghost">{{ label }}</button></form>
-          {% endfor %}
-          <form method="post" action="/applications/{{ app.id }}/snooze"><button class="btn-ghost">Snooze 3d</button></form>
-          {% if app.status == "sent" %}<form method="post" action="/applications/{{ app.id }}/followed-up"><button class="btn-ghost">Mark followed up ({{ app.followups_sent }}/2)</button></form>{% endif %}
-          {% if drafts and app.status in ["new", "shortlisted", "drafted", "approved"] %}<form method="post" action="/applications/{{ app.id }}/draft"><button class="btn-ghost">Regenerate all</button></form>{% endif %}
-          {% if can_undo %}<form method="post" action="/applications/{{ app.id }}/undo"><button class="btn-ghost">Undo last change</button></form>{% endif %}
-          <form method="post" action="/applications/{{ app.id }}/not-interested" class="danger-zone">
-            <label><input type="checkbox" name="block_company" value="true"> also block company</label>
-            <button class="btn-ghost bad">Not interested</button>
-          </form>
-        </div>
-      </details>
+      {{ more_menu() }}
     </div>
   </section>
+  {% else %}
+  <div class="card block actions">{{ more_menu() }}</div>
+  {% endif %}
 </div>
 </div>
 {% endblock %}

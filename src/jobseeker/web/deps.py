@@ -38,6 +38,7 @@ def render(request: Request, conn, name: str, **ctx):
     ctx["run_finished"] = run["finished_at"] if run else None
     ctx["nav"] = nav_counts(conn, user.id)
     ctx["user"] = user
+    ctx["can_outreach"] = user.id == OWNER_ID  # interim; sub-project 5 reads users.outreach_enabled
     return request.app.state.templates.TemplateResponse(request, name, ctx)
 
 
