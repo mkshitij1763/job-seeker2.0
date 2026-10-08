@@ -48,7 +48,7 @@ class _Static(StaticFiles):
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
-    from jobseeker.web import admin, application, auth, contacts, inbox, pipeline
+    from jobseeker.web import admin, application, auth, contacts, health, inbox, pipeline
 
     from jobseeker.db.core import connect
     from jobseeker.db.users import ensure_owner
@@ -76,6 +76,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory))
     app.mount("/static", _Static(directory=HERE / "static"), name="static")
     app.add_middleware(GZipMiddleware, minimum_size=1000)  # the inbox is ~50 KB of HTML, ~8 KB gzipped
+    app.include_router(health.router)  # public, before the guarded routers
     app.include_router(auth.router)
     app.include_router(inbox.router)  # "/" depends on optional_user itself
     app.include_router(application.router, dependencies=[Depends(owned_app)])
