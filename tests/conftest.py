@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
     (tmp_path / "profile").mkdir()
-    shutil.copy(ROOT / "profile" / "preferences.yaml", tmp_path / "profile" / "preferences.yaml")
+    shutil.copy(ROOT / "tests" / "fixtures" / "preferences.yaml", tmp_path / "profile" / "preferences.yaml")
     shutil.copy(ROOT / "rubric.yaml", tmp_path / "rubric.yaml")
     shutil.copy(ROOT / "companies.yaml", tmp_path / "companies.yaml")
     return tmp_path

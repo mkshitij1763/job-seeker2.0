@@ -7,6 +7,8 @@ import yaml
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+REPO_ROOT = Path(__file__).resolve().parents[2]  # the code checkout (…/src/jobseeker/config.py → repo root)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -82,6 +84,10 @@ class Settings(BaseSettings):
         return self.jobseeker_home / "rubric.yaml"
 
     @property
+    def app_config_path(self) -> Path:
+        return self.jobseeker_home / "config" / "app.yaml"
+
+    @property
     def secrets_dir(self) -> Path:
         return self.jobseeker_home / "secrets"
 
@@ -137,8 +143,8 @@ class Preferences(BaseModel):
     target_roles: list[str]
     cities: list[str]
     remote_india_ok: bool = True
-    current_ctc_lpa: float
-    target_base_lpa: float
+    current_ctc_lpa: float | None = None
+    target_base_lpa: float | None = None
     must_haves: list[str] = []
     deal_breakers: list[str] = []
     title_deny: list[str] = []
@@ -189,3 +195,105 @@ def load_rubric(path: Path | str) -> Rubric:
     if total != 100:
         raise ValueError(f"rubric dimensions must sum to 100, got {total}")
     return rubric
+
+class Role(BaseModel):
+    label: str
+    query: str
+    allow: list[str] = []
+
+
+class AppBudgets(BaseModel):
+    score_per_run: int = 80
+    draft_per_run: int = 10
+    facts_per_user_per_day: int = 3
+    facts_per_day: int = 10
+
+
+class AppSearch(BaseModel):
+    hours_old: int = 72
+    results_per_search: int = 25
+    sites: list[Literal["linkedin", "naukri", "indeed"]] = ["linkedin", "naukri", "indeed"]
+    linkedin_descriptions_per_run: int = 15
+
+
+class AppConfig(BaseModel):
+    models: Models = Models()
+    thresholds: Thresholds = Thresholds()
+    min_prescore: int = 30
+    budgets: AppBudgets = AppBudgets()
+    search: AppSearch = AppSearch()
+    contacts: ContactsConfig = ContactsConfig()
+    default_title_deny: list[str] = []
+    cities: list[str] = []
+    roles: list[Role] = []
+    companies_path: Path = REPO_ROOT / "companies.yaml"
+    rubric_path: Path = REPO_ROOT / "rubric.yaml"
+
+
+def load_app_config(path: Path | str) -> AppConfig:
+    return AppConfig.model_validate(_yaml(path))
+
+
+LIST_MAX, ITEM_MAX = 10, 60
+
+
+class UserPrefs(BaseModel):
+    roles: list[str] = []
+    custom_role: str = ""
+    cities: list[str] = []
+    remote_india_ok: bool = True
+    experience_years: float | None = None
+    drop_if_min_years_at_least: float | None = None
+    max_age_days: int = 7
+    current_ctc_lpa: float | None = None
+    target_base_lpa: float | None = None
+    must_haves: list[str] = []
+    deal_breakers: list[str] = []
+    title_deny: list[str] | None = None
+    title_allow_extra: list[str] = []
+    experience_summary: str = ""
+    linkedin: str = ""
+    github: str = ""
+    notify_new_matches: bool = True
+    target_roles_text: list[str] = []  # how the scorer describes the target roles; empty = the role picks (import keeps the owner's prose)
+
+    def complete(self) -> list[str]:
+        """The onboarding steps still missing something, in step order (an empty list means complete)."""
+        missing = []
+        if not (self.roles or self.custom_role.strip()):
+            missing.append("roles")
+        if not (self.cities or self.remote_india_ok):
+            missing.append("where")
+        t = self.drop_if_min_years_at_least
+        if t is None or (self.experience_years is not None and t <= self.experience_years) \
+                or not self.experience_summary.strip():
+            missing.append("experience")
+        return missing
+
+
+def effective_prefs(up: UserPrefs, cfg: AppConfig, name: str, email: str) -> Preferences:
+    by_label = {r.label: r for r in cfg.roles}
+    roles = [by_label[x] for x in up.roles if x in by_label]
+    custom = up.custom_role.strip()
+    if up.title_allow_extra:  # explicit list (the migrated owner): used as is, so their matches never widen
+        allow = up.title_allow_extra + ([custom.lower()] if custom else [])
+    else:
+        allow = [w for r in roles for w in r.allow] + ([custom.lower()] if custom else [])
+    return Preferences(
+        name=name, email=email, linkedin=up.linkedin, github=up.github,
+        experience_summary=up.experience_summary,
+        target_roles=up.target_roles_text or [r.label for r in roles] + ([custom] if custom else []),
+        cities=up.cities, remote_india_ok=up.remote_india_ok,
+        current_ctc_lpa=up.current_ctc_lpa, target_base_lpa=up.target_base_lpa,
+        must_haves=up.must_haves, deal_breakers=up.deal_breakers,
+        title_deny=up.title_deny if up.title_deny is not None else cfg.default_title_deny,
+        title_allow=list(dict.fromkeys(allow)),
+        drop_if_min_years_at_least=up.drop_if_min_years_at_least or 8, max_age_days=up.max_age_days,
+        thresholds=cfg.thresholds, min_prescore=cfg.min_prescore, models=cfg.models,
+        budgets=Budgets(score_per_run=cfg.budgets.score_per_run, draft_per_run=cfg.budgets.draft_per_run),
+        search=SearchConfig(queries=[r.query for r in roles] + ([custom] if custom else []),
+                            locations=up.cities, remote_query=up.remote_india_ok, hours_old=cfg.search.hours_old,
+                            results_per_search=cfg.search.results_per_search, sites=cfg.search.sites,
+                            linkedin_descriptions_per_run=cfg.search.linkedin_descriptions_per_run),
+        contacts=cfg.contacts.model_copy(update={"sender_email": email}),
+    )

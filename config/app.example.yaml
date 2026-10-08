@@ -1,0 +1,21 @@
+# Server-wide settings. Copy to $JOBSEEKER_HOME/config/app.yaml (migration v2 writes it for you on first run).
+models: {scoring: openai/gpt-oss-20b, drafting: openai/gpt-oss-120b, facts: openai/gpt-oss-120b}
+thresholds: {apply: 70, review: 50}
+min_prescore: 30
+budgets: {score_per_run: 80, draft_per_run: 10, facts_per_user_per_day: 3, facts_per_day: 10}
+search: {hours_old: 72, results_per_search: 25, sites: [linkedin, naukri, indeed], linkedin_descriptions_per_run: 15}
+contacts: {tavily_monthly_limit: 950, apify_monthly_usd_limit: 4.5, hunter_monthly_limit: 45, smtp_daily_limit: 60}
+default_title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president,
+                     account executive, recruiter, designer, design lead, engineer, engineering, developer, architect,
+                     product marketing]
+cities: [Bengaluru, Gurgaon, Noida, Pune, Mumbai, Hyderabad, Chennai, Delhi]
+roles:
+  - {label: Product Analyst,           query: Product Analyst,           allow: [product, analyst, analytics]}
+  - {label: Associate Product Manager, query: Associate Product Manager, allow: [product, apm]}
+  - {label: Product Manager,           query: Product Manager,           allow: [product]}
+  - {label: Founder's Office,          query: Founder's Office,          allow: [founder, chief of staff, strategy]}
+  - {label: Growth Analyst,            query: Growth Analyst,            allow: [growth, analyst]}
+  - {label: Business Analyst,          query: Business Analyst,          allow: [business analyst, analyst]}
+  - {label: Data Analyst,              query: Data Analyst,              allow: [data analyst, analytics, insights, business intelligence]}
+  - {label: Program Manager,           query: Program Manager,           allow: [program manager, programme manager]}
+  - {label: Strategy & Ops,            query: Strategy and Operations,   allow: [strategy, operations]}

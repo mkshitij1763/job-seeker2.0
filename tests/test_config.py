@@ -1,6 +1,6 @@
 import pytest
 
-from jobseeker.config import load_companies, load_rubric
+from jobseeker.config import REPO_ROOT, UserPrefs, effective_prefs, load_app_config, load_companies, load_rubric
 
 
 def test_preferences_load(prefs):
@@ -60,3 +60,42 @@ search:
     prefs = load_preferences(p)
     assert prefs.search.queries == ["APM"] and prefs.search.sites == ["naukri"]
     assert prefs.search.hours_old == 72 and prefs.min_prescore == 45
+
+
+
+def _cfg():
+    return load_app_config(REPO_ROOT / "config" / "app.example.yaml")
+
+
+def test_app_config_loads_catalog_and_checkout_paths():
+    cfg = _cfg()
+    assert [r.label for r in cfg.roles][:2] == ["Product Analyst", "Associate Product Manager"]
+    assert len(cfg.roles) == 9
+    assert cfg.companies_path == REPO_ROOT / "companies.yaml" and cfg.rubric_path == REPO_ROOT / "rubric.yaml"
+
+
+def test_effective_prefs_maps_roles_and_defaults():
+    up = UserPrefs(roles=["Product Analyst", "Founder's Office"], custom_role="Chief of Staff", cities=["Pune"],
+                   experience_years=1.3, drop_if_min_years_at_least=2.5, experience_summary="x")
+    p = effective_prefs(up, _cfg(), name="A B", email="a@example.com")
+    assert p.target_roles == ["Product Analyst", "Founder's Office", "Chief of Staff"]
+    assert set(p.title_allow) >= {"product", "analyst", "founder", "chief of staff"}
+    assert p.search.queries == ["Product Analyst", "Founder's Office", "Chief of Staff"]
+    assert p.title_deny == _cfg().default_title_deny
+    assert p.current_ctc_lpa is None and p.min_prescore == 30 and p.name == "A B"
+
+
+def test_complete_lists_missing_steps_in_order():
+    assert UserPrefs(remote_india_ok=False).complete() == ["roles", "where", "experience"]
+    assert UserPrefs().complete() == ["roles", "experience"]  # remote_india_ok defaults on, which satisfies "where"
+    up = UserPrefs(roles=["Product Analyst"], remote_india_ok=True, drop_if_min_years_at_least=2.5,
+                   experience_summary="x")
+    assert up.complete() == []
+    assert UserPrefs(roles=["x"], experience_years=3, drop_if_min_years_at_least=2.5,
+                     experience_summary="x").complete() == ["experience"]  # threshold must exceed years
+
+
+def test_scorer_prompt_says_not_given_for_missing_ctc(facts, rubric, prefs):
+    from jobseeker.scoring.scorer import _system
+    text = _system(facts, prefs.model_copy(update={"current_ctc_lpa": None, "target_base_lpa": None}), rubric)
+    assert "CTC not given" in text

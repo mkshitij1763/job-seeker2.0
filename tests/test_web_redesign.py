@@ -55,10 +55,10 @@ def test_today_dashboard_greets_and_shows_stat_tiles(settings, seeded):
     a, b = seeded
     conn = connect(settings.db_path)
     conn.execute("UPDATE applications SET status = 'drafted' WHERE id IN (?, ?)", (a, b))
-    conn.execute("UPDATE users SET name = 'Kshitij Meshram' WHERE id = 1")
+    conn.execute("UPDATE users SET name = 'Asha Owner' WHERE id = 1")
     conn.commit()
     html = client(settings).get("/today").text
-    assert re.search(r"Good (morning|afternoon|evening), Kshitij\.", html)
+    assert re.search(r"Good (morning|afternoon|evening), Asha\.", html)
     for label in ("New today", "Ready to approve", "Need contacts", "Send in Gmail"):
         assert f'<span class="stat-label">{label}</span>' in html, label
     assert 'href="#find"' in html and 'id="find"' in html
@@ -70,11 +70,11 @@ def test_today_greeting_follows_local_hour(settings, seeded, monkeypatch):
     from jobseeker.web import pipeline as pipeline_routes
 
     conn = connect(settings.db_path)
-    conn.execute("UPDATE users SET name = 'Kshitij Meshram' WHERE id = 1")
+    conn.execute("UPDATE users SET name = 'Asha Owner' WHERE id = 1")
     conn.commit()
     for hour, word in ((8, "morning"), (14, "afternoon"), (21, "evening")):
         monkeypatch.setattr(pipeline_routes, "_local_hour", lambda h=hour: h)
-        assert f"Good {word}, Kshitij." in client(settings).get("/today").text
+        assert f"Good {word}, Asha." in client(settings).get("/today").text
 
 
 def test_jobs_page_chip_filters_and_tier_pills(settings, seeded):

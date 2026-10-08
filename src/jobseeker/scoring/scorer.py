@@ -33,7 +33,7 @@ Candidate:
 - Experience: {prefs.experience_summary}
 - Target roles: {", ".join(prefs.target_roles)}
 - Cities: {", ".join(prefs.cities)} (remote within India OK: {prefs.remote_india_ok})
-- Current CTC {prefs.current_ctc_lpa} LPA; target base {prefs.target_base_lpa} LPA
+- {"CTC not given" if prefs.current_ctc_lpa is None else f"Current CTC {prefs.current_ctc_lpa} LPA"}; {"target base not given" if prefs.target_base_lpa is None else f"target base {prefs.target_base_lpa} LPA"}
 - Must-haves: {", ".join(prefs.must_haves) or "none"}; deal-breakers: {", ".join(prefs.deal_breakers) or "none"}
 
 Resume facts (the only evidence of the candidate's skills):

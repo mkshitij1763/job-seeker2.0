@@ -171,4 +171,4 @@ def test_approve_adds_greeting_and_signature(ctx):
     msg = email_lib.message_from_bytes(base64.urlsafe_b64decode(gmail.raws[0]))
     body = next(p for p in msg.walk() if p.get_content_type() == "text/plain").get_payload(decode=True).decode()
     assert body.startswith("Hi Asha,\n\nEmail body citing 67%.")
-    assert "Kshitij Meshram" in body
+    assert "Asha Owner" in body

@@ -25,9 +25,15 @@
   | T10 admin page, sign-out controls | `ea42f25` |
   | T11 web isolation, acceptance, HANDOFF.md | `22fd45f` |
 
-- **Tests at the build/devops merge:** 550 pytest (472 + 78 from devops), 19 node; `uv lock --check` ok. backup.py conflict resolved to the multi-user side.
+- **Plan 3** `docs/superpowers/plans/2026-10-08-mu-onboarding-settings.md` (spec `docs/superpowers/specs/2026-10-08-mu-onboarding-settings-design.md`), base `2f473a9`:
+
+  | Task | Commit |
+  |---|---|
+  | P3-T1 UserPrefs, AppConfig, effective_prefs, fixtures | `this commit` |
+
+- **Tests at `P3-T1`:** 554 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 2 is built (T1–T11) and build/devops is merged. The whole-branch security review of plan 2 (`4a029ff..22fd45f`) is with a reviewer subagent; findings go to `manager`, and nothing gets fixed until `manager` rules. Then **plan 3** `docs/superpowers/plans/2026-10-08-mu-onboarding-settings.md` (accepted at `a16ac84`), T1–T9, ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** plan 3 **Task 2** (migration v2 and the profile importer), then T3–T9. Plan 2 security review: findings go to `manager`, and nothing gets fixed until `manager` rules. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -42,6 +48,7 @@
 - T9: no deviations. `base_url` must equal the browser origin exactly, or every POST gets 403 "Request blocked".
 - T10: no deviations. `admin.html` is a plain three-card page (Invites, Users, Usage); no new CSS (`.topbar-signout` has no rule yet).
 - T11: the T8 guard tests passed vacuously. FastAPI 0.142 keeps included routers as `_IncludedRouter` in `app.routes`, so the `isinstance(r, APIRoute)` walks saw zero routes. The walk now uses `fastapi.routing.iter_route_contexts`, which gives effective paths plus router-level deps, and asserts it finds more than 20 routes. The real guards were already correct: all pass, and an unguarded `/leak` probe now fails. Acceptance on a live-DB copy: counts unchanged, fk check empty, the un-migrated copy refuses to start.
+- P3-T1: the spec says "where" is complete with ≥1 city OR `remote_india_ok`, and remote defaults to True, so `UserPrefs().complete() == ["roles", "experience"]`. The plan's test expected all three; I kept the spec. `config/app.example.yaml`'s `default_title_deny` is the owner's full 18-item list. Personal values are gone from test fixtures: `tests/fixtures/preferences.yaml` uses "Asha Owner".
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

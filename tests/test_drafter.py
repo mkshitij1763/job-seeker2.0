@@ -33,7 +33,7 @@ def test_gives_up_with_warnings(prefs, facts):
 
 
 def test_signature_and_search_url(prefs):
-    assert signature(prefs).endswith("https://www.linkedin.com/in/kshitijmeshram1763/")
+    assert signature(prefs).endswith("https://www.linkedin.com/in/asha-owner/")
     assert "keywords=Groww+Founder%27s+Office" in linkedin_search_url("Groww", "Founder's Office")
 
 
