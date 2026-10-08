@@ -64,26 +64,6 @@ class Settings(BaseSettings):
         return self.jobseeker_home / "profile"
 
     @property
-    def resume_path(self) -> Path:
-        return self.profile_dir / "resume.pdf"
-
-    @property
-    def facts_path(self) -> Path:
-        return self.profile_dir / "facts.json"
-
-    @property
-    def preferences_path(self) -> Path:
-        return self.profile_dir / "preferences.yaml"
-
-    @property
-    def companies_path(self) -> Path:
-        return self.jobseeker_home / "companies.yaml"
-
-    @property
-    def rubric_path(self) -> Path:
-        return self.jobseeker_home / "rubric.yaml"
-
-    @property
     def app_config_path(self) -> Path:
         return self.jobseeker_home / "config" / "app.yaml"
 

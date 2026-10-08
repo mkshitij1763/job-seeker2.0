@@ -1,12 +1,13 @@
-import json
+from datetime import UTC, datetime
 
 import pytest
 
 from jobseeker.db.applications import get_application, get_drafts, get_status
 from jobseeker.db.core import connect
+from jobseeker.db.profile import save_facts
 from jobseeker.gmail.client import GmailUnavailable
 from jobseeker.outreach.drafter import DraftBundle
-from tests.conftest import signed_in_client
+from tests.conftest import owner_resume, signed_in_client
 from tests.fakes import FakeLLM
 
 
@@ -36,8 +37,8 @@ class FakeGmail:
 
 @pytest.fixture
 def ctx(settings, seeded, facts):
-    settings.resume_path.write_bytes(b"%PDF-1.5 fake")
-    settings.facts_path.write_text(json.dumps({"resume_sha256": "x", "facts": facts.model_dump()}))
+    owner_resume(settings).write_bytes(b"%PDF-1.5 fake")
+    save_facts(connect(settings.db_path), 1, "x", facts, edited=True, now=datetime.now(UTC))
     gmail = FakeGmail()
     llm = FakeLLM(handler=lambda schema, prompt: DraftBundle(
         contact_role="Founder", contact_reason="r", email_subject="New subject",
@@ -86,7 +87,7 @@ def test_approve_unverified_needs_confirmation_then_creates_draft(ctx):
 
 
 def test_approve_gmail_unavailable_keeps_state(settings, seeded, facts):
-    settings.resume_path.write_bytes(b"%PDF fake")
+    owner_resume(settings).write_bytes(b"%PDF fake")
     a = seeded[0]
     client = signed_in_client(settings, gmail_factory=lambda: FakeGmail(fail=True), follow_redirects=False)
     client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",

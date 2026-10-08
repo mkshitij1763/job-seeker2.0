@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from jobseeker.config import Settings, UserPrefs, load_preferences, load_rubric
+from jobseeker.config import REPO_ROOT, Settings, UserPrefs, load_app_config, load_preferences, load_rubric
 from jobseeker.profile.facts import Achievement, Facts, Role
 from jobseeker.db.applications import ensure_application, save_draft, set_suggestion, transition
 from jobseeker.db.core import connect
@@ -42,12 +42,17 @@ def settings(home: Path) -> Settings:
 
 @pytest.fixture
 def prefs(settings):
-    return load_preferences(settings.preferences_path)
+    return load_preferences(ROOT / "tests" / "fixtures" / "preferences.yaml")
 
 
 @pytest.fixture
 def rubric(settings):
-    return load_rubric(settings.rubric_path)
+    return load_rubric(REPO_ROOT / "rubric.yaml")
+
+
+@pytest.fixture
+def app_config(settings):
+    return load_app_config(settings.app_config_path)
 
 
 @pytest.fixture
@@ -116,6 +121,14 @@ def seeded_two(settings, seeded):
     conn.commit()
     conn.close()
     return {"owner_apps": seeded, "roommate_app": app2, "j1": j1}
+
+
+def owner_resume(settings) -> Path:
+    """Where the owner's resume lives (data/users/1/resume.pdf), with its folder created."""
+    from jobseeker.profile.resume import resume_path
+    path = resume_path(settings.jobseeker_home, 1)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def signed_in_client(settings, user_id: int = 1, *, follow_redirects: bool = True, **app_kwargs):

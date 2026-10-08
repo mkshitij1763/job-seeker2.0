@@ -87,8 +87,11 @@ def test_contact_inputs_are_phone_friendly(settings, seeded):
 
 
 def test_jd_summary_counts_matched_skills(settings, seeded, facts):
-    import json as _json
-    settings.facts_path.write_text(_json.dumps({"resume_sha256": "x", "facts": facts.model_dump()}))
+    from datetime import UTC, datetime
+
+    from jobseeker.db.core import connect
+    from jobseeker.db.profile import save_facts
+    save_facts(connect(settings.db_path), 1, "x", facts, edited=True, now=datetime.now(UTC))
     html = client(settings).get(f"/applications/{seeded[0]}").text
     # seeded JD: "We want SQL and A/B Testing skills." -> SQL and A/B Testing are among the facts' skills
     assert "Job description · 2 skills matched" in html

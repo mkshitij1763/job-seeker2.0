@@ -18,10 +18,10 @@ from jobseeker.gmail.mime import build_raw_message
 from jobseeker.llm import LLMError
 from jobseeker.outreach.drafter import greeting, signature
 from jobseeker.pipeline.run import draft_application
-from jobseeker.profile.facts import load_facts
+from jobseeker.profile.resume import resume_path
 from jobseeker.status import InvalidTransition
 from jobseeker.web import oauth
-from jobseeker.web.deps import current_user, get_conn, render, require_owner
+from jobseeker.web.deps import current_facts, current_prefs, current_user, get_conn, render, require_owner
 
 router = APIRouter(prefix="/applications")
 KINDS = {"email", "li_note", "li_dm"}
@@ -38,19 +38,19 @@ def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err:
 
 
 @router.get("/{app_id}")
-def detail(request: Request, app_id: int, user=Depends(current_user), conn=Depends(get_conn)):
+def detail(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
+           facts=Depends(current_facts), conn=Depends(get_conn)):
     d = queries.application_detail(conn, user.id, app_id)
     if not d:
         raise HTTPException(404)
-    settings = request.app.state.settings
-    terms = load_facts(settings.facts_path).skills if settings.facts_path.exists() else []
+    terms = facts.skills if facts else []
     jd = (d["job"]["jd_text"] or "").lower()
     matched = sum(1 for t in terms if t and t.lower() in jd)
     from jobseeker.web.contacts import card_context
 
     from jobseeker.web.view import factor_bars, next_step, timeline
 
-    ctx = card_context(request, conn, app_id)
+    ctx = card_context(request, conn, app_id, prefs)
     bars = factor_bars(d["score"]["breakdown"], request.app.state.rubric) if d["score"] else []
     return render(request, conn, "application.html", terms=terms, matched_skills=matched,
                   can_undo=can_undo(conn, app_id), bars=bars,
@@ -107,16 +107,16 @@ def edit_draft(app_id: int, kind: str, subject: str = Form(""), body: str = Form
 
 
 @router.post("/{app_id}/draft", dependencies=[Depends(require_owner)])
-def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
+def draft_now(request: Request, app_id: int, prefs=Depends(current_prefs), facts=Depends(current_facts),
+              conn=Depends(get_conn)):
     state = request.app.state
     status = get_status(conn, app_id)
     if status not in REGENERATABLE:
         return _back(app_id, err=f"Can't regenerate drafts once {status.replace('_', ' ')}; edit them instead")
+    if facts is None:
+        return _back(app_id, err="No resume facts yet. Add your resume in Settings")
     try:
-        facts = load_facts(state.settings.facts_path)
-        draft_application(conn, app_id, state.llm_factory(), facts, state.prefs)
-    except FileNotFoundError:
-        return _back(app_id, err="No resume facts yet. Run `jobseeker init`")
+        draft_application(conn, app_id, state.llm_factory(), facts, prefs)
     except LLMError as e:
         return _back(app_id, err=f"Drafting failed: {e}")
     if status == "approved":
@@ -127,12 +127,13 @@ def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
 
 
 @router.post("/{app_id}/approve", dependencies=[Depends(require_owner)])
-async def approve(request: Request, app_id: int, user=Depends(current_user), conn=Depends(get_conn)):
+async def approve(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
+                  conn=Depends(get_conn)):
     form = await request.form()  # the confirm_<rank> boxes are dynamic, so read the form here, then work off-loop
-    return await run_in_threadpool(_approve, request.app.state, conn, user.id, app_id, form)
+    return await run_in_threadpool(_approve, request.app.state, conn, prefs, user.id, app_id, form)
 
 
-def _approve(state, conn, user_id: int, app_id: int, form):
+def _approve(state, conn, prefs, user_id: int, app_id: int, form):
     from jobseeker.db.contacts_repo import people
 
     d = queries.application_detail(conn, user_id, app_id)
@@ -145,7 +146,7 @@ def _approve(state, conn, user_id: int, app_id: int, form):
         return _back(app_id, err=f"Can't approve from status '{get_status(conn, app_id)}'")
     everyone = people(conn, app_id)
     if not everyone:
-        return _approve_single(state, conn, app_id, d, email, bool(form.get("confirm_unverified")))
+        return _approve_single(state, conn, prefs, user_id, app_id, d, email, bool(form.get("confirm_unverified")))
     linked = [p for p in everyone if p["wave"] == 1]
     manual = d["contact"]  # "Add someone myself" while people are linked: emailed now too, as rank 0
     if manual and manual["id"] not in {p["contact_id"] for p in everyone}:
@@ -167,7 +168,7 @@ def _approve(state, conn, user_id: int, app_id: int, form):
     created, failure, first_draft_id = [], None, None
     for p in targets:
         try:
-            draft_id = create_draft(state.gmail_factory(), _raw_for(state, p["email"], p["name"], email))
+            draft_id = create_draft(state.gmail_factory(), _raw_for(state, prefs, user_id, p["email"], p["name"], email))
         except GmailUnavailable as e:
             failure = e
             break
@@ -188,16 +189,16 @@ def _approve(state, conn, user_id: int, app_id: int, form):
     return _back(app_id, msg="; ".join(parts) + ". Review and press Send in Gmail")
 
 
-def _raw_for(state, to: str, name: str, email: dict, extra: str = "") -> str:
-    prefs = state.prefs
+def _raw_for(state, prefs, user_id: int, to: str, name: str, email: dict, extra: str = "") -> str:
+    resume = resume_path(state.settings.jobseeker_home, user_id)
     body = email["body"] + (f"\n\n{extra}" if extra else "")
     return build_raw_message(
         to=to, subject=email["subject"], body=greeting(name, body) + signature(prefs),
-        attachment=state.settings.resume_path if state.settings.resume_path.exists() else None,
+        attachment=resume if resume.exists() else None,
         attachment_name=f"{prefs.name.replace(' ', '_')}_Resume.pdf")
 
 
-def _approve_single(state, conn, app_id: int, d: dict, email: dict, confirm_unverified: bool):
+def _approve_single(state, conn, prefs, user_id: int, app_id: int, d: dict, email: dict, confirm_unverified: bool):
     contact = d["contact"]
     if not contact or not contact["email"]:
         return _back(app_id, err="Add the contact's email first")
@@ -206,7 +207,7 @@ def _approve_single(state, conn, app_id: int, d: dict, email: dict, confirm_unve
     if contact["email_status"] != "verified" and not confirm_unverified:
         return _back(app_id, err="Email is unverified. Tick the confirmation box to draft anyway")
     try:
-        draft_id = create_draft(state.gmail_factory(), _raw_for(state, contact["email"], contact["name"], email))
+        draft_id = create_draft(state.gmail_factory(), _raw_for(state, prefs, user_id, contact["email"], contact["name"], email))
     except GmailUnavailable as e:
         return _back(app_id, err=f"Gmail draft not created: {e}")
     previous = email["gmail_draft_id"]

@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from jobseeker.config import Settings, load_preferences, load_rubric
+from jobseeker.config import Settings, load_app_config, load_rubric
 from jobseeker.status import allowed_next
 from jobseeker.web.csrf import OriginCheck
 from jobseeker.web.deps import NotAuthenticated, current_user, owned_app
@@ -59,6 +59,9 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
         raise RuntimeError("Set " + ", ".join(n.upper() for n in missing) + " in .env before starting the web app")
     if len(settings.secret_key) < 32:
         raise RuntimeError("SECRET_KEY must be at least 32 characters (run `jobseeker gen-key`)")
+    if not settings.app_config_path.exists():
+        raise RuntimeError("Run `jobseeker migrate` (with the owner's files in $JOBSEEKER_HOME/profile/), "
+                           "or copy config/app.example.yaml to config/app.yaml")
     boot = connect(settings.db_path)  # raises SchemaOutOfDate on an un-migrated database: fail at startup
     ensure_owner(boot, settings.owner_email)
     boot.close()
@@ -69,11 +72,11 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     templates.env.globals["asset"] = asset
     templates.env.globals.update(tier=tier, TIER_LABELS=TIER_LABELS, STEPS=STEPS)
     app.state.settings = settings
-    app.state.prefs = load_preferences(settings.preferences_path)
-    app.state.rubric = load_rubric(settings.rubric_path)
+    app.state.app_config = load_app_config(settings.app_config_path)  # server-wide; a change needs a restart
+    app.state.rubric = load_rubric(app.state.app_config.rubric_path)
     app.state.templates = templates
     app.state.llm_factory = llm_factory or (
-        lambda: FallbackLLM(build_llm(settings), app.state.prefs.models.fallbacks))
+        lambda: FallbackLLM(build_llm(settings), app.state.app_config.models.fallbacks))
     app.state.gmail_factory = gmail_factory or (lambda: load_service(settings.secrets_dir / "token.json"))
     app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory))
     app.mount("/static", _Static(directory=HERE / "static"), name="static")

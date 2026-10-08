@@ -8,7 +8,7 @@ from jobseeker.db.applications import get_status, transition
 from jobseeker.db.contacts_repo import link_contact, people, upsert_contact
 from jobseeker.db.core import connect
 from jobseeker.gmail.client import GmailUnavailable
-from tests.conftest import signed_in_client
+from tests.conftest import owner_resume, signed_in_client
 
 
 class FakeGmail:
@@ -53,7 +53,7 @@ def link_three(settings, a, statuses=("verified", "verified", "verified")):
 
 
 def client(settings, gmail):
-    settings.resume_path.write_bytes(b"%PDF fake")
+    owner_resume(settings).write_bytes(b"%PDF fake")
     return signed_in_client(settings, gmail_factory=lambda: gmail, follow_redirects=False)
 
 
@@ -190,7 +190,7 @@ def test_approve_does_gmail_work_off_the_event_loop(settings, seeded):
         except RuntimeError:
             on_loop.append(False)
         return FakeGmail()
-    settings.resume_path.write_bytes(b"%PDF fake")
+    owner_resume(settings).write_bytes(b"%PDF fake")
     signed_in_client(settings, gmail_factory=factory, follow_redirects=False).post(f"/applications/{a}/approve")
     assert on_loop and not any(on_loop)  # blocking Gmail/SQLite calls must not stall other requests
 

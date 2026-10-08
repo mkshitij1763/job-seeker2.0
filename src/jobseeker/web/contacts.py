@@ -13,7 +13,7 @@ from jobseeker.db.contacts_repo import (
 from jobseeker.db.usage import Budget, contacts_limits
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
-from jobseeker.web.deps import current_user, get_conn, require_owner
+from jobseeker.web.deps import current_prefs, current_user, get_conn, require_owner
 
 router = APIRouter(prefix="/applications")
 
@@ -23,20 +23,20 @@ def _company(conn, app_id: int) -> str:
                         (app_id,)).fetchone()["company"]
 
 
-def card_context(request: Request, conn, app_id: int) -> dict:
+def card_context(request: Request, conn, app_id: int, prefs) -> dict:
     state = request.app.state
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
             "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
             "third_due": third_due(conn, app_id, datetime.now(UTC)),
             "nudge_due": nudge_due(conn, app_id, datetime.now(UTC)),
             "already_emailed": emailed_count(conn, app_id) > 0,
-            "usage": Budget(conn, request.state.user.id, contacts_limits(state.prefs.contacts), datetime.now(UTC)).summary(),
+            "usage": Budget(conn, request.state.user.id, contacts_limits(prefs.contacts), datetime.now(UTC)).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
 
 
 @router.post("/{app_id}/contacts/find", dependencies=[Depends(require_owner)])
 def find(request: Request, app_id: int, background: BackgroundTasks, user=Depends(current_user),
-         conn=Depends(get_conn)):
+         prefs=Depends(current_prefs), conn=Depends(get_conn)):
     state = request.app.state
     if not state.settings.tavily_api_key and state.contacts_deps_factory is None:
         return _back(app_id, err="Add TAVILY_API_KEY to .env to find contacts")
@@ -48,18 +48,18 @@ def find(request: Request, app_id: int, background: BackgroundTasks, user=Depend
         return _back(app_id, err="People were already emailed for this job; edit or remove them individually")
     if not claim_find(conn, app_id, datetime.now(UTC)):
         return _back(app_id, msg="Already finding contacts")
-    background.add_task(run_find, state.settings.db_path, app_id, user.id, state.prefs, deps_factory)
+    background.add_task(run_find, state.settings.db_path, app_id, user.id, prefs, deps_factory)
     return _back(app_id)  # the People card shows progress and replaces itself when done
 
 
 @router.get("/{app_id}/contacts/card")
-def card(request: Request, app_id: int, conn=Depends(get_conn)):
+def card(request: Request, app_id: int, prefs=Depends(current_prefs), conn=Depends(get_conn)):
     app = conn.execute("SELECT * FROM applications WHERE id = ?", (app_id,)).fetchone()
     if not app:
         raise HTTPException(404)
     drafts = {r["kind"]: dict(r) for r in conn.execute("SELECT * FROM drafts WHERE application_id = ?", (app_id,))}
     return request.app.state.templates.TemplateResponse(
-        request, "_people.html", {"app": dict(app), "drafts": drafts, **card_context(request, conn, app_id)})
+        request, "_people.html", {"app": dict(app), "drafts": drafts, **card_context(request, conn, app_id, prefs)})
 
 
 @router.post("/{app_id}/contacts/domain", dependencies=[Depends(require_owner)])
@@ -121,7 +121,8 @@ def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
 
 
 @router.post("/{app_id}/contacts/3/email", dependencies=[Depends(require_owner)])
-def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
+def email_third(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
+                conn=Depends(get_conn)):
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
@@ -135,7 +136,7 @@ def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
     email = conn.execute("SELECT * FROM drafts WHERE application_id = ? AND kind = 'email'", (app_id,)).fetchone()
     try:
         draft_id = create_draft(request.app.state.gmail_factory(),
-                                _raw_for(request.app.state, third["email"], third["name"], dict(email),
+                                _raw_for(request.app.state, prefs, user.id, third["email"], third["name"], dict(email),
                                          extra="I also reached out to your colleague earlier."))
     except GmailUnavailable as e:
         return _back(app_id, err=f"Gmail draft not created: {e}")
@@ -152,7 +153,8 @@ FOLLOW_UP = ("Following up on my note from last week about the {title} role. I'd
 
 
 @router.post("/{app_id}/contacts/followup", dependencies=[Depends(require_owner)])
-def follow_up(request: Request, app_id: int, conn=Depends(get_conn)):
+def follow_up(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
+              conn=Depends(get_conn)):
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
@@ -168,7 +170,7 @@ def follow_up(request: Request, app_id: int, conn=Depends(get_conn)):
     created, failure = [], None
     for p in due:
         try:
-            create_draft(request.app.state.gmail_factory(), _raw_for(request.app.state, p["email"], p["name"], note))
+            create_draft(request.app.state.gmail_factory(), _raw_for(request.app.state, prefs, user.id, p["email"], p["name"], note))
         except GmailUnavailable as e:
             failure = e
             break

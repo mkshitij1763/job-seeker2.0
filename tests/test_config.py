@@ -24,13 +24,13 @@ def test_rubric_rejects_bad_total(tmp_path):
 
 
 def test_companies_load(settings):
-    companies = load_companies(settings.companies_path)
+    companies = load_companies(REPO_ROOT / "companies.yaml")
     assert any(c.slug == "sarvam" and c.ats == "ashby" for c in companies)
 
 
 def test_settings_paths(settings, home):
     assert settings.db_path == home / "data" / "jobseeker.db"
-    assert settings.resume_path == home / "profile" / "resume.pdf"
+    assert settings.app_config_path == home / "config" / "app.yaml"
 
 
 def test_search_defaults_when_block_missing(prefs):

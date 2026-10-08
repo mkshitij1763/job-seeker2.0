@@ -1,6 +1,6 @@
 import json
 
-from jobseeker.config import load_rubric
+from jobseeker.config import REPO_ROOT, load_rubric
 from jobseeker.db.core import connect
 from jobseeker.web.view import STEPS, factor_bars, nav_counts, next_step, tier, timeline
 
@@ -11,7 +11,7 @@ def test_tier_thresholds():
 
 
 def test_factor_bars_follow_rubric_order_clamp_and_skip_unknown(settings):
-    rubric = load_rubric(settings.rubric_path)
+    rubric = load_rubric(REPO_ROOT / "rubric.yaml")
     bars = factor_bars(json.dumps({"skills_match": 25, "role_fit": 15, "mystery": 3}), rubric)
     assert [b["key"] for b in bars] == ["role_fit", "skills_match"]
     assert bars[0] == {"key": "role_fit", "label": "Role fit", "value": 15, "max": 30, "pct": 50}

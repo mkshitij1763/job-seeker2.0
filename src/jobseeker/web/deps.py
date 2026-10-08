@@ -69,6 +69,17 @@ def owned_app(app_id: int, user: User = Depends(current_user), conn=Depends(get_
     return app_id
 
 
+def current_prefs(request: Request, user: User = Depends(current_user), conn=Depends(get_conn)):
+    """The signed-in user's effective Preferences, read fresh per request (cached within it by FastAPI)."""
+    from jobseeker.db.profile import load_user_context
+    return load_user_context(conn, user.id, request.app.state.app_config)[0]
+
+
+def current_facts(user: User = Depends(current_user), conn=Depends(get_conn)):
+    from jobseeker.db.profile import get_facts
+    return get_facts(conn, user.id)
+
+
 def require_owner(user: User = Depends(current_user)) -> User:
     """Interim outreach gate: contacts and company domains are shared rows, so only the owner may write them until
     sub-project 5 makes contacts per user (it replaces this with require_outreach)."""

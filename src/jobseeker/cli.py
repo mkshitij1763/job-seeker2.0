@@ -4,63 +4,67 @@ import json
 
 import typer
 
-from jobseeker.config import Settings, load_companies, load_preferences, load_rubric
+from jobseeker.config import Settings, load_companies, load_rubric
 from jobseeker.db.core import connect
-from jobseeker.llm import FallbackLLM, build_llm
+from jobseeker.llm import build_llm
 
 app = typer.Typer(no_args_is_help=True, help="Personal job search and outreach assistant.")
 
 
-def _load():
-    from jobseeker.db.users import ensure_owner
+def _ctx(email: str | None = None):
+    """Settings, server config, a connection, and one user's context (the owner unless --user names someone)."""
+    from jobseeker.config import load_app_config
+    from jobseeker.db.profile import load_user_context
+    from jobseeker.db.users import OWNER_ID, ensure_owner
 
     settings = Settings()
+    cfg = load_app_config(settings.app_config_path)
     conn = connect(settings.db_path)
     ensure_owner(conn, settings.owner_email)
-    conn.close()
-    return settings, load_preferences(settings.preferences_path), load_rubric(settings.rubric_path)
+    if email:
+        row = conn.execute("SELECT id FROM users WHERE email = lower(?)", (email.strip(),)).fetchone()
+        if row is None:
+            typer.echo(f"No user with email {email}", err=True)
+            raise typer.Exit(1)
+        uid = row[0]
+    else:
+        uid = OWNER_ID
+    prefs, facts = load_user_context(conn, uid, cfg)
+    return settings, cfg, conn, uid, prefs, facts
 
 
 @app.command()
 def init() -> None:
-    """Create folders and the database, and extract resume facts."""
-    from jobseeker.profile.facts import load_or_build_facts
-
-    settings, prefs, _ = _load()
+    """Create the folders and the database."""
+    settings = Settings()
     for d in (settings.data_dir, settings.logs_dir, settings.secrets_dir):
         d.mkdir(parents=True, exist_ok=True)
     connect(settings.db_path).close()
-    if not settings.resume_path.exists():
-        typer.echo(f"Put your resume at {settings.resume_path} and run `jobseeker init` again.")
-        raise typer.Exit(1)
-    facts = load_or_build_facts(FallbackLLM(build_llm(settings), prefs.models.fallbacks), settings.resume_path,
-                                settings.facts_path, prefs.models.facts)
-    typer.echo(f"Facts written to {settings.facts_path}: {len(facts.achievements)} achievements, "
-               f"{len(facts.skills)} skills. Review and edit that file if anything is wrong.")
+    typer.echo(f"Ready in {settings.jobseeker_home}. Run `jobseeker migrate` to import profile/ and write config/app.yaml.")
 
 
-def _run(fetch: bool, force: bool) -> None:
+def _run(fetch: bool, force: bool, user: str = "") -> None:
     from jobseeker.db.companies import active_companies
-    from jobseeker.db.users import OWNER_ID
     from jobseeker.pipeline.run import run_daily
-    from jobseeker.profile.facts import load_facts
     from jobseeker.sources.http import make_client
     from jobseeker.sources.registry import build_sources
 
-    settings, prefs, rubric = _load()
-    conn = connect(settings.db_path)
-    facts = load_facts(settings.facts_path)
-    sources = build_sources(load_companies(settings.companies_path), active_companies(conn), prefs.search)
+    settings, cfg, conn, uid, prefs, facts = _ctx(user)
+    if facts is None:
+        typer.echo("No resume facts for this user yet", err=True)
+        raise typer.Exit(1)
+    sources = build_sources(load_companies(cfg.companies_path), active_companies(conn), prefs.search)
     with make_client() as client:
-        stats = run_daily(conn, user_id=OWNER_ID, sources=sources, client=client, llm=build_llm(settings),
-                          facts=facts, prefs=prefs, rubric=rubric, fetch=fetch, force_rescore=force)
+        stats = run_daily(conn, user_id=uid, sources=sources, client=client, llm=build_llm(settings),
+                          facts=facts, prefs=prefs, rubric=load_rubric(cfg.rubric_path), fetch=fetch,
+                          force_rescore=force)
     typer.echo(json.dumps(stats.__dict__, indent=2))
 
 
 @app.command()
-def run() -> None:
+def run(user: str = typer.Option("", "--user", help="The user's email (default: the owner).")) -> None:
     """Fetch, dedup, filter, score and draft (the daily job), then back up the database."""
-    _run(fetch=True, force=False)
+    _run(fetch=True, force=False, user=user)
     try:
         backup()
     except Exception as e:  # a failed backup must not hide the run's own result
@@ -69,13 +73,13 @@ def run() -> None:
 
 @app.command()
 def backup() -> None:
-    """Save a gzipped copy of the database and facts.json (keeps the last 7 days)."""
+    """Save a gzipped copy of the database (keeps the last 7 days); facts live in the database."""
     from datetime import datetime
 
     from jobseeker.db.backup import backup as write_backup
 
     settings = Settings()
-    out = write_backup(settings.db_path, settings.facts_path, settings.backup_path, datetime.now().astimezone())
+    out = write_backup(settings.db_path, settings.backup_path, datetime.now().astimezone())
     typer.echo(f"Backup written to {out}")
 
 
@@ -98,22 +102,21 @@ def migrate(dry_run: bool = typer.Option(False, "--dry-run", help="Migrate a cop
 
 
 @app.command()
-def rescore() -> None:
+def rescore(user: str = typer.Option("", "--user", help="The user's email (default: the owner).")) -> None:
     """Re-score existing jobs (after editing rubric.yaml or preferences)."""
-    _run(fetch=False, force=True)
+    _run(fetch=False, force=True, user=user)
 
 
 @app.command()
-def refilter(apply: bool = typer.Option(False, "--apply", help="Write the changes (default: only list them).")) -> None:
+def refilter(apply: bool = typer.Option(False, "--apply", help="Write the changes (default: only list them)."),
+             user: str = typer.Option("", "--user", help="The user's email (default: the owner).")) -> None:
     """Re-apply preferences.yaml filters to stored jobs (after changing title, city or experience rules)."""
     from datetime import UTC, datetime
 
     from jobseeker.pipeline.refilter import refilter as run_refilter
 
-    settings, prefs, _ = _load()
-    from jobseeker.db.users import OWNER_ID
-
-    changes = run_refilter(connect(settings.db_path), OWNER_ID, prefs, datetime.now(UTC), apply=apply)
+    _, _, conn, uid, prefs, _ = _ctx(user)
+    changes = run_refilter(conn, uid, prefs, datetime.now(UTC), apply=apply)
     for c in changes:
         effect = "-> skipped" if c["skips"] else f"(kept {c['status']})" if c["status"] else ""
         typer.echo(f"  {c['title'][:40]:<41}{c['company'][:24]:<25}{c['reason']:<34}{effect}")
@@ -130,7 +133,7 @@ def companies() -> None:
     """List companies discovered automatically from job-site results."""
     from jobseeker.db.companies import list_companies
 
-    settings, _, _ = _load()
+    settings = Settings()
     rows = list_companies(connect(settings.db_path))
     if not rows:
         typer.echo("No companies discovered yet. They appear after `jobseeker run`.")

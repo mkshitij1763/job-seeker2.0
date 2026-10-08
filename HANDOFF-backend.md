@@ -31,10 +31,11 @@
   |---|---|
   | P3-T1 UserPrefs, AppConfig, effective_prefs, fixtures | `0f773be` |
   | P3-T2 migration v2, profile importer (+ where_confirmed) | `4f68793` |
+  | P3-T3 request-scoped prefs, DB facts, CLI --user | `this commit` |
 
-- **Tests at the security-review fix:** 579 pytest, 19 node. `git status` is clean. build/devops2 (8fc47f6) merged as `3796e44`.
+- **Tests at `P3-T3`:** 582 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 3 **Task 3** (request-scoped prefs; facts from the DB), then T4–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** a small commit hiding outreach UI for non-owners (`can_outreach` flag, from `manager`: roommates get "Open job posting ↗" plus "Mark applied", with a render test), then plan 3 **Task 4** (require_onboarded, onboarding steps 1-3), then T5–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -59,6 +60,7 @@
   - M2: the app refuses to start with a `SECRET_KEY` under 32 chars (`gen-key` gives 44).
   - M3: the OAuth cookie is cleared on every callback exit.
 - Merge of build/devops2: `test_uninvited_gets_403_with_owner_name_and_no_row` now expects "Ask Asha for an invite.", since the fixture owner's name is imported since P3-T2.
+- P3-T3: `db/backup.backup(db_path, dest, now)` no longer takes `facts_path`, because facts live in the DB. The web app refuses to start without `config/app.yaml`. A CLI `--user` with an unknown email exits 1. Tests use conftest `owner_resume(settings)` and `save_facts` in place of the removed `Settings` paths.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

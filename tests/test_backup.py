@@ -12,17 +12,15 @@ def test_backup_writes_a_restorable_copy_and_keeps_the_last_seven(tmp_path):
     conn = connect(db)
     conn.execute("INSERT INTO runs (started_at) VALUES ('2026-10-08T00:00:00+00:00')")
     conn.commit()
-    facts = tmp_path / "facts.json"
-    facts.write_text('{"name": "K"}', encoding="utf-8")
     dest = tmp_path / "backups"
     start = datetime(2026, 10, 1, tzinfo=UTC)
     for day in range(9):
-        out = backup(db, facts, dest, start + timedelta(days=day))
+        out = backup(db, dest, start + timedelta(days=day))
     assert out.name == "jobseeker-2026-10-09.db.gz"
     restored = tmp_path / "restored.db"
     restored.write_bytes(gzip.decompress(out.read_bytes()))
     assert sqlite3.connect(restored).execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
-    assert len(list(dest.glob("jobseeker-*.db.gz"))) == 7 and len(list(dest.glob("facts-*.json"))) == 7
+    assert len(list(dest.glob("jobseeker-*.db.gz"))) == 7
     assert not (dest / "jobseeker-2026-10-02.db.gz").exists()
 
 
