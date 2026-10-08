@@ -122,13 +122,16 @@ def companies() -> None:
 
 
 @app.command()
-def serve(port: int = 8000) -> None:
+def serve(port: int = 8000,
+          proxy_headers: bool = typer.Option(False, "--proxy-headers/--no-proxy-headers",
+                                             help="Trust X-Forwarded-* from Caddy on 127.0.0.1 (server only).")) -> None:
     """Start the dashboard on http://127.0.0.1:<port>."""
     import uvicorn
 
     from jobseeker.web.app import create_app
 
-    uvicorn.run(create_app(Settings()), host="127.0.0.1", port=port)
+    extra = {"proxy_headers": True, "forwarded_allow_ips": "127.0.0.1"} if proxy_headers else {}
+    uvicorn.run(create_app(Settings()), host="127.0.0.1", port=port, **extra)
 
 
 @app.command("auth-gmail")
