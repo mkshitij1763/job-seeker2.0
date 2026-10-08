@@ -42,7 +42,7 @@ Run Job Seeker on an always-on public server so the owner and two roommates can 
 
 ```
 /srv/jobseeker/
-  app/               git checkout (detached at the deployed SHA)
+  app/               git checkout (detached at the deployed SHA); also holds companies.yaml and rubric.yaml
   data/              jobseeker.db, users/<id>/resume.pdf, logs/, backups/, deploy.log
   profile/           only during the first migration (Mac import), then removed
   config/app.yaml    global settings (onboarding spec), written by migration v2
@@ -51,6 +51,8 @@ Run Job Seeker on an always-on public server so the owner and two roommates can 
 ```
 
 `JOBSEEKER_HOME=/srv/jobseeker`, so `Settings.data_dir`, `profile_dir` and `db_path` resolve as on the Mac.
+
+`companies.yaml` and `rubric.yaml` stay in the code checkout (`/srv/jobseeker/app`), not in `JOBSEEKER_HOME`: `AppConfig.companies_path` and `rubric_path` default to the checkout (onboarding spec §4.1). They're versioned with the code and change only through a deploy. `bootstrap.sh`, `deploy.sh` and the data move never copy them into `/srv/jobseeker`.
 
 ### 2. What the user does by hand
 
@@ -98,7 +100,9 @@ The owner does this once, about 45 minutes. **(verify)** items must be checked a
   4. Render the templates in `scripts/server/templates/` (§4, §5) with `envsubst`, using only `${DOMAIN}`, `${OWNER_EMAIL}` and `${HOME_DIR}`. `DOMAIN` is the host part of `BASE_URL`. Install them into `/etc/systemd/system/` and `/etc/caddy/Caddyfile`.
   5. Write `/etc/duckdns.env` (root, 600) with `DUCKDNS_DOMAIN` (the first label of `DOMAIN`) and `DUCKDNS_TOKEN`. The token is read from the terminal with `read -s` if the file is missing; it's never passed as an argument.
   6. `systemctl daemon-reload`; enable and start `caddy` and `duckdns.timer`.
-  7. Enable `jobseeker-web` and `jobseeker-tick.timer` **only if** `.env` has non-empty `SECRET_KEY`, `OWNER_EMAIL`, `BASE_URL`, `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and `data/jobseeker.db` exists. Otherwise it prints which ones are missing.
+  7. Enable `jobseeker-web` and `jobseeker-tick.timer` **only if** all of these hold; otherwise it prints which ones are missing:
+     - `.env` has non-empty `SECRET_KEY`, `OWNER_EMAIL`, `BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_KEY`. `create_app` refuses to start without them (auth spec §4.1, outreach spec §6);
+     - `data/jobseeker.db` and `config/app.yaml` exist (onboarding spec §4.1).
 - It ends with a status block: each unit's state, the Caddy certificate state, and what's left to do.
 
 ### 4. systemd units (templates in `scripts/server/templates/`)
@@ -158,6 +162,9 @@ Usage: `js migrate --dry-run`, `js run --user …`, `js restore …`.
 	email ${OWNER_EMAIL}
 }
 ${DOMAIN} {
+	request_body {
+		max_size 6MB
+	}
 	reverse_proxy 127.0.0.1:8000
 	header Strict-Transport-Security "max-age=31536000"
 	log {
@@ -171,6 +178,7 @@ ${DOMAIN} {
 
 - Certificates come from Let's Encrypt over the HTTP-01 challenge (port 80), and port 80 redirects to HTTPS.
 - No `encode`: the app already gzips (`deb1441`).
+- `request_body max_size 6MB` is the proxy-level cap for resume uploads: the onboarding spec's limit is 5 MB, plus room for the multipart overhead. Larger requests get 413 before they reach the app.
 - Fallback, not built: a DNS-01 Caddy build with the `caddy-dns/duckdns` plugin, if HTTP-01 is ever blocked.
 
 **DuckDNS:**
@@ -259,7 +267,7 @@ Downtime per deploy is a few seconds, while the web service is stopped for `migr
 
 ### 10. First move from the Mac (one evening)
 
-Prerequisites: the auth (v1) and onboarding (v2) migrations are on the deployed branch, `bootstrap.sh` has finished Phase B, and `.env` is filled.
+Prerequisites: the deployed branch has all multi-user migrations (v1 auth, v2 onboarding, v3 extras, v4 pipeline, v5 outreach), `bootstrap.sh` has finished Phase B, and `.env` is filled.
 
 1. **Mac:** `launchctl bootout gui/$(id -u)/com.kshitij.jobseeker`, which stops scheduled runs. Leave the web agent running for now.
 2. **Mac:** take a consistent copy of the DB and check it:
@@ -275,7 +283,7 @@ Prerequisites: the auth (v1) and onboarding (v2) migrations are on the deployed 
    ```
 4. **Server:**
    - move the files into place as `jobseeker`: `/srv/jobseeker/data/jobseeker.db` and `/srv/jobseeker/profile/`;
-   - run `js migrate --dry-run`, then `js migrate`. v1 assigns every row to user 1 (`OWNER_EMAIL`); v2 imports `profile/` into `user_prefs`, `user_facts` and `data/users/1/resume.pdf`, and writes `config/app.yaml`;
+   - run `js migrate --dry-run`, then `js migrate`. It runs v1 to v5 in order. v1 assigns every row to user 1 (`OWNER_EMAIL`); v2 imports `profile/` into `user_prefs`, `user_facts` and `data/users/1/resume.pdf`, and writes `config/app.yaml`; v4 back-fills the owner's `scores.profile_hash`; v5 turns outreach on for the owner;
    - compare the row counts with step 2: each existing table matches, and the only differences are the new tables.
 5. **Server:** delete `/srv/jobseeker/profile/` and the `/tmp` copies. Re-run `bootstrap.sh`, so the web service and timer are enabled now that the DB exists.
 6. **Phone:**

@@ -63,6 +63,10 @@ CREATE TABLE push_subscriptions (
 ALTER TABLE users ADD COLUMN notified_on TEXT;   -- IST date (YYYY-MM-DD) of the last match alert
 ```
 
+**Delete and export coverage** (onboarding spec §4.7):
+- `push_subscriptions` is added to the per-user delete list, before `users`. The explicit delete is the rule; `ON DELETE CASCADE` is only a backstop.
+- It's left out of the export: endpoints and keys are device credentials, not the user's data. `users.notified_on` goes with the `users` row.
+
 `UserPrefs` gains `notify_new_matches: bool = True`. That's a field in the onboarding spec's JSON, so no SQL is needed, and a missing key reads as `True`.
 
 **Service worker `GET /sw.js`:**
@@ -128,7 +132,7 @@ A push failure never raises out of `notify_new_matches`.
 - `archive.py`: `write_archive(settings, now) -> Path`.
 - `crypto.py`: `encrypt(data, key) -> bytes` and `decrypt(blob, key) -> bytes`.
 - `s3.py`: `put_object(client, cfg, key, body)` with SigV4.
-- `nightly.py`: `nightly_backup(conn, settings, now) -> BackupResult`.
+- `nightly.py`: `nightly_backup(conn, settings, now, force=False) -> BackupResult`.
 - `restore.py`.
 
 **Archive:** `jobseeker-YYYY-MM-DD.tar.gz` (IST date), built in a temp directory and renamed into `BACKUP_DIR` when complete. It contains:
@@ -182,17 +186,18 @@ CREATE TABLE backups (
 );
 ```
 
-**`nightly_backup(conn, settings, now)`:**
-1. Write the archive and apply local retention. A failure here raises `BackupFailed`; nothing is recorded.
-2. Upsert the `backups` row for the IST day.
-3. If `BACKUP_S3_*` and `BACKUP_KEY` are all set: encrypt and PUT the daily key (and the weekly one on Sunday). Then set `uploaded_at`, or `upload_error`.
+**`nightly_backup(conn, settings, now, force=False)`** is idempotent per IST day:
+1. Unless `force`: if today's `backups` row exists and was **ok** (below), return its result with `skipped=True` and do no work. A row from a failed attempt is redone in full; the day's archive file is overwritten.
+2. Write the archive and apply local retention. A failure here raises `BackupFailed`; nothing is recorded.
+3. Upsert the `backups` row for the IST day.
+4. If `BACKUP_S3_*` and `BACKUP_KEY` are all set: encrypt and PUT the daily key (and the weekly one on Sunday). Then set `uploaded_at`, or `upload_error`.
    - Off-site settings present but `BACKUP_KEY` missing: `upload_error = "BACKUP_KEY is not set, so nothing was uploaded"`. Plaintext never leaves the host.
-   - No off-site settings at all: `upload_error = "Off-site backup isn't configured"`.
-4. Return `BackupResult(path, uploaded: bool, error: str | None)`.
+   - No off-site settings at all (none of the five `BACKUP_S3_*` set): `upload_error = "Off-site backup isn't configured"`. This is a notice, not a failure.
+5. Return `BackupResult(path, ok, uploaded, error, skipped)`. **`ok`** = the archive was written **and** either the upload succeeded or no off-site settings exist at all. A failed or refused upload is `ok=False` but doesn't raise.
 
 **When it runs:**
-- `tick` (pipeline spec) calls `nightly_backup` once per IST day, after the scheduled run, **even if the run failed**, when there's no `backups` row for today.
-- `jobseeker backup` stays as the manual command: it runs `nightly_backup` regardless of an existing row and prints the result.
+- `tick` (pipeline spec §4.8) calls `nightly_backup(conn, settings, now)` after **every** scheduled-run attempt, **even if the run failed**. Idempotency makes a retried attempt cheap: a day that already has an ok backup isn't backed up twice.
+- `jobseeker backup` stays as the manual command: it calls `nightly_backup(..., force=True)` and prints the result.
 
 **Admin page:** a "Backups" card on `/admin` (auth spec) shows the last 7 `backups` rows: day, size, "Uploaded" or the error. Nothing else is added to `/admin`.
 
@@ -214,10 +219,10 @@ CREATE TABLE backups (
 - `HEAD` returns the same status with no body;
 - `Cache-Control: no-store`; no counts, users, versions or timings are exposed.
 
-**Dead-man's switch:** with `HEALTHCHECK_PING_URL` set, `tick` sends `GET <url>` (5-second timeout, errors ignored) after a scheduled run **and** that day's `nightly_backup`:
-- the run succeeded and the backup was written and uploaded → `GET <url>`;
-- otherwise → `GET <url>/fail`, so the owner gets an email right away instead of after the 26-hour grace;
-- `fetch_now` runs never ping.
+**Dead-man's switch:** the ping is sent by `tick` (pipeline spec §4.8). With `HEALTHCHECK_PING_URL` set, after a scheduled-run attempt and its `nightly_backup` call, it sends one request with a 5-second timeout; a failure is only logged:
+- `GET <url>` when the run finished without aborting **and** `nightly_backup` returned `ok=True`;
+- `GET <url>/fail` when the run aborted, `nightly_backup` raised, or it returned `ok=False` (for example a failed B2 upload). The owner gets an email right away instead of after the 26-hour grace;
+- Fetch-now and CLI runs never ping.
 
 ### 4. Public landing page
 
@@ -278,6 +283,7 @@ All tests are offline (`pytest-socket`). HTTP goes through `respx`.
   - the payload never contains a job title, company or location;
   - 410 deletes the row; 5 failures delete it; when all sends fail, `notified_on` stays unset and the run note is added;
   - an exception inside sending doesn't propagate to `run_all`.
+  - the onboarding spec's table-walk delete test covers `push_subscriptions`, and the export zip contains no endpoint or key.
 - **Backups** (`tests/test_backup.py`):
   - the archive members are exactly the DB, `data/users/**`, `config/app.yaml` and `MANIFEST.json`, and **never `.env`**, even when `.env` and `secrets/` exist in `JOBSEEKER_HOME`;
   - the manifest sha256s match;
@@ -286,7 +292,8 @@ All tests are offline (`pytest-socket`). HTTP goes through `respx`.
   - **SigV4** reproduces the canonical request, string-to-sign and signature of a fixed vector. Use AWS's documented S3 `PUT` example (`examplebucket`, `test$file.text`, the AWS example key pair); if it can't be reached offline, check in a vector computed once with `botocore` and record that in the test file;
   - respx-mocked PUT: the `Authorization` scope is `<date>/<region>/s3/aws4_request`, `x-amz-content-sha256` equals the body hash, and it goes to the daily key, plus the weekly key on Sunday IST;
   - upload refused without `BACKUP_KEY`; failed PUT (500 ×3) → local archive kept and `upload_error` set;
-  - `tick` runs the backup once per IST day even when the run failed;
+  - idempotency: a second `nightly_backup` the same IST day after an ok one returns `skipped=True` without writing; after a failed one it redoes the work; `force=True` always redoes it;
+  - `ok` semantics: upload success → ok; no off-site settings → ok with the notice; `BACKUP_KEY` missing or a failed PUT → `ok=False`, no exception;
   - **restore drill:** back up `seeded_two`, restore to a temp dir, and both users' rows, the resume files and the manifest counts match; refuses a non-empty target and a `../` member.
 - **Health** (`tests/test_health.py`):
   - 200 with no session;
@@ -294,7 +301,7 @@ All tests are offline (`pytest-socket`). HTTP goes through `respx`.
   - 503 `db` when the file is missing;
   - HEAD returns the same status and no body;
   - the handler never calls `get_conn`, checked with a monkeypatched `get_conn` that raises;
-  - ping: a successful scheduled run plus backup → `<url>`; a failed run or failed upload → `<url>/fail`; a fetch-now run → no ping (respx).
+  - the `tick` call and the ping itself are tested in the pipeline spec (§7, "Calls into sub-project 6"); this spec tests `BackupResult.ok`, which drives the ping;
 - **Landing** (`tests/test_landing.py`):
   - anonymous `/` shows the headline, the Google button linking to `/login`, `noindex`, the owner's first name, and no job or application text from `seeded_two`;
   - signed-in `/` shows the inbox;
