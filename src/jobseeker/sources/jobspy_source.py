@@ -73,12 +73,15 @@ class JobSpySource:
     discovers = True  # companies seen here feed board discovery
 
     def __init__(self, site: str, search: SearchConfig, scrape: Scrape = jobspy_scrape,
-                 sleep: Callable[[float], None] = time.sleep):
+                 sleep: Callable[[float], None] = time.sleep, plan: list[tuple[str, str]] | None = None):
         self.site, self.search, self.scrape, self.sleep = site, search, scrape, sleep
+        self.plan = plan
         self.name = site
         self.warnings: list[str] = []
 
     def searches(self) -> list[tuple[str, str]]:
+        if self.plan is not None:
+            return list(self.plan)
         if self.site == "linkedin":
             locations = ["India"]  # one search per query keeps LinkedIn under its rate limit
         else:

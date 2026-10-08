@@ -148,13 +148,16 @@ def companies() -> None:
 
 
 @app.command()
-def serve(port: int = 8000) -> None:
+def serve(port: int = 8000,
+          proxy_headers: bool = typer.Option(False, "--proxy-headers/--no-proxy-headers",
+                                             help="Trust X-Forwarded-* from Caddy on 127.0.0.1 (server only).")) -> None:
     """Start the dashboard on http://127.0.0.1:<port>."""
     import uvicorn
 
     from jobseeker.web.app import create_app
 
-    uvicorn.run(create_app(Settings()), host="127.0.0.1", port=port)
+    extra = {"proxy_headers": True, "forwarded_allow_ips": "127.0.0.1"} if proxy_headers else {}
+    uvicorn.run(create_app(Settings()), host="127.0.0.1", port=port, **extra)
 
 
 @app.command("auth-gmail")
@@ -165,3 +168,52 @@ def auth_gmail() -> None:
     settings = Settings()
     authorize(settings.secrets_dir / "credentials.json", settings.secrets_dir / "token.json")
     typer.echo("Gmail connected (drafts only).")
+
+
+@app.command("gen-key")
+def gen_key() -> None:
+    """Print 32 random bytes as base64 (SECRET_KEY, TOKEN_KEY, BACKUP_KEY)."""
+    import base64
+    import secrets
+
+    typer.echo(base64.b64encode(secrets.token_bytes(32)).decode())
+
+
+@app.command("vapid-keys")
+def vapid_keys() -> None:
+    """Print a new VAPID key pair for .env (rotating it invalidates every push subscription)."""
+    from cryptography.hazmat.primitives import serialization
+    from py_vapid import Vapid02
+
+    from jobseeker.b64 import urlsafe_encode
+
+    v = Vapid02()
+    v.generate_keys()
+    private = v.private_key.private_numbers().private_value.to_bytes(32, "big")
+    public = v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    owner = Settings().model_dump().get("owner_email") or "you@example.com"
+    typer.echo(f"VAPID_PRIVATE_KEY={urlsafe_encode(private)}")
+    typer.echo(f"VAPID_PUBLIC_KEY={urlsafe_encode(public)}")
+    typer.echo(f"VAPID_SUBJECT=mailto:{owner}")
+
+
+@app.command()
+def restore(path: str, to: str = typer.Option("", "--to", help="Empty directory (default ./restore-<date>).")) -> None:
+    """Unpack and check a backup (.tar.gz, or .tar.gz.enc from B2). Never touches the live data."""
+    from datetime import date
+    from pathlib import Path
+
+    from jobseeker.backup.crypto import load_key
+    from jobseeker.backup.restore import RestoreError, restore as do_restore
+
+    settings = Settings()
+    key = load_key(settings.backup_key) if settings.backup_key else None
+    target = Path(to or f"restore-{date.today().isoformat()}")
+    try:
+        report = do_restore(Path(path), target, key)
+    except RestoreError as e:
+        typer.echo(f"Restore refused: {e}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Restored into {target}; integrity ok")
+    for table, n in sorted(report["restored_counts"].items()):
+        typer.echo(f"  {table:<28}{n:>8}  (manifest {report['manifest_counts'].get(table, '-')})")

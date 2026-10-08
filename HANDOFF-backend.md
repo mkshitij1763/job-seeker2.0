@@ -23,11 +23,11 @@
   | T8 route guards, owned_app, signed-in user | `04259b6` |
   | T9 CSRF Origin check | `8477b1c` |
   | T10 admin page, sign-out controls | `ea42f25` |
-  | T11 web isolation, acceptance, HANDOFF.md | `this commit` |
+  | T11 web isolation, acceptance, HANDOFF.md | `22fd45f` |
 
-- **Tests at `T11`:** 472 pytest, 19 node. `git status` is clean.
+- **Tests at the build/devops merge:** 550 pytest (472 + 78 from devops), 19 node; `uv lock --check` ok. backup.py conflict resolved to the multi-user side.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 2 is fully built (T1–T11). It still needs the plan's whole-branch review (one fresh reviewer on the most capable model, `git diff 4a029ff..HEAD`); `manager` decides who runs it. Then **plan 3** `docs/superpowers/plans/2026-10-08-mu-onboarding-settings.md` (accepted at `a16ac84`), T1–T9. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** plan 2 is built (T1–T11) and build/devops is merged. The whole-branch security review of plan 2 (`4a029ff..22fd45f`) is with a reviewer subagent; findings go to `manager`, and nothing gets fixed until `manager` rules. Then **plan 3** `docs/superpowers/plans/2026-10-08-mu-onboarding-settings.md` (accepted at `a16ac84`), T1–T9, ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 

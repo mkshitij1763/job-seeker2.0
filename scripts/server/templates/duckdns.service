@@ -1,0 +1,10 @@
+[Unit]
+Description=Update the DuckDNS record
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/duckdns.env
+ExecStart=/usr/bin/curl -fsS -o /run/duckdns.out "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip="
+ExecStartPost=/usr/bin/grep -qx OK /run/duckdns.out

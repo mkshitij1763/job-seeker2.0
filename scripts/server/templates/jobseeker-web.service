@@ -1,0 +1,21 @@
+[Unit]
+Description=Job Seeker web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=jobseeker
+WorkingDirectory=${HOME_DIR}/app
+EnvironmentFile=${HOME_DIR}/.env
+Environment=JOBSEEKER_HOME=${HOME_DIR}
+ExecStart=${HOME_DIR}/.local/bin/uv run --frozen --no-sync jobseeker serve --port 8000 --proxy-headers
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ReadWritePaths=${HOME_DIR}/data ${HOME_DIR}/config
+
+[Install]
+WantedBy=multi-user.target
