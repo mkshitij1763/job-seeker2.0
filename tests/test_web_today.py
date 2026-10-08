@@ -10,7 +10,7 @@ from jobseeker.web.app import create_app
 
 
 def _person(conn, app_id, rank, name):
-    cid = upsert_contact(conn, "CRED", name, "PM", f"https://www.linkedin.com/in/{name.lower()}",
+    cid = upsert_contact(conn, 1, "CRED", name, "PM", f"https://www.linkedin.com/in/{name.lower()}",
                          f"{name.lower()}@cred.club", "verified")
     link_contact(conn, app_id, rank, cid, "peer", "r", "smtp")
 
@@ -21,13 +21,13 @@ def test_today_groups_what_needs_action(settings, seeded):
     conn.execute("UPDATE applications SET status = 'drafted' WHERE id IN (?, ?)", (a, b))
     conn.commit()
     _person(conn, b, 1, "Asha")
-    t = queries.today(conn, datetime.now(UTC))
+    t = queries.today(conn, 1, datetime.now(UTC))
     assert [r["app_id"] for r in t["find_contacts"]] == [a]
     assert [r["app_id"] for r in t["ready"]] == [b]
     assert t["new_since_yesterday"] == 2
 
     transition(conn, b, "approved")
-    t = queries.today(conn, datetime.now(UTC))
+    t = queries.today(conn, 1, datetime.now(UTC))
     assert [r["app_id"] for r in t["send"]] == [b] and t["ready"] == []
 
     transition(conn, b, "sent")
@@ -36,7 +36,7 @@ def test_today_groups_what_needs_action(settings, seeded):
     conn.execute("UPDATE application_contacts SET emailed_at = '2026-10-01T00:00:00+00:00' WHERE application_id = ?",
                  (b,))
     conn.commit()
-    assert [r["app_id"] for r in queries.today(conn, datetime.now(UTC))["followups"]] == [b]
+    assert [r["app_id"] for r in queries.today(conn, 1, datetime.now(UTC))["followups"]] == [b]
 
 
 def test_today_page_nav_and_mark_sent(settings, seeded):

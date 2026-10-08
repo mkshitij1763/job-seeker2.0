@@ -14,10 +14,10 @@ def test_pipeline_board_and_followup_flag(settings, seeded):
     then = datetime.now(UTC) - timedelta(days=6)
     transition(conn, a, "approved", now=then)
     transition(conn, a, "sent", now=then)
-    board = queries.pipeline(conn, datetime.now(UTC))
+    board = queries.pipeline(conn, 1, datetime.now(UTC))
     [card] = board["sent"]
     assert card["days_since"] == 6 and card["needs_followup"] is True
-    st = queries.stats(conn, datetime.now(UTC))
+    st = queries.stats(conn, 1, datetime.now(UTC))
     assert st["sent"] == 1 and st["drafted"] == 1 and st["reply_rate"] == 0.0
     assert st["jobs_per_source"] == {"lever": 2}
 
@@ -34,7 +34,7 @@ def test_stats_ignore_undone_transitions(settings, seeded):
     transition(conn, a, "approved")
     transition(conn, a, "sent")
     undo_last_status(conn, a)  # "Mark sent" pressed by mistake
-    st = queries.stats(conn, datetime.now(UTC))
+    st = queries.stats(conn, 1, datetime.now(UTC))
     assert st["sent"] == 0 and st["drafted"] == 1
     transition(conn, a, "sent")
-    assert queries.stats(conn, datetime.now(UTC))["sent"] == 1
+    assert queries.stats(conn, 1, datetime.now(UTC))["sent"] == 1

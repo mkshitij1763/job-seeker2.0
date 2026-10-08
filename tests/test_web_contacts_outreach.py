@@ -47,7 +47,7 @@ def link_three(settings, a, statuses=("verified", "verified", "verified")):
     for rank, (name, email, st) in enumerate([("Asha Rao", "asha@cred.club", statuses[0]),
                                                ("Vikram Singh", "vikram@cred.club", statuses[1]),
                                                ("Rahul Sharma", "rahul@cred.club", statuses[2])], start=1):
-        cid = upsert_contact(conn, "CRED", name, "PM", f"https://www.linkedin.com/in/{name.split()[0].lower()}",
+        cid = upsert_contact(conn, 1, "CRED", name, "PM", f"https://www.linkedin.com/in/{name.split()[0].lower()}",
                              email, st)
         link_contact(conn, a, rank, cid, "peer", "r", "smtp")
     return conn
@@ -111,7 +111,7 @@ def test_third_person_offered_after_five_days_and_drafted(settings, seeded):
     transition(conn, a, "sent", now=then)
     conn.execute("UPDATE events SET at = ? WHERE application_id = ?", (then.isoformat(timespec="seconds"), a))
     conn.commit()
-    [card] = queries.pipeline(conn, datetime.now(UTC))["sent"]
+    [card] = queries.pipeline(conn, 1, datetime.now(UTC))["sent"]
     assert card["third"] == {"name": "Rahul Sharma", "label": "peer"}
     assert "Email #3: Rahul" in c.get("/pipeline").text
     assert "Draft email to #3" in c.get(f"/applications/{a}").text
@@ -120,7 +120,7 @@ def test_third_person_offered_after_five_days_and_drafted(settings, seeded):
     to, body = to_and_body(gmail.raws[-1])
     assert to == "rahul@cred.club" and body.startswith("Hi Rahul,") and "I also reached out to your colleague earlier." in body
     assert people(connect(settings.db_path), a)[2]["emailed_at"] is not None
-    assert queries.pipeline(connect(settings.db_path), datetime.now(UTC))["sent"][0]["third"] is None
+    assert queries.pipeline(connect(settings.db_path), 1, datetime.now(UTC))["sent"][0]["third"] is None
 
 
 def test_reply_suppresses_third(settings, seeded):
@@ -129,7 +129,7 @@ def test_reply_suppresses_third(settings, seeded):
     client(settings, FakeGmail()).post(f"/applications/{a}/approve")
     transition(conn, a, "sent")
     transition(conn, a, "replied")
-    assert all(card.get("third") is None for cards in queries.pipeline(conn, datetime.now(UTC)).values()
+    assert all(card.get("third") is None for cards in queries.pipeline(conn, 1, datetime.now(UTC)).values()
                for card in cards)
 
 
@@ -140,7 +140,7 @@ def test_not_interested_blocks_all_linked_people(settings, seeded):
     a = seeded[0]
     conn = link_three(settings, a)
     mark_not_interested(conn, a, block_company=False)
-    assert len(blocked_profile_urls(conn, "CRED")) == 3
+    assert len(blocked_profile_urls(conn, 1, "CRED")) == 3
 
 
 def test_removing_top_two_does_not_draft_removed_person(settings, seeded):
@@ -248,4 +248,4 @@ def test_follow_up_to_first_two_after_five_days(settings, seeded):
     assert ps[0]["nudged_at"] and ps[1]["nudged_at"] and not ps[2]["nudged_at"]
     page = c.get(f"/applications/{a}").text
     assert "Draft follow-up to #1" not in page  # once per person, and the 5-day clock restarts
-    assert queries.application_detail(connect(settings.db_path), a)["app"]["followups_sent"] == 1
+    assert queries.application_detail(connect(settings.db_path), 1, a)["app"]["followups_sent"] == 1

@@ -57,7 +57,7 @@ def test_jobs_needing_score_respects_filter_hash_and_version():
     assert jobs_needing_score(conn, 1, "v1", 10) == []
     assert [r["id"] for r in jobs_needing_score(conn, 1, "v2", 10)] == [a]
     assert [r["id"] for r in jobs_needing_score(conn, 1, "v1", 10, force=True)] == [a]
-    assert latest_score(conn, a)["score"] == 80
+    assert latest_score(conn, 1, a)["score"] == 80
 
 
 def test_concurrent_reader_during_write(tmp_path):

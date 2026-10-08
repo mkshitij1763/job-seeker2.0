@@ -172,8 +172,8 @@ def save_score(conn: sqlite3.Connection, user_id: int, job_id: int, result: Scor
     conn.commit()
 
 
-def latest_score(conn: sqlite3.Connection, job_id: int) -> dict | None:
+def latest_score(conn: sqlite3.Connection, user_id: int, job_id: int) -> dict | None:
     row = conn.execute(
-        "SELECT * FROM scores WHERE job_id = ? ORDER BY id DESC LIMIT 1", (job_id,)
+        "SELECT * FROM scores WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1", (user_id, job_id)
     ).fetchone()
     return dict(row) if row else None

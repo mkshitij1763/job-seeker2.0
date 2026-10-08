@@ -74,7 +74,7 @@ def test_contact_reuse_and_blocklist(app_id):
     assert get_application(conn, a)["contact_id"] == cid
     mark_not_interested(conn, a, block_company=True, now=NOW)
     assert get_status(conn, a) == "not_interested"
-    assert "cred" in blocked_companies(conn)
+    assert "cred" in blocked_companies(conn, 1)
     job2, _ = upsert_job(conn, make_job(source_job_id="other", fingerprint="fp-other"))
     a2 = ensure_application(conn, 1, job2)
     with pytest.raises(BlockedContact):

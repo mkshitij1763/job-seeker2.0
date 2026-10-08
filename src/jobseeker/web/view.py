@@ -80,12 +80,13 @@ def timeline(events: list[dict]) -> list[dict]:
     return out
 
 
-def nav_counts(conn: sqlite3.Connection) -> dict:
+def nav_counts(conn: sqlite3.Connection, user_id: int) -> dict:
     """Badges for the sidebar/tab bar: Jobs = default inbox rows, Pipeline = applications after Approve,
     Today = Gmail drafts waiting to be sent."""
     from jobseeker.db.queries import inbox
 
-    pipeline = conn.execute("""SELECT COUNT(*) FROM applications
-                               WHERE status IN ('approved', 'sent', 'replied', 'interview')""").fetchone()[0]
-    ready = conn.execute("SELECT COUNT(*) FROM applications WHERE status = 'approved'").fetchone()[0]
-    return {"jobs": len(inbox(conn)), "pipeline": pipeline, "today": ready}
+    pipeline = conn.execute("""SELECT COUNT(*) FROM applications WHERE user_id = ?
+                               AND status IN ('approved', 'sent', 'replied', 'interview')""", (user_id,)).fetchone()[0]
+    ready = conn.execute("SELECT COUNT(*) FROM applications WHERE user_id = ? AND status = 'approved'",
+                         (user_id,)).fetchone()[0]
+    return {"jobs": len(inbox(conn, user_id)), "pipeline": pipeline, "today": ready}

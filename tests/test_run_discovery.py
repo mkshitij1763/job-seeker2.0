@@ -162,7 +162,7 @@ def test_unexpected_exception_still_finishes_run(prefs, rubric, facts):
     conn = connect(":memory:")
     stats = run(conn, [Src("broken", [None])], prefs, rubric, facts)
     assert any(e.startswith("run aborted:") for e in stats.errors)
-    assert last_run(conn)["finished_at"] is not None
+    assert last_run(conn, 1)["finished_at"] is not None
 
 
 def test_jobs_without_description_do_not_block_scoring(prefs, rubric, facts):

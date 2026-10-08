@@ -136,7 +136,7 @@ def test_compact_card_shows_next_step_one_match_and_count(settings, seeded):
     conn = connect(settings.db_path)
     conn.execute("UPDATE applications SET status = 'drafted' WHERE id IN (?, ?)", (a, b))
     conn.execute("UPDATE scores SET recommendation = 'apply', matches = '[\"SQL\", \"A/B tests\"]'")
-    cid = upsert_contact(conn, "CRED", "Asha Rao", "PM", "https://www.linkedin.com/in/asha", "a@cred.club", "verified")
+    cid = upsert_contact(conn, 1, "CRED", "Asha Rao", "PM", "https://www.linkedin.com/in/asha", "a@cred.club", "verified")
     link_contact(conn, b, 1, cid, "peer", "r", "smtp")
     html = client(settings).get("/").text
     assert 'class="next-step find">Find contacts →' in _card(html, a)

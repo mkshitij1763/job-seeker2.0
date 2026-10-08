@@ -190,7 +190,7 @@ def test_people_card_restyled_with_rank_and_status_pills(settings, seeded):
     a = seeded[0]
     conn = connect(settings.db_path)
     for rank, (name, st) in enumerate([("Asha Rao", "verified"), ("Vikram Singh", "unverified")], start=1):
-        cid = upsert_contact(conn, "CRED", name, "PM", f"https://www.linkedin.com/in/{name[:4].lower()}",
+        cid = upsert_contact(conn, 1, "CRED", name, "PM", f"https://www.linkedin.com/in/{name[:4].lower()}",
                              f"{name[:4].lower()}@cred.club", st)
         link_contact(conn, a, rank, cid, "peer", "r", "smtp")
     html = client(settings).get(f"/applications/{a}").text
@@ -267,7 +267,7 @@ def test_sent_job_with_follow_up_due_opens_on_people(settings, seeded):
 
     a = seeded[0]
     conn = connect(settings.db_path)
-    cid = upsert_contact(conn, "CRED", "Asha Rao", "PM", "https://www.linkedin.com/in/asha", "asha@cred.club", "verified")
+    cid = upsert_contact(conn, 1, "CRED", "Asha Rao", "PM", "https://www.linkedin.com/in/asha", "asha@cred.club", "verified")
     link_contact(conn, a, 1, cid, "peer", "r", "smtp")
     then = (datetime.now(UTC) - timedelta(days=6)).isoformat(timespec="seconds")
     conn.execute("UPDATE applications SET status = 'sent' WHERE id = ?", (a,))

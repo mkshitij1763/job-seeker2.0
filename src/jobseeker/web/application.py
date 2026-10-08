@@ -8,6 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 
 from jobseeker.db import queries
+from jobseeker.db.users import OWNER_ID
 from jobseeker.db.core import utcnow
 from jobseeker.db.applications import (
     BlockedContact, can_undo, get_status, mark_not_interested, record_followup, save_contact, save_draft,
@@ -38,7 +39,7 @@ def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err:
 
 @router.get("/{app_id}")
 def detail(request: Request, app_id: int, conn=Depends(get_conn)):
-    d = queries.application_detail(conn, app_id)
+    d = queries.application_detail(conn, OWNER_ID, app_id)
     if not d:
         raise HTTPException(404)
     settings = request.app.state.settings
@@ -134,7 +135,7 @@ async def approve(request: Request, app_id: int, conn=Depends(get_conn)):
 def _approve(state, conn, app_id: int, form):
     from jobseeker.db.contacts_repo import people
 
-    d = queries.application_detail(conn, app_id)
+    d = queries.application_detail(conn, OWNER_ID, app_id)
     if not d:
         raise HTTPException(404)
     email = d["drafts"].get("email")

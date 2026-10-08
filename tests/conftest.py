@@ -80,3 +80,23 @@ def seeded(settings):
         ids.append(app_id)
     conn.close()
     return tuple(ids)
+
+
+@pytest.fixture
+def seeded_two(settings, seeded):
+    """The owner's `seeded` data, plus user 2 with their own score and application on the owner's first job (J1),
+    a blocklist row and a usage row: everything isolation tests try to leak."""
+    from datetime import UTC, datetime
+    conn = connect(settings.db_path)
+    j1 = conn.execute("SELECT job_id FROM applications WHERE id = ?", (seeded[0],)).fetchone()[0]
+    conn.execute("INSERT INTO users (id, email, name, created_at) VALUES (2, 'roomie@example.com', 'Roomie', 't')")
+    save_score(conn, 2, j1, ScoreResult(score=91, breakdown={}, matches=["Excel"], gaps=[], recommendation="apply",
+                                        role_family="growth_analyst"), "m", "v1", "h")
+    app2 = ensure_application(conn, 2, j1)
+    transition(conn, app2, "shortlisted")
+    conn.execute("INSERT INTO blocklist (user_id, company, reason, at) VALUES (2, 'cred', 'not interested', 't')")
+    conn.execute("INSERT INTO usage (user_id, period, service, amount) VALUES (2, ?, 'tavily', 7)",
+                 (datetime.now(UTC).strftime("%Y-%m"),))
+    conn.commit()
+    conn.close()
+    return {"owner_apps": seeded, "roommate_app": app2, "j1": j1}

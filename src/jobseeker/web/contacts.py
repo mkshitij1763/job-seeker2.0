@@ -11,6 +11,7 @@ from jobseeker.db.contacts_repo import (
     upsert_contact,
 )
 from jobseeker.db.usage import Budget, contacts_limits
+from jobseeker.db.users import OWNER_ID
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
 from jobseeker.web.deps import get_conn
@@ -96,7 +97,7 @@ def remove(app_id: int, rank: int, conn=Depends(get_conn)):
     if dom.get("domain") and nm:
         guesses = names.candidates(nm, dom["domain"], [dom["pattern"]] if dom.get("pattern") else [])
         email, source = (guesses[0], "pattern") if guesses else ("", "")
-    cid = upsert_contact(conn, company, nxt["name"], nxt["headline"], nxt["linkedin_url"], email, "unverified")
+    cid = upsert_contact(conn, OWNER_ID, company, nxt["name"], nxt["headline"], nxt["linkedin_url"], email, "unverified")
     if cid is None:
         return _back(app_id, err=f"{nxt['name']} said not interested before; run Find contacts again")
     link_contact(conn, app_id, rank, cid, nxt["label"], nxt["reason"], source)

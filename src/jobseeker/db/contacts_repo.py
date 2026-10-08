@@ -153,20 +153,20 @@ def third_due(conn: sqlite3.Connection, app_id: int, now: datetime) -> bool:
                            AND c.email != '' AND c.email_status != 'bounced'""", (app_id,)).fetchone() is not None
 
 
-def blocked_profile_urls(conn: sqlite3.Connection, company: str) -> set[str]:
+def blocked_profile_urls(conn: sqlite3.Connection, user_id: int, company: str) -> set[str]:
     norm = normalize_company(company)
     rows = conn.execute("""SELECT c.company, c.linkedin_url FROM blocklist b JOIN contacts c ON c.id = b.contact_id
-                           WHERE c.linkedin_url != ''""").fetchall()
+                           WHERE b.user_id = ? AND c.linkedin_url != ''""", (user_id,)).fetchall()
     return {r["linkedin_url"] for r in rows if normalize_company(r["company"]) == norm}
 
 
-def blocked_names(conn: sqlite3.Connection, company: str) -> set[tuple[str, str]]:
+def blocked_names(conn: sqlite3.Connection, user_id: int, company: str) -> set[tuple[str, str]]:
     """(first, last) of blocked people at this company who have no LinkedIn URL to match on."""
     from jobseeker.contacts.names import clean_name
 
     norm = normalize_company(company)
     rows = conn.execute("""SELECT c.company, c.name FROM blocklist b JOIN contacts c ON c.id = b.contact_id
-                           WHERE c.linkedin_url = '' AND c.name != ''""").fetchall()
+                           WHERE b.user_id = ? AND c.linkedin_url = '' AND c.name != ''""", (user_id,)).fetchall()
     out = set()
     for r in rows:
         nm = clean_name(r["name"]) if normalize_company(r["company"]) == norm else None
@@ -175,7 +175,7 @@ def blocked_names(conn: sqlite3.Connection, company: str) -> set[tuple[str, str]
     return out
 
 
-def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str, linkedin_url: str, email: str,
+def upsert_contact(conn: sqlite3.Connection, user_id: int, company: str, name: str, role: str, linkedin_url: str, email: str,
                    email_status: str, domain: str | None = None) -> int | None:
     row = conn.execute("SELECT id, email, email_status FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",
                        (linkedin_url,)).fetchone()
@@ -183,7 +183,7 @@ def upsert_contact(conn: sqlite3.Connection, company: str, name: str, role: str,
         row = conn.execute("""SELECT id, email, email_status FROM contacts
                               WHERE lower(email) = lower(?) AND linkedin_url = ''""", (email,)).fetchone()
     if row:
-        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ?", (row["id"],)).fetchone():
+        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ? AND user_id = ?", (row["id"], user_id)).fetchone():
             return None
         on_domain = not domain or (row["email"] or "").lower().endswith("@" + domain)
         if row["email_status"] == "verified" and email_status != "verified" and row["email"] and on_domain:

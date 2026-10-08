@@ -119,8 +119,9 @@ def set_suggestion(conn: sqlite3.Connection, app_id: int, role: str, reason: str
     conn.commit()
 
 
-def blocked_companies(conn: sqlite3.Connection) -> set[str]:
-    return {r["company"] for r in conn.execute("SELECT company FROM blocklist WHERE company != ''")}
+def blocked_companies(conn: sqlite3.Connection, user_id: int) -> set[str]:
+    return {r["company"] for r in conn.execute("SELECT company FROM blocklist WHERE user_id = ? AND company != ''",
+                                               (user_id,))}
 
 
 def _company_of(conn: sqlite3.Connection, app_id: int) -> str:
@@ -132,6 +133,7 @@ def _company_of(conn: sqlite3.Connection, app_id: int) -> str:
 def save_contact(conn: sqlite3.Connection, app_id: int, *, name: str, role: str, linkedin_url: str,
                  email: str, email_status: str) -> int:
     company = _company_of(conn, app_id)
+    user_id = get_application(conn, app_id)["user_id"]
     existing = None
     if email:
         existing = conn.execute("SELECT id FROM contacts WHERE lower(email) = lower(?)", (email,)).fetchone()
@@ -139,7 +141,7 @@ def save_contact(conn: sqlite3.Connection, app_id: int, *, name: str, role: str,
         existing = conn.execute("SELECT id FROM contacts WHERE linkedin_url = ?", (linkedin_url,)).fetchone()
     if existing:
         cid = existing["id"]
-        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ?", (cid,)).fetchone():
+        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ? AND user_id = ?", (cid, user_id)).fetchone():
             raise BlockedContact(f"{name or email} said not interested; not attaching")
         conn.execute(
             "UPDATE contacts SET name=?, role=?, linkedin_url=?, email=?, email_status=? WHERE id=?",

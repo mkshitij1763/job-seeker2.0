@@ -52,7 +52,7 @@ def test_full_run_scores_shortlists_and_drafts(prefs, rubric, facts):
     assert (stats.fetched, stats.new, stats.scored, stats.shortlisted, stats.drafted) == (1, 1, 1, 1, 1)
     assert get_status(conn, 1) == "drafted"
     assert set(get_drafts(conn, 1)) == {"email", "li_note", "li_dm"}
-    assert last_run(conn)["finished_at"] is not None
+    assert last_run(conn, 1)["finished_at"] is not None
 
 
 def test_run_dedups_across_sources(prefs, rubric, facts):
@@ -121,7 +121,7 @@ def test_run_records_actual_finish_time(prefs, rubric, facts):
     times = iter([NOW, NOW + timedelta(minutes=5)])
     run_daily(conn, user_id=1, sources=[], client=None, llm=FakeLLM(handler=handler), facts=facts, prefs=prefs,
               rubric=rubric, clock=lambda: next(times))
-    run = last_run(conn)
+    run = last_run(conn, 1)
     assert run["started_at"] == "2026-10-07T02:00:00+00:00"
     assert run["finished_at"] == "2026-10-07T02:05:00+00:00"
 

@@ -51,7 +51,7 @@ def test_timeline_reads_like_sentences():
 
 def test_nav_counts(settings, seeded):
     conn = connect(settings.db_path)
-    counts = nav_counts(conn)
+    counts = nav_counts(conn, 1)
     assert set(counts) == {"jobs", "pipeline", "today"}
     assert counts["jobs"] == 1  # seeded: one "apply" job in an inbox status
 

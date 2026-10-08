@@ -87,7 +87,7 @@ def _rank(conn: sqlite3.Connection, user_id: int, stats: RunStats, job_id: int, 
 
 def _fetch(conn, user_id: int, stats: RunStats, sources, client, facts: Facts, prefs: Preferences,
            now: datetime) -> None:
-    blocked = blocked_companies(conn)
+    blocked = blocked_companies(conn, user_id)
     known = {normalize_company(s.company.name) for s in sources if hasattr(s, "company")}
     seen: dict[str, tuple[str, set[str]]] = {}
     unrecorded: Counter[str] = Counter()  # jobs at companies discovery may record later this run
@@ -145,7 +145,7 @@ def _select(conn, user_id: int, stats: RunStats, rubric: Rubric, facts: Facts, p
 def _fill_linkedin_descriptions(conn, user_id: int, stats: RunStats, candidates: list[dict], facts: Facts, prefs: Preferences,
                                 now: datetime, describe: Describe) -> None:
     cap = prefs.search.linkedin_descriptions_per_run
-    blocked = blocked_companies(conn)
+    blocked = blocked_companies(conn, user_id)
     attempts = failures = consecutive = 0
     last_error = ""
     for row in candidates:
@@ -228,7 +228,7 @@ def run_daily(conn: sqlite3.Connection, *, user_id: int, sources, client, llm: L
     llm = FallbackLLM(llm, prefs.models.fallbacks)
     now = now or clock()
     stats = RunStats()
-    run_id = start_run(conn, now)
+    run_id = start_run(conn, now, user_id=user_id)
     try:
         _run(conn, stats, user_id=user_id, sources=sources, client=client, llm=llm, facts=facts, prefs=prefs, rubric=rubric,
              now=now, fetch=fetch, force_rescore=force_rescore, describe=describe)

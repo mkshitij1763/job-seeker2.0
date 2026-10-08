@@ -60,11 +60,11 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     company, norm = job["company"], normalize_company(job["company"])
     budget = Budget(conn, user_id, contacts_limits(prefs.contacts), deps.now())
     notes: list[str] = []
-    family = (conn.execute("SELECT role_family FROM scores WHERE job_id = ? ORDER BY id DESC LIMIT 1",
-                           (job["id"],)).fetchone() or {"role_family": ""})["role_family"]
+    family = (conn.execute("SELECT role_family FROM scores WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1",
+                           (user_id, job["id"])).fetchone() or {"role_family": ""})["role_family"]
 
     # 1. people
-    seen = set(blocked_profile_urls(conn, company))
+    seen = set(blocked_profile_urls(conn, user_id, company))
     cands = []
     for q in search_queries(company, job["title"], family, job["location_city"]):
         cands += from_results(_search(deps, budget, notes, q, include_domains=["linkedin.com"], max_results=10),
@@ -83,7 +83,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                     cands.append(c)
         else:
             notes.append(f"Apify budget used for {budget.month}")
-    blocked = blocked_names(conn, company)
+    blocked = blocked_names(conn, user_id, company)
     if blocked:
         cands = [c for c in cands if (nm := names.clean_name(c.name)) is None or (nm.first, nm.last) not in blocked]
     if not cands:
@@ -217,7 +217,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             if guesses:
                 email, status, source = guesses[0], "likely", "pattern"
                 taken.add(email)
-        cid = upsert_contact(conn, company, c.name, c.headline, c.linkedin_url, email,
+        cid = upsert_contact(conn, user_id, company, c.name, c.headline, c.linkedin_url, email,
                              "verified" if status == "verified" else "unverified", domain=domain if mx else None)
         if cid is None:
             continue

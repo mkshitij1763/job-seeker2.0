@@ -17,7 +17,7 @@ def refilter(conn: sqlite3.Connection, user_id: int, prefs: Preferences, now: da
     Age is not re-judged: old jobs already expire on their own. Applications not yet approved are skipped
     (undoable); later ones keep their status.
     """
-    blocked = blocked_companies(conn)
+    blocked = blocked_companies(conn, user_id)
     rows = conn.execute("""SELECT j.*, a.id AS app_id FROM jobs j
                            LEFT JOIN user_jobs uj ON uj.job_id = j.id AND uj.user_id = :u
                            LEFT JOIN applications a ON a.job_id = j.id AND a.user_id = :u
