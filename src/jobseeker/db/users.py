@@ -19,6 +19,10 @@ def ensure_owner(conn: sqlite3.Connection, email: str) -> None:
 FALLBACK_OWNER = "the person who shared this link"
 
 
+class EmailLinkedElsewhere(ValueError):
+    """An invited email whose account is already bound to a different Google `sub` (e.g. a re-created account)."""
+
+
 class LastAdmin(ValueError):
     pass
 
@@ -53,6 +57,8 @@ def resolve_sign_in(conn: sqlite3.Connection, sub: str, email: str, name: str, n
     if row is None:
         if not conn.execute("SELECT 1 FROM invites WHERE email = ?", (email,)).fetchone():
             return None
+        if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+            raise EmailLinkedElsewhere(email)
         cur = conn.execute("INSERT INTO users (google_sub, email, name, created_at) VALUES (?, ?, ?, ?)",
                            (sub, email, name, iso(now)))
         conn.execute("UPDATE invites SET accepted_at = ? WHERE email = ?", (iso(now), email))

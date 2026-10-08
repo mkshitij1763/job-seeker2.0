@@ -57,6 +57,8 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
                if not getattr(settings, n)]
     if missing:
         raise RuntimeError("Set " + ", ".join(n.upper() for n in missing) + " in .env before starting the web app")
+    if len(settings.secret_key) < 32:
+        raise RuntimeError("SECRET_KEY must be at least 32 characters (run `jobseeker gen-key`)")
     boot = connect(settings.db_path)  # raises SchemaOutOfDate on an un-migrated database: fail at startup
     ensure_owner(boot, settings.owner_email)
     boot.close()
@@ -98,7 +100,8 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     async def _refresh_session_cookie(request, call_next):
         response = await call_next(request)
         token = getattr(request.state, "refresh_session", None)
-        if token:
+        signing_out = any(c.startswith(f"{SESSION_COOKIE}=") for c in response.headers.getlist("set-cookie"))
+        if token and not signing_out:  # never re-issue a cookie the route just deleted (logout/all)
             response.set_cookie(SESSION_COOKIE, token, max_age=30 * 24 * 3600, path="/",
                                 secure=settings.cookie_secure, httponly=True, samesite="lax")
         return response

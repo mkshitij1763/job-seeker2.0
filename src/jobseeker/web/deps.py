@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, Request
 from jobseeker.db.core import connect
 from jobseeker.db.runs import last_run
 from jobseeker.db.sessions import user_for_token
-from jobseeker.db.users import User
+from jobseeker.db.users import OWNER_ID, User
 from jobseeker.web.filters import explain_run
 from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.view import nav_counts
@@ -67,6 +67,14 @@ def owned_app(app_id: int, user: User = Depends(current_user), conn=Depends(get_
     if not conn.execute("SELECT 1 FROM applications WHERE id = ? AND user_id = ?", (app_id, user.id)).fetchone():
         raise HTTPException(404)  # 404, not 403: never confirm another user's ids exist
     return app_id
+
+
+def require_owner(user: User = Depends(current_user)) -> User:
+    """Interim outreach gate: contacts and company domains are shared rows, so only the owner may write them until
+    sub-project 5 makes contacts per user (it replaces this with require_outreach)."""
+    if user.id != OWNER_ID:
+        raise HTTPException(404)
+    return user
 
 
 def require_admin(user: User = Depends(current_user)) -> User:

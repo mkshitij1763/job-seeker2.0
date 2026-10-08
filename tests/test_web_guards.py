@@ -62,3 +62,31 @@ def test_owner_still_sees_everything(seeded, client_as):
     web = client_as(1)
     assert web.get("/").status_code == 200
     assert web.get(f"/applications/{seeded[0]}").status_code == 200
+
+
+# Outreach writes shared rows (contacts, company_domains, bounced emails), so until per-user contacts land
+# (sub-project 5, which swaps this for require_outreach) only the owner may reach these routes.
+OUTREACH = {("POST", "/applications/{app_id}/contact"), ("POST", "/applications/{app_id}/drafts/{kind}"),
+            ("POST", "/applications/{app_id}/draft"), ("POST", "/applications/{app_id}/approve"),
+            ("POST", "/applications/{app_id}/followed-up")}
+
+
+def _outreach(r):
+    return any((m, r.path) in OUTREACH for m in r.methods) or ("/contacts/" in r.path and "POST" in r.methods)
+
+
+def test_outreach_routes_are_owner_only(settings):
+    from jobseeker.web.deps import require_owner
+    gated = [r for r in _api_routes(create_app(settings)) if _outreach(r)]
+    assert len(gated) >= 11
+    for r in gated:
+        assert require_owner in set(_calls(r.dependant)), f"{r.path} has no require_owner"
+
+
+def test_roommate_gets_404_on_outreach_routes_of_their_own_application(seeded_two, client_as, settings):
+    web, a = client_as(2, follow_redirects=False), seeded_two["roommate_app"]
+    assert web.get(f"/applications/{a}").status_code == 200  # their own application is still theirs
+    for r in _api_routes(create_app(settings)):
+        if _outreach(r):
+            path = r.path.replace("{app_id}", str(a)).replace("{kind}", "email").replace("{rank}", "1")
+            assert web.post(path).status_code == 404, path

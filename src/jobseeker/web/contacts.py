@@ -13,7 +13,7 @@ from jobseeker.db.contacts_repo import (
 from jobseeker.db.usage import Budget, contacts_limits
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
-from jobseeker.web.deps import current_user, get_conn
+from jobseeker.web.deps import current_user, get_conn, require_owner
 
 router = APIRouter(prefix="/applications")
 
@@ -34,7 +34,7 @@ def card_context(request: Request, conn, app_id: int) -> dict:
             "has_tavily": bool(state.settings.tavily_api_key)}
 
 
-@router.post("/{app_id}/contacts/find")
+@router.post("/{app_id}/contacts/find", dependencies=[Depends(require_owner)])
 def find(request: Request, app_id: int, background: BackgroundTasks, user=Depends(current_user),
          conn=Depends(get_conn)):
     state = request.app.state
@@ -62,7 +62,7 @@ def card(request: Request, app_id: int, conn=Depends(get_conn)):
         request, "_people.html", {"app": dict(app), "drafts": drafts, **card_context(request, conn, app_id)})
 
 
-@router.post("/{app_id}/contacts/domain")
+@router.post("/{app_id}/contacts/domain", dependencies=[Depends(require_owner)])
 def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
     from jobseeker.db.contacts_repo import save_domain
 
@@ -75,7 +75,7 @@ def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
     return _back(app_id, msg=f"Email domain set to {value}. Run Find contacts again to rebuild emails")
 
 
-@router.post("/{app_id}/contacts/{rank}/remove")
+@router.post("/{app_id}/contacts/{rank}/remove", dependencies=[Depends(require_owner)])
 def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_conn)):
     nxt = next_candidate(conn, app_id)
     removed = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND rank = ?",
@@ -103,7 +103,7 @@ def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_
     return _back(app_id, msg=f"Replaced with {nxt['name']} (email is a pattern guess)")
 
 
-@router.post("/{app_id}/contacts/{rank}/edit")
+@router.post("/{app_id}/contacts/{rank}/edit", dependencies=[Depends(require_owner)])
 def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
          email_status: str = Form("unverified"), conn=Depends(get_conn)):
     if email_status not in {"unverified", "verified", "bounced"}:
@@ -120,7 +120,7 @@ def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
     return _back(app_id, msg="Saved")
 
 
-@router.post("/{app_id}/contacts/3/email")
+@router.post("/{app_id}/contacts/3/email", dependencies=[Depends(require_owner)])
 def email_third(request: Request, app_id: int, conn=Depends(get_conn)):
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
@@ -151,7 +151,7 @@ FOLLOW_UP = ("Following up on my note from last week about the {title} role. I'd
              "for convenience.")
 
 
-@router.post("/{app_id}/contacts/followup")
+@router.post("/{app_id}/contacts/followup", dependencies=[Depends(require_owner)])
 def follow_up(request: Request, app_id: int, conn=Depends(get_conn)):
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow

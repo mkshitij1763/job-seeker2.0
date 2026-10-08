@@ -10,7 +10,7 @@
       <li>Built for your phone: add it to your Home Screen.</li>
     </ul>
     {% if invite_only %}
-      <p class="landing-note">This app is invite-only. Ask {{ owner_first }} for an invite.</p>
+      <p class="landing-note">{% if note %}{{ note }}{% else %}This app is invite-only. Ask {{ owner_first }} for an invite.{% endif %}</p>
     {% else %}
       <a class="btn btn-google" href="/login">{% include "_google_g.svg.html" %}<span>Continue with Google</span></a>
       <p class="landing-note">Invite-only. If you haven't been invited, ask {{ owner_first }}.</p>

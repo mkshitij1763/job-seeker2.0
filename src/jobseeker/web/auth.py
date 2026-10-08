@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 
 from jobseeker.db.sessions import create_session, delete_session, delete_user_sessions, purge_expired
-from jobseeker.db.users import owner_first_name, resolve_sign_in
+from jobseeker.db.users import EmailLinkedElsewhere, owner_first_name, resolve_sign_in
 from jobseeker.web.deps import get_conn, optional_user, render_public
 from jobseeker.web.oauth import (OAUTH_COOKIE, SESSION_COOKIE, TOKEN_URL, BadSignature, auth_url, local_path,
                                  pkce_pair, sign, unsign)
@@ -33,10 +33,10 @@ def verify_id_token(token: str, client_id: str) -> dict:
     return id_token.verify_oauth2_token(token, GoogleRequest(), client_id)  # signature, aud, iss, exp
 
 
-def _page(request, status: int, message: str, conn=None):
+def _page(request, status: int, message: str, conn=None, note: str = ""):
     if status == 403:
         return render_public(request, conn, "landing.html", status_code=403, owner_first=owner_first_name(conn),
-                             invite_only=True)
+                             invite_only=True, note=note)
     return request.app.state.templates.TemplateResponse(request, "auth_message.html", {"message": message},
                                                         status_code=status)
 
@@ -59,6 +59,13 @@ def login(request: Request, next: str = ""):
 
 @router.get("/auth/callback")
 def callback(request: Request, code: str = "", state: str = "", error: str = "", conn=Depends(get_conn)):
+    resp = _callback(request, code, state, error, conn)
+    s = request.app.state.settings  # the OAuth cookie is single-use: cleared on every exit, not only success
+    resp.delete_cookie(OAUTH_COOKIE, path="/", secure=s.cookie_secure, httponly=True, samesite="lax")
+    return resp
+
+
+def _callback(request: Request, code: str, state: str, error: str, conn):
     s, now = request.app.state.settings, datetime.now(UTC)
     if error:
         return _page(request, 200, "Sign-in was cancelled.")
@@ -78,14 +85,18 @@ def callback(request: Request, code: str = "", state: str = "", error: str = "",
         return _page(request, 400, "Sign-in couldn't be verified.")
     if claims.get("nonce") != data.get("nonce") or claims.get("email_verified") is not True:
         return _page(request, 400, "Sign-in couldn't be verified.")
-    user = resolve_sign_in(conn, claims["sub"], claims.get("email", ""), claims.get("name", ""), now)
+    try:
+        user = resolve_sign_in(conn, claims["sub"], claims.get("email", ""), claims.get("name", ""), now)
+    except EmailLinkedElsewhere:
+        conn.rollback()
+        return _page(request, 403, "", conn, note="This email is already linked to a different Google account. "
+                                                  "Ask the owner to sort it out.")
     if user is None:
         return _page(request, 403, "This app is invite-only.", conn)
     if secrets.randbelow(100) == 0:
         purge_expired(conn, now)
     resp = RedirectResponse(local_path(data.get("next")) or "/", 303)
     _cookie(resp, SESSION_COOKIE, create_session(conn, user.id, now), SESSION_MAX_AGE, s)
-    resp.delete_cookie(OAUTH_COOKIE, path="/", secure=s.cookie_secure, httponly=True, samesite="lax")
     return resp
 
 

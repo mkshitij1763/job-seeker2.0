@@ -131,3 +131,34 @@ def test_logout_deletes_session(web, settings):
 def test_startup_refuses_missing_auth_settings(settings):
     with pytest.raises(RuntimeError, match="GOOGLE_CLIENT_ID"):
         create_app(settings.model_copy(update={"google_client_id": ""}))
+
+
+def test_invited_email_already_linked_to_another_google_account_is_403_not_500(web, monkeypatch, settings):
+    add_invite(connect(settings.db_path), "roomie@example.com", 1, T)
+    assert _callback(web, monkeypatch, {"sub": "g2", "email": "roomie@example.com"}).status_code == 303
+    web.cookies.clear()
+    r = _callback(web, monkeypatch, {"sub": "g2-recreated", "email": "roomie@example.com"})
+    assert r.status_code == 403 and "already linked to a different Google account" in r.text
+
+
+def test_oauth_cookie_cleared_on_every_callback_exit(web, monkeypatch):
+    st, _ = _login(web)
+    r = web.get("/auth/callback?code=c&state=wrong")
+    assert r.status_code == 400 and '__Host-js_oauth=""' in r.headers.get("set-cookie", "")
+    r = _callback(web, monkeypatch, {"sub": "g9", "email": "stranger@example.com"})
+    assert r.status_code == 403 and '__Host-js_oauth=""' in r.headers.get("set-cookie", "")
+
+
+def test_logout_all_with_an_old_session_does_not_reissue_the_cookie(web, settings):
+    from jobseeker.db.sessions import REFRESH_AFTER
+    conn = connect(settings.db_path)
+    tok = create_session(conn, 1, datetime.now(UTC) - REFRESH_AFTER - timedelta(hours=1))
+    web.cookies.set("__Host-js_session", tok)
+    r = web.post("/logout/all", headers={"Origin": "https://testserver"})
+    cookies = [c for c in r.headers.get_list("set-cookie") if c.startswith("__Host-js_session=")]
+    assert r.status_code == 303 and cookies and all('__Host-js_session=""' in c for c in cookies)
+
+
+def test_startup_refuses_short_secret_key(settings):
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        create_app(settings.model_copy(update={"secret_key": "short"}))

@@ -21,7 +21,7 @@ from jobseeker.pipeline.run import draft_application
 from jobseeker.profile.facts import load_facts
 from jobseeker.status import InvalidTransition
 from jobseeker.web import oauth
-from jobseeker.web.deps import current_user, get_conn, render
+from jobseeker.web.deps import current_user, get_conn, render, require_owner
 
 router = APIRouter(prefix="/applications")
 KINDS = {"email", "li_note", "li_dm"}
@@ -82,7 +82,7 @@ def notes(app_id: int, notes: str = Form(""), conn=Depends(get_conn)):
     return _back(app_id, msg="Notes saved")
 
 
-@router.post("/{app_id}/contact")
+@router.post("/{app_id}/contact", dependencies=[Depends(require_owner)])
 def contact(app_id: int, name: str = Form(""), role: str = Form(""), linkedin_url: str = Form(""),
             email: str = Form(""), email_status: str = Form("unverified"), conn=Depends(get_conn)):
     if email_status not in {"unverified", "verified", "bounced"}:
@@ -95,7 +95,7 @@ def contact(app_id: int, name: str = Form(""), role: str = Form(""), linkedin_ur
     return _back(app_id, msg="Contact saved")
 
 
-@router.post("/{app_id}/drafts/{kind}")
+@router.post("/{app_id}/drafts/{kind}", dependencies=[Depends(require_owner)])
 def edit_draft(app_id: int, kind: str, subject: str = Form(""), body: str = Form(...), conn=Depends(get_conn)):
     if kind not in KINDS:
         raise HTTPException(404)
@@ -106,7 +106,7 @@ def edit_draft(app_id: int, kind: str, subject: str = Form(""), body: str = Form
     return _back(app_id, msg="Draft saved")
 
 
-@router.post("/{app_id}/draft")
+@router.post("/{app_id}/draft", dependencies=[Depends(require_owner)])
 def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
     state = request.app.state
     status = get_status(conn, app_id)
@@ -126,7 +126,7 @@ def draft_now(request: Request, app_id: int, conn=Depends(get_conn)):
     return _back(app_id, msg="Drafts generated")
 
 
-@router.post("/{app_id}/approve")
+@router.post("/{app_id}/approve", dependencies=[Depends(require_owner)])
 async def approve(request: Request, app_id: int, user=Depends(current_user), conn=Depends(get_conn)):
     form = await request.form()  # the confirm_<rank> boxes are dynamic, so read the form here, then work off-loop
     return await run_in_threadpool(_approve, request.app.state, conn, user.id, app_id, form)
@@ -218,7 +218,7 @@ def _approve_single(state, conn, app_id: int, d: dict, email: dict, confirm_unve
     return _back(app_id, msg="Gmail draft created. Review and press Send in Gmail")
 
 
-@router.post("/{app_id}/followed-up")
+@router.post("/{app_id}/followed-up", dependencies=[Depends(require_owner)])
 def followed_up(app_id: int, conn=Depends(get_conn)):
     try:
         record_followup(conn, app_id)

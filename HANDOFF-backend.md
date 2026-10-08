@@ -30,11 +30,11 @@
   | Task | Commit |
   |---|---|
   | P3-T1 UserPrefs, AppConfig, effective_prefs, fixtures | `0f773be` |
-  | P3-T2 migration v2, profile importer (+ where_confirmed) | `this commit` |
+  | P3-T2 migration v2, profile importer (+ where_confirmed) | `4f68793` |
 
-- **Tests at `P3-T2`:** 561 pytest, 19 node. `git status` is clean.
+- **Tests at the security-review fix:** 579 pytest, 19 node. `git status` is clean. build/devops2 (8fc47f6) merged as `3796e44`.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** merge `origin/build/devops2` (from `manager`), then one "fix(auth): security review" commit (rulings in §3), then plan 3 **Task 3**, then T4–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** plan 3 **Task 3** (request-scoped prefs; facts from the DB), then T4–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -52,6 +52,13 @@
 - P3-T1: the spec says "where" is complete with ≥1 city OR `remote_india_ok`, and remote defaults to True, so `UserPrefs().complete() == ["roles", "experience"]`. The plan's test expected all three; I kept the spec. `config/app.example.yaml`'s `default_title_deny` is the owner's full 18-item list. Personal values are gone from test fixtures: `tests/fixtures/preferences.yaml` uses "Asha Owner".
 - P3-T1/T2 (ruling by `manager`, replaces my P3-T1 ruling): "where" is complete only with ≥1 city, or with `remote_india_ok` plus `UserPrefs.where_confirmed`. The Where step sets `where_confirmed` when saved; the importer sets it True for the migrated owner. `UserPrefs().complete() == ["roles", "where", "experience"]`.
 - P3-T2: `tests/fixtures/facts.json` is anonymised (Acme Health, Bigfour Consulting); the conftest literal names real employers. `db/profile.py` starts in T2 with `get_user_prefs`, because T2's test needs it. `import_profile` aborts only on per-user golden fields: `min_prescore`/`thresholds` come from `app.yaml`, and an existing admin `app.yaml` wins. Live-copy acceptance with the REAL owner profile: v1+v2 ok, full golden dict equal, scorer prompt byte-identical, resume 600/700, fk check empty.
+- Plan 2 security review (fresh Opus reviewer over `4a029ff..22fd45f`; `manager` ruled all five fixed, in commit "fix(auth): security review"):
+  - I1: contacts and company_domains are shared rows, so user B could overwrite A's contacts. The interim gate is `require_owner` (404 for non-owners) on application `/contact`, `/drafts/{kind}`, `/draft`, `/approve`, `/followed-up`, and on every POST under `/contacts/`. The read-only card GET stays open. Covered by a route-walk test and a roommate-404 test. **Plan 5 replaces `require_owner` with `require_outreach` and adds copy-on-write contacts per spec 5; say so at the top of the outreach plan.**
+  - I2: an invited email already bound to another Google `sub` gets a 403 on landing, "already linked to a different Google account", instead of a 500.
+  - M1: `/logout/all` no longer re-issues the session cookie.
+  - M2: the app refuses to start with a `SECRET_KEY` under 32 chars (`gen-key` gives 44).
+  - M3: the OAuth cookie is cleared on every callback exit.
+- Merge of build/devops2: `test_uninvited_gets_403_with_owner_name_and_no_row` now expects "Ask Asha for an invite.", since the fixture owner's name is imported since P3-T2.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;
