@@ -49,3 +49,28 @@ def test_last_run_shows_own_and_shared_runs(settings, seeded_two):
     assert last_run(conn, 1)["id"] == shared
     mine = start_run(conn, NOW, user_id=1)
     assert last_run(conn, 1)["id"] == mine
+
+
+def test_roommate_pages_show_only_their_rows(seeded_two, client_as):
+    web = client_as(2)
+    inbox = web.get("/?band=all").text
+    assert f"/applications/{seeded_two['roommate_app']}" in inbox
+    assert f"/applications/{seeded_two['owner_apps'][0]}" not in inbox
+    assert f"/applications/{seeded_two['owner_apps'][0]}" not in web.get("/pipeline").text
+    assert f"/applications/{seeded_two['owner_apps'][0]}" not in web.get("/today").text
+
+
+def test_owner_pages_unchanged_by_roommate(seeded_two, client_as):
+    web = client_as(1)
+    assert f"/applications/{seeded_two['roommate_app']}" not in web.get("/?band=all").text
+    assert web.get(f"/applications/{seeded_two['owner_apps'][0]}").status_code == 200
+
+
+def test_owner_find_contacts_ignores_roommate_blocklist(seeded_two, settings):
+    from jobseeker.db.contacts_repo import blocked_profile_urls
+    conn = connect(settings.db_path)
+    cid = conn.execute("INSERT INTO contacts (company, name, linkedin_url) VALUES ('CRED', 'A', 'https://li/a')").lastrowid
+    conn.execute("INSERT INTO blocklist (user_id, contact_id, reason, at) VALUES (2, ?, 'not interested', 't')", (cid,))
+    conn.commit()
+    assert blocked_profile_urls(conn, 2, "CRED") == {"https://li/a"}
+    assert blocked_profile_urls(conn, 1, "CRED") == set()

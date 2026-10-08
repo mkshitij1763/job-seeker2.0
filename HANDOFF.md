@@ -160,3 +160,14 @@ Not done (the user deferred it): the SaaS evaluation, after 2–3 weeks of use b
 3. Ask **one question at a time**, starting with: *hosting budget, strictly free (Oracle Always Free) or about ₹400/month (Hetzner)?* Then: invite-only Google sign-in OK? Gmail drafts for roommates too, or just job matching for them?
 4. Propose running the hosting/scraping **spike** before writing specs.
 
+
+**Sub-project 2 built (accounts + auth), on `multi-user`, 2026-10-09:**
+- New env vars in `.env`. The web app refuses to start without the first four:
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (a Web OAuth client, redirect `<BASE_URL>/auth/callback`)
+  - `BASE_URL` (the exact browser origin, e.g. `https://<name>.duckdns.org`; the CSRF check 403s any POST from another origin)
+  - `SECRET_KEY` (32+ random chars; signs the short-lived OAuth cookie)
+  - `OWNER_EMAIL` (the owner's Google email; claims user 1 and admin)
+  - `COOKIE_SECURE` (default true; the `__Host-` cookies need HTTPS)
+- `jobseeker migrate` upgrades the DB to v1 (users, invites, sessions, user_jobs, `user_id` on per-user tables). Stop the web service and the run timer first. `--dry-run` previews. Both the web app and the pipeline refuse an un-migrated DB with `SchemaOutOfDate`.
+- The live Mac app stays on `main` until cutover. Never run `migrate` against the live `data/` from `multi-user`.
+- Tests: 472 pytest, 19 node. Acceptance on a `.backup` copy of the live DB: migrate leaves counts unchanged (apps 167, scores 168, jobs 4497, user_jobs 4497), foreign_key_check is empty, and the un-migrated copy refuses to start. Real Google sign-in is checked at deploy.
