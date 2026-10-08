@@ -10,20 +10,25 @@ from pathlib import Path
 KEEP = 7
 
 
+def snapshot(db_path: Path, out: Path) -> Path:
+    """Consistent copy of a live SQLite database (safe while the web app writes, WAL)."""
+    src, dst = sqlite3.connect(db_path), sqlite3.connect(out)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    return out
+
+
 def backup(db_path: Path, facts_path: Path, dest: Path, now: datetime, keep: int = KEEP) -> Path:
     """Write a consistent, gzipped copy of the database (and facts.json) for today; keep the newest `keep`."""
     dest.mkdir(parents=True, exist_ok=True)
     day = now.strftime("%Y-%m-%d")
     out = dest / f"jobseeker-{day}.db.gz"
     with tempfile.TemporaryDirectory() as tmp:
-        snapshot = Path(tmp) / "snapshot.db"
-        src, dst = sqlite3.connect(db_path), sqlite3.connect(snapshot)
-        try:
-            src.backup(dst)  # safe while the dashboard is writing (WAL)
-        finally:
-            src.close()
-            dst.close()
-        with snapshot.open("rb") as f, gzip.open(out.with_suffix(".tmp"), "wb") as g:
+        copy = snapshot(db_path, Path(tmp) / "snapshot.db")
+        with copy.open("rb") as f, gzip.open(out.with_suffix(".tmp"), "wb") as g:
             shutil.copyfileobj(f, g)
     out.with_suffix(".tmp").replace(out)  # never leave a half-written backup under the real name
     if facts_path.exists():
