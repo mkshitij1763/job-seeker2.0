@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from jobseeker.config import Settings, load_preferences, load_rubric
 from jobseeker.status import allowed_next
+from jobseeker.web.csrf import OriginCheck
 from jobseeker.web.deps import NotAuthenticated, current_user, owned_app
 from jobseeker.web.filters import age, highlight, personal_note
 from jobseeker.web.oauth import SESSION_COOKIE
@@ -80,6 +81,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.include_router(application.router, dependencies=[Depends(owned_app)])
     app.include_router(contacts.router, dependencies=[Depends(owned_app)])
     app.include_router(pipeline.router, dependencies=[Depends(current_user)])
+    app.add_middleware(OriginCheck, base_url=settings.base_url)
 
     @app.exception_handler(NotAuthenticated)
     async def _signed_out(request, exc):
