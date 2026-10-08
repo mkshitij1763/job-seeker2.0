@@ -4,15 +4,19 @@ import hashlib
 import json
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from jobseeker.config import Settings, load_preferences, load_rubric
 from jobseeker.status import allowed_next
+from jobseeker.web.deps import NotAuthenticated
 from jobseeker.web.filters import age, highlight, personal_note
+from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.view import STEPS, TIER_LABELS, tier
 
 HERE = Path(__file__).parent
@@ -42,11 +46,15 @@ class _Static(StaticFiles):
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
-    from jobseeker.web import application, contacts, inbox, pipeline
+    from jobseeker.web import application, auth, contacts, inbox, pipeline
 
     from jobseeker.db.core import connect
     from jobseeker.db.users import ensure_owner
 
+    missing = [n for n in ("google_client_id", "google_client_secret", "base_url", "secret_key")
+               if not getattr(settings, n)]
+    if missing:
+        raise RuntimeError("Set " + ", ".join(n.upper() for n in missing) + " in .env before starting the web app")
     boot = connect(settings.db_path)  # raises SchemaOutOfDate on an un-migrated database: fail at startup
     ensure_owner(boot, settings.owner_email)
     boot.close()
@@ -66,10 +74,30 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory))
     app.mount("/static", _Static(directory=HERE / "static"), name="static")
     app.add_middleware(GZipMiddleware, minimum_size=1000)  # the inbox is ~50 KB of HTML, ~8 KB gzipped
+    app.include_router(auth.router)
     app.include_router(inbox.router)
     app.include_router(application.router)
     app.include_router(contacts.router)
     app.include_router(pipeline.router)
+
+    @app.exception_handler(NotAuthenticated)
+    async def _signed_out(request, exc):
+        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        if request.headers.get("HX-Request"):
+            current = request.headers.get("HX-Current-URL")
+            path = urlsplit(current).path if current else target
+            return Response(status_code=401, headers={"HX-Redirect": f"/login?next={quote(path)}"})
+        return RedirectResponse(f"/login?next={quote(target)}", 303)
+
+    @app.middleware("http")
+    async def _refresh_session_cookie(request, call_next):
+        response = await call_next(request)
+        token = getattr(request.state, "refresh_session", None)
+        if token:
+            response.set_cookie(SESSION_COOKIE, token, max_age=30 * 24 * 3600, path="/",
+                                secure=settings.cookie_secure, httponly=True, samesite="lax")
+        return response
+
     return app
 
 

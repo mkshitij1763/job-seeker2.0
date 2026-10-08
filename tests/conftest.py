@@ -22,9 +22,13 @@ def home(tmp_path: Path) -> Path:
     return tmp_path
 
 
+AUTH_TEST = dict(google_client_id="cid.apps.googleusercontent.com", google_client_secret="secret",
+                 base_url="https://testserver", secret_key="k" * 32, owner_email="owner@example.com")
+
+
 @pytest.fixture
 def settings(home: Path) -> Settings:
-    return Settings(jobseeker_home=home, groq_api_key="test")
+    return Settings(jobseeker_home=home, groq_api_key="test", **AUTH_TEST)
 
 
 @pytest.fixture

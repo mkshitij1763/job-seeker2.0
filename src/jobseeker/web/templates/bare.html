@@ -1,0 +1,20 @@
+{% from "_icons.html" import icon %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FBFBF9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Job Seeker">
+  <title>{% block title %}Job Seeker{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="stylesheet" href="{{ asset('ui.css') }}">
+  <script src="{{ asset('htmx.min.js') }}" defer></script>
+  <script src="{{ asset('swipe.js') }}" defer></script>
+  <script src="{{ asset('keys.js') }}" defer></script>
+  <script src="{{ asset('tabs.js') }}" defer></script>
+</head>
+<body><main class="main bare">{% block content %}{% endblock %}</main></body></html>
