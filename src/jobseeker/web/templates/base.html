@@ -43,10 +43,13 @@
   <nav class="sidebar" aria-label="Main">
     <a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>
     {{ nav_links() }}
-    <div class="sidebar-foot">{{ run_notes_box() }}</div>
+    <div class="sidebar-foot">{{ run_notes_box() }}
+      {% if user and user.is_admin %}<a class="nav-item" href="/admin">{{ icon("people") }}<span>Admin</span></a>{% endif %}
+      {% if user %}<form method="post" action="/logout"><button class="btn-ghost">Sign out</button></form>{% endif %}
+    </div>
   </nav>
   <div>
-    <header class="topbar"><a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>{{ run_notes_box() }}</header>
+    <header class="topbar"><a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>{{ run_notes_box() }}{% if user %}<form method="post" action="/logout" class="topbar-signout"><button class="btn-ghost" aria-label="Sign out">Sign out</button></form>{% endif %}</header>
     <main class="main">
       {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
       {% if err %}<div class="flash err">{{ err }}</div>{% endif %}

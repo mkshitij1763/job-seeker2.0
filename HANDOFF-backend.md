@@ -22,10 +22,11 @@
   | T7 sessions, /login, /auth/callback, /logout | `e920d9b` |
   | T8 route guards, owned_app, signed-in user | `04259b6` |
   | T9 CSRF Origin check | `8477b1c` |
+  | T10 admin page, sign-out controls | `0676718` |
 
-- **Tests at `8477b1c`:** 465 pytest, 19 node. `git status` is clean.
+- **Tests at `0676718`:** 469 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 2 **Task 10** (admin page: invites, users, usage; sign-out controls), then T11. Then **plan 3** `docs/superpowers/plans/2026-10-08-mu-onboarding-settings.md` (accepted at `a16ac84`), T1–T9. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
+- **NEXT:** plan 2 **Task 11**, then **plan 3** `docs/superpowers/plans/2026-10-08-mu-onboarding-settings.md` (accepted at `a16ac84`), T1–T9. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -38,6 +39,7 @@
 - T7: no deviations; respx around TestClient works (no monkeypatch of `exchange_code` needed).
 - T8 (accepted by `manager`): conftest gains plain `signed_in_client(settings, user_id=1, *, follow_redirects, **app_kwargs)`; `client_as` delegates to it, and old web-test helpers that only take `settings` use it. The Today greeting reads `users.name`, so greeting tests set `users.name`. `tests/test_web_view.py` GETs `/today` signed in.
 - T9: no deviations. `base_url` must equal the browser origin exactly, or every POST gets 403 "Request blocked".
+- T10: no deviations. `admin.html` is a plain three-card page (Invites, Users, Usage); no new CSS (`.topbar-signout` has no rule yet).
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

@@ -61,3 +61,9 @@ def owned_app(app_id: int, user: User = Depends(current_user), conn=Depends(get_
     if not conn.execute("SELECT 1 FROM applications WHERE id = ? AND user_id = ?", (app_id, user.id)).fetchone():
         raise HTTPException(404)  # 404, not 403: never confirm another user's ids exist
     return app_id
+
+
+def require_admin(user: User = Depends(current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(404)
+    return user

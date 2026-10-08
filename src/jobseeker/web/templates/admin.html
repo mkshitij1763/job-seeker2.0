@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Admin · Job Seeker{% endblock %}
+{% block content %}
+<header class="page-head"><h1>Admin</h1></header>
+
+<section class="card block">
+  <h2 class="section-title">Invites</h2>
+  <table>
+    <thead><tr><th>Email</th><th>Invited</th><th>Accepted</th><th></th></tr></thead>
+    <tbody>
+    {% for i in invites %}
+      <tr><td>{{ i.email }}</td><td class="mono muted">{{ (i.created_at or "")[:10] }}</td>
+        <td class="mono muted">{{ (i.accepted_at or "")[:10] or "—" }}</td>
+        <td><form method="post" action="/admin/invites/{{ i.email|urlencode }}/remove"><button class="btn btn-ghost">Remove</button></form></td></tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">No invites yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/invites">
+    <input type="email" name="email" required placeholder="name@example.com" aria-label="Email to invite">
+    <button class="btn">Invite</button>
+  </form>
+  <p class="muted">Invites send no email. Send them the link yourself.</p>
+</section>
+
+<section class="card block">
+  <h2 class="section-title">Users</h2>
+  <table>
+    <thead><tr><th>Email</th><th>Name</th><th>Last login</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td class="mono muted">{{ (u.last_login_at or "")[:10] or "—" }}</td>
+        <td>{% if u.disabled_at %}Disabled{% else %}Active{% endif %}{% if u.is_admin %} · admin{% endif %}</td>
+        <td>{% if u.disabled_at %}<form method="post" action="/admin/users/{{ u.id }}/enable"><button class="btn btn-ghost">Enable</button></form>
+            {% else %}<form method="post" action="/admin/users/{{ u.id }}/disable"><button class="btn btn-ghost">Disable</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card block">
+  <h2 class="section-title">Usage</h2>
+  <table>
+    <thead><tr><th>User</th>{% for s in usage.services %}<th>{{ s }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in usage.rows %}
+      <tr><td>{{ r.user.email }}</td>{% for s in usage.services %}<td class="mono">{{ r["values"].get(s, 0) }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Daily services show today, monthly services this month.</p>
+</section>
+{% endblock %}

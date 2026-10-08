@@ -1,7 +1,7 @@
 from fastapi.routing import APIRoute
 
 from jobseeker.web.app import PUBLIC, create_app
-from jobseeker.web.deps import current_user, optional_user, owned_app
+from jobseeker.web.deps import current_user, optional_user, owned_app, require_admin
 
 
 def _calls(dependant):
@@ -19,6 +19,8 @@ def test_every_route_is_guarded(settings):
             assert optional_user in calls
             continue
         assert current_user in calls, f"{r.path} has no current_user"
+        if r.path.startswith("/admin"):
+            assert require_admin in calls, f"{r.path} has no require_admin"
         if "{app_id}" in r.path:
             assert owned_app in calls, f"{r.path} has no owned_app"
 
