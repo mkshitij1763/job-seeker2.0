@@ -1,0 +1,18 @@
+[Unit]
+Description=Job Seeker tick (daily run, Fetch now, backups)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jobseeker
+WorkingDirectory=${HOME_DIR}/app
+EnvironmentFile=${HOME_DIR}/.env
+Environment=JOBSEEKER_HOME=${HOME_DIR}
+ExecStart=${HOME_DIR}/.local/bin/uv run --frozen --no-sync jobseeker tick
+TimeoutStartSec=3h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ReadWritePaths=${HOME_DIR}/data ${HOME_DIR}/config
