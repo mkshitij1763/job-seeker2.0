@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 from jobseeker.cli import app
 from jobseeker.db.applications import ensure_application, get_status, transition
 from jobseeker.db.core import connect
-from jobseeker.db.jobs import get_job, upsert_job
+from jobseeker.db.jobs import get_user_job, upsert_job
 from jobseeker.pipeline.refilter import refilter
 from tests.factories import make_job
 
@@ -29,17 +29,17 @@ def test_refilter_applies_current_rules_to_stored_jobs(prefs):
     transition(conn, a_approved, "drafted", now=NOW)
     transition(conn, a_approved, "approved", now=NOW)
 
-    changes = refilter(conn, prefs, NOW, apply=False)
+    changes = refilter(conn, 1, prefs, NOW, apply=False)
     assert {c["job_id"] for c in changes} == {senior, approved}  # age isn't re-judged
-    assert get_job(conn, senior)["filter_reason"] is None  # dry run writes nothing
+    assert (get_user_job(conn, 1, senior) or {}).get("filter_reason") is None  # dry run writes nothing
 
-    refilter(conn, prefs, NOW, apply=True)
-    assert get_job(conn, senior)["filter_reason"] == "experience: 4+ years"
+    refilter(conn, 1, prefs, NOW, apply=True)
+    assert (get_user_job(conn, 1, senior) or {}).get("filter_reason") == "experience: 4+ years"
     assert get_status(conn, a_senior) == "skipped"
-    assert get_job(conn, approved)["filter_reason"] == "experience: 6+ years"
+    assert (get_user_job(conn, 1, approved) or {}).get("filter_reason") == "experience: 6+ years"
     assert get_status(conn, a_approved) == "approved"  # a Gmail draft exists: never touched
-    assert get_job(conn, ok)["filter_reason"] is None and get_job(conn, old)["filter_reason"] is None
-    assert refilter(conn, prefs, NOW, apply=True) == []  # idempotent
+    assert (get_user_job(conn, 1, ok) or {}).get("filter_reason") is None and (get_user_job(conn, 1, old) or {}).get("filter_reason") is None
+    assert refilter(conn, 1, prefs, NOW, apply=True) == []  # idempotent
 
 
 def test_refilter_command_is_a_dry_run_unless_applied(settings, monkeypatch):
@@ -49,6 +49,6 @@ def test_refilter_command_is_a_dry_run_unless_applied(settings, monkeypatch):
     conn.close()
     out = CliRunner().invoke(app, ["refilter"]).output
     assert "experience: 7+ years" in out and "--apply" in out
-    assert get_job(connect(settings.db_path), job)["filter_reason"] is None
+    assert (get_user_job(connect(settings.db_path), 1, job) or {}).get("filter_reason") is None
     CliRunner().invoke(app, ["refilter", "--apply"])
-    assert get_job(connect(settings.db_path), job)["filter_reason"] == "experience: 7+ years"
+    assert (get_user_job(connect(settings.db_path), 1, job) or {}).get("filter_reason") == "experience: 7+ years"

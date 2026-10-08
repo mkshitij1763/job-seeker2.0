@@ -111,7 +111,9 @@ def refilter(apply: bool = typer.Option(False, "--apply", help="Write the change
     from jobseeker.pipeline.refilter import refilter as run_refilter
 
     settings, prefs, _ = _load()
-    changes = run_refilter(connect(settings.db_path), prefs, datetime.now(UTC), apply=apply)
+    from jobseeker.db.users import OWNER_ID
+
+    changes = run_refilter(connect(settings.db_path), OWNER_ID, prefs, datetime.now(UTC), apply=apply)
     for c in changes:
         effect = "-> skipped" if c["skips"] else f"(kept {c['status']})" if c["status"] else ""
         typer.echo(f"  {c['title'][:40]:<41}{c['company'][:24]:<25}{c['reason']:<34}{effect}")

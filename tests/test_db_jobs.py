@@ -4,7 +4,7 @@ import threading
 
 from jobseeker.db.core import connect
 from jobseeker.db.jobs import (
-    get_job, job_from_row, jobs_needing_score, latest_score, save_score,
+    get_job, get_user_job, job_from_row, jobs_needing_score, latest_score, save_score,
     set_filter_reason, upsert_job,
 )
 from jobseeker.models import ScoreResult, jd_hash
@@ -49,14 +49,14 @@ def test_jobs_needing_score_respects_filter_hash_and_version():
     conn = _conn()
     a, _ = upsert_job(conn, make_job())
     b, _ = upsert_job(conn, make_job(source_job_id="abc-2", fingerprint="fp2"))
-    set_filter_reason(conn, b, "location: Hyderabad")
-    assert [r["id"] for r in jobs_needing_score(conn, "v1", 10)] == [a]
+    set_filter_reason(conn, 1, b, "location: Hyderabad")
+    assert [r["id"] for r in jobs_needing_score(conn, 1, "v1", 10)] == [a]
     result = ScoreResult(score=80, breakdown={"role_fit": 30}, matches=["SQL"], gaps=[],
                          recommendation="apply", role_family="senior_product_analyst")
     save_score(conn, 1, a, result, "openai/gpt-oss-20b", "v1", get_job(conn, a)["jd_hash"])
-    assert jobs_needing_score(conn, "v1", 10) == []
-    assert [r["id"] for r in jobs_needing_score(conn, "v2", 10)] == [a]
-    assert [r["id"] for r in jobs_needing_score(conn, "v1", 10, force=True)] == [a]
+    assert jobs_needing_score(conn, 1, "v1", 10) == []
+    assert [r["id"] for r in jobs_needing_score(conn, 1, "v2", 10)] == [a]
+    assert [r["id"] for r in jobs_needing_score(conn, 1, "v1", 10, force=True)] == [a]
     assert latest_score(conn, a)["score"] == 80
 
 
@@ -107,9 +107,9 @@ def test_jobs_needing_score_orders_by_prescore():
     a, _ = upsert_job(conn, make_job(source_job_id="a", fingerprint="fa"))
     b, _ = upsert_job(conn, make_job(source_job_id="b", fingerprint="fb"))
     c, _ = upsert_job(conn, make_job(source_job_id="c", fingerprint="fc"))
-    set_prescore(conn, a, 40)
-    set_prescore(conn, b, 90)
-    assert [r["id"] for r in jobs_needing_score(conn, "v1", -1)] == [b, a, c]
+    set_prescore(conn, 1, a, 40)
+    set_prescore(conn, 1, b, 90)
+    assert [r["id"] for r in jobs_needing_score(conn, 1, "v1", -1)] == [b, a, c]
 
 
 def test_set_jd_text_keeps_longer_and_rehashes():
@@ -135,12 +135,12 @@ def test_expire_unscored_and_missing_prescore():
     scored, _ = upsert_job(conn, make_job(source_job_id="s", fingerprint="fs", posted_at=now - timedelta(days=9)))
     save_score(conn, 1, scored, ScoreResult(score=80, breakdown={}, matches=[], gaps=[], recommendation="apply",
                                          role_family="other"), "m", "v1", "h")
-    assert expire_unscored(conn, now, 7) == 1
-    assert get_job(conn, old)["filter_reason"] == "stale: never scored"
-    assert get_job(conn, scored)["filter_reason"] is None
-    assert [r["id"] for r in jobs_missing_prescore(conn)] == [fresh]
-    set_prescore(conn, fresh, 50)
-    assert jobs_missing_prescore(conn) == []
+    assert expire_unscored(conn, 1, now, 7) == 1
+    assert (get_user_job(conn, 1, old) or {}).get("filter_reason") == "stale: never scored"
+    assert (get_user_job(conn, 1, scored) or {}).get("filter_reason") is None
+    assert [r["id"] for r in jobs_missing_prescore(conn, 1)] == [fresh]
+    set_prescore(conn, 1, fresh, 50)
+    assert jobs_missing_prescore(conn, 1) == []
 
 
 def test_same_source_refresh_with_empty_jd_keeps_fetched_description():
@@ -153,3 +153,17 @@ def test_same_source_refresh_with_empty_jd_keeps_fetched_description():
     upsert_job(conn, li)
     row = get_job(conn, job_id)
     assert row["jd_text"] == "fetched full description" and row["jd_hash"] == jd_hash("fetched full description")
+
+
+def test_verdicts_are_per_user(tmp_path):
+    from jobseeker.db.jobs import get_user_job, set_prescore
+    conn = connect(tmp_path / "db.sqlite")
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (2, 'b@example.com', 't')")
+    a, _ = upsert_job(conn, make_job(source_job_id="a", fingerprint="fa"))
+    set_filter_reason(conn, 1, a, "title: sde")
+    set_prescore(conn, 2, a, 55)
+    assert get_user_job(conn, 1, a)["filter_reason"] == "title: sde"
+    assert get_user_job(conn, 2, a)["prescore"] == 55 and get_user_job(conn, 2, a)["filter_reason"] is None
+    assert jobs_needing_score(conn, 1, "v1", 10) == []
+    assert [r["id"] for r in jobs_needing_score(conn, 2, "v1", 10)] == [a]
+    assert tuple(conn.execute("SELECT filter_reason, prescore FROM jobs WHERE id = ?", (a,)).fetchone()) == (None, None)

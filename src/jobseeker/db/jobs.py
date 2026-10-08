@@ -67,9 +67,23 @@ def upsert_job(conn: sqlite3.Connection, job: Job, now: datetime | None = None) 
     return cur.lastrowid, True
 
 
-def set_filter_reason(conn: sqlite3.Connection, job_id: int, reason: str) -> None:
-    conn.execute("UPDATE jobs SET filter_reason = ? WHERE id = ?", (reason, job_id))
+def _upsert_verdict(conn: sqlite3.Connection, user_id: int, job_id: int, column: str, value) -> None:
+    conn.execute(
+        f"""INSERT INTO user_jobs (user_id, job_id, {column}, jd_hash, evaluated_at)
+            SELECT ?, id, ?, jd_hash, ? FROM jobs WHERE id = ?
+            ON CONFLICT (user_id, job_id) DO UPDATE SET {column} = excluded.{column},
+              jd_hash = excluded.jd_hash, evaluated_at = excluded.evaluated_at""",
+        (user_id, value, utcnow(), job_id))
     conn.commit()
+
+
+def set_filter_reason(conn: sqlite3.Connection, user_id: int, job_id: int, reason: str) -> None:
+    _upsert_verdict(conn, user_id, job_id, "filter_reason", reason)
+
+
+def get_user_job(conn: sqlite3.Connection, user_id: int, job_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM user_jobs WHERE user_id = ? AND job_id = ?", (user_id, job_id)).fetchone()
+    return dict(row) if row else None
 
 
 def get_job(conn: sqlite3.Connection, job_id: int) -> dict | None:
@@ -77,9 +91,8 @@ def get_job(conn: sqlite3.Connection, job_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-def set_prescore(conn: sqlite3.Connection, job_id: int, score: int) -> None:
-    conn.execute("UPDATE jobs SET prescore = ? WHERE id = ?", (score, job_id))
-    conn.commit()
+def set_prescore(conn: sqlite3.Connection, user_id: int, job_id: int, score: int) -> None:
+    _upsert_verdict(conn, user_id, job_id, "prescore", score)
 
 
 def set_jd_text(conn: sqlite3.Connection, job_id: int, text: str) -> None:
@@ -95,20 +108,34 @@ def record_jd_attempt(conn: sqlite3.Connection, job_id: int) -> None:
     conn.commit()
 
 
-def expire_unscored(conn: sqlite3.Connection, now: datetime, max_age_days: int) -> int:
+def expire_unscored(conn: sqlite3.Connection, user_id: int, now: datetime, max_age_days: int) -> int:
     cutoff = iso(now - timedelta(days=max_age_days))
     cur = conn.execute(
-        """UPDATE jobs SET filter_reason = 'stale: never scored'
-           WHERE filter_reason IS NULL AND COALESCE(posted_at, first_seen_at) < ?
-           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.job_id = jobs.id)""", (cutoff,))
+        """UPDATE user_jobs SET filter_reason = 'stale: never scored'
+           WHERE user_id = ? AND filter_reason IS NULL
+           AND job_id IN (SELECT id FROM jobs WHERE COALESCE(posted_at, first_seen_at) < ?)
+           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = user_jobs.user_id AND s.job_id = user_jobs.job_id)""",
+        (user_id, cutoff))
+    expired = cur.rowcount
+    cur = conn.execute(  # old jobs this user has no verdict for yet (never evaluated): expire those too
+        """INSERT INTO user_jobs (user_id, job_id, filter_reason, jd_hash, evaluated_at)
+           SELECT ?, j.id, 'stale: never scored', j.jd_hash, ? FROM jobs j
+           WHERE COALESCE(j.posted_at, j.first_seen_at) < ?
+           AND NOT EXISTS (SELECT 1 FROM user_jobs uj WHERE uj.user_id = ? AND uj.job_id = j.id)
+           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = ? AND s.job_id = j.id)""",
+        (user_id, iso(now), cutoff, user_id, user_id))
     conn.commit()
-    return cur.rowcount
+    return expired + cur.rowcount
 
 
-def jobs_missing_prescore(conn: sqlite3.Connection) -> list[dict]:
+_UJ = "LEFT JOIN user_jobs uj ON uj.job_id = j.id AND uj.user_id = :u"
+
+
+def jobs_missing_prescore(conn: sqlite3.Connection, user_id: int) -> list[dict]:
     rows = conn.execute(
-        """SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL AND j.prescore IS NULL
-           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.job_id = j.id) ORDER BY j.id""").fetchall()
+        f"""SELECT j.* FROM jobs j {_UJ} WHERE uj.filter_reason IS NULL AND uj.prescore IS NULL
+            AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = :u AND s.job_id = j.id) ORDER BY j.id""",
+        {"u": user_id}).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -123,19 +150,14 @@ def job_from_row(row: dict) -> Job:
     )
 
 
-def jobs_needing_score(conn: sqlite3.Connection, rubric_version: str, limit: int,
+def jobs_needing_score(conn: sqlite3.Connection, user_id: int, rubric_version: str, limit: int,
                        force: bool = False, with_jd: bool = False) -> list[dict]:
     tail = ("AND TRIM(j.jd_text) != '' " if with_jd else "") + \
-        "ORDER BY COALESCE(j.prescore, -1) DESC, j.first_seen_at DESC, j.id DESC LIMIT ?"
-    if force:
-        sql = f"SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL {tail}"
-        params: tuple = (limit,)
-    else:
-        sql = f"""SELECT j.* FROM jobs j WHERE j.filter_reason IS NULL AND NOT EXISTS (
-                    SELECT 1 FROM scores s WHERE s.job_id = j.id
-                    AND s.rubric_version = ? AND s.jd_hash = j.jd_hash) {tail}"""
-        params = (rubric_version, limit)
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        "ORDER BY COALESCE(uj.prescore, -1) DESC, j.first_seen_at DESC, j.id DESC LIMIT :limit"
+    fresh = "" if force else """AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = :u AND s.job_id = j.id
+                                    AND s.rubric_version = :rv AND s.jd_hash = j.jd_hash)"""
+    sql = f"SELECT j.*, uj.prescore AS uj_prescore FROM jobs j {_UJ} WHERE uj.filter_reason IS NULL {fresh} {tail}"
+    return [dict(r) for r in conn.execute(sql, {"u": user_id, "rv": rubric_version, "limit": limit}).fetchall()]
 
 
 def save_score(conn: sqlite3.Connection, user_id: int, job_id: int, result: ScoreResult, model: str,

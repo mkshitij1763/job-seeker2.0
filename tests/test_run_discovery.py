@@ -5,7 +5,7 @@ import respx
 
 from jobseeker.db.companies import active_companies, get_company, record_company
 from jobseeker.db.core import connect
-from jobseeker.db.jobs import get_job
+from jobseeker.db.jobs import get_job, get_user_job
 from jobseeker.db.runs import last_run
 from jobseeker.llm import LLMQuotaExceeded
 from jobseeker.models import RawJob
@@ -70,7 +70,7 @@ def test_low_prescore_set_aside(prefs, rubric, facts):
     stats = run(conn, [Src("naukri", [raw(title="Insights Manager", jd_text="Lorem ipsum.", location="")])],
                 prefs, rubric, facts)
     assert stats.below_cutoff == 1 and stats.scored == 0
-    assert get_job(conn, 1)["filter_reason"] == "low pre-score: 32"
+    assert (get_user_job(conn, 1, 1) or {}).get("filter_reason") == "low pre-score: 32"
 
 
 def test_linkedin_description_fetched_before_scoring(prefs, rubric, facts):
@@ -93,7 +93,7 @@ def test_linkedin_description_failure_waits(prefs, rubric, facts):
         raise RuntimeError("429")
     stats = run(conn, [Src("linkedin", [raw(source="linkedin", source_job_id="li-7", jd_text="")])],
                 prefs, rubric, facts, describe=describe)
-    assert stats.scored == 0 and get_job(conn, 1)["filter_reason"] is None
+    assert stats.scored == 0 and (get_user_job(conn, 1, 1) or {}).get("filter_reason") is None
     assert any("linkedin descriptions: 1 failed" in e for e in stats.errors)
 
 
@@ -112,7 +112,7 @@ def test_fetched_description_with_8_plus_years_is_filtered(prefs, rubric, facts)
     conn = connect(":memory:")
     stats = run(conn, [Src("linkedin", [raw(source="linkedin", source_job_id="li-7", jd_text="")])],
                 prefs, rubric, facts, describe=lambda s, j: "Needs 10+ years of experience.")
-    assert stats.scored == 0 and get_job(conn, 1)["filter_reason"] == "experience: 10+ years"
+    assert stats.scored == 0 and (get_user_job(conn, 1, 1) or {}).get("filter_reason") == "experience: 10+ years"
 
 
 def test_unscored_jobs_expire(prefs, rubric, facts):
@@ -120,7 +120,7 @@ def test_unscored_jobs_expire(prefs, rubric, facts):
     quota = FakeLLM(handler=lambda schema, prompt: LLMQuotaExceeded("daily quota"))
     run(conn, [Src("naukri", [raw()])], prefs, rubric, facts, llm=quota)
     run(conn, [], prefs, rubric, facts, now=NOW + timedelta(days=8))
-    assert get_job(conn, 1)["filter_reason"] == "stale: never scored"
+    assert (get_user_job(conn, 1, 1) or {}).get("filter_reason") == "stale: never scored"
 
 
 @respx.mock

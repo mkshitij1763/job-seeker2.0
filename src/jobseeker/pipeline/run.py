@@ -15,7 +15,8 @@ from jobseeker.db.applications import (
 )
 from jobseeker.db.companies import bump_jobs_seen, mark_inactive
 from jobseeker.db.jobs import (
-    expire_unscored, get_job, job_from_row, jobs_missing_prescore, jobs_needing_score, save_score, set_filter_reason,
+    expire_unscored, get_job, get_user_job, job_from_row, jobs_missing_prescore, jobs_needing_score, save_score,
+    set_filter_reason,
     record_jd_attempt, set_jd_text, set_prescore, upsert_job,
 )
 from jobseeker.db.runs import finish_run, start_run
@@ -70,20 +71,22 @@ def _apps_needing_drafts(conn: sqlite3.Connection, limit: int) -> list[int]:
     return [r["id"] for r in rows]
 
 
-def _rank(conn: sqlite3.Connection, stats: RunStats, job_id: int, facts: Facts, prefs: Preferences,
+def _rank(conn: sqlite3.Connection, user_id: int, stats: RunStats, job_id: int, facts: Facts, prefs: Preferences,
           cutoff: bool) -> None:
-    """Store the job's pre-score; with cutoff, set aside jobs below min_prescore."""
+    """Store the job's pre-score for this user; with cutoff, set aside jobs below min_prescore."""
     row = get_job(conn, job_id)
-    if row is None or row["filter_reason"] is not None:
+    verdict = get_user_job(conn, user_id, job_id)
+    if row is None or (verdict and verdict["filter_reason"] is not None):
         return
     points = prescore(job_from_row(row), facts, prefs)
-    set_prescore(conn, job_id, points)
+    set_prescore(conn, user_id, job_id, points)
     if cutoff and points < prefs.min_prescore:
-        set_filter_reason(conn, job_id, f"low pre-score: {points}")
+        set_filter_reason(conn, user_id, job_id, f"low pre-score: {points}")
         stats.below_cutoff += 1
 
 
-def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferences, now: datetime) -> None:
+def _fetch(conn, user_id: int, stats: RunStats, sources, client, facts: Facts, prefs: Preferences,
+           now: datetime) -> None:
     blocked = blocked_companies(conn)
     known = {normalize_company(s.company.name) for s in sources if hasattr(s, "company")}
     seen: dict[str, tuple[str, set[str]]] = {}
@@ -109,7 +112,7 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
                 stats.new += 1
                 reason = prefilter(job, prefs, now, blocked)
                 if reason:
-                    set_filter_reason(conn, job_id, reason)
+                    set_filter_reason(conn, user_id, job_id, reason)
                     stats.filtered += 1
                     continue
                 norm = normalize_company(job.company)
@@ -117,7 +120,7 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
                     unrecorded[norm] += 1
             else:
                 stats.duplicates += 1
-            _rank(conn, stats, job_id, facts, prefs, cutoff=is_new)
+            _rank(conn, user_id, stats, job_id, facts, prefs, cutoff=is_new)
     if client is not None and seen:
         query_words = {w for q in prefs.search.queries for w in normalize_title(q).split()}
         stats.discovered = discover(conn, client, seen, known | blocked, now,
@@ -126,20 +129,20 @@ def _fetch(conn, stats: RunStats, sources, client, facts: Facts, prefs: Preferen
             bump_jobs_seen(conn, norm, n)
 
 
-def _select(conn, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferences, now: datetime,
+def _select(conn, user_id: int, stats: RunStats, rubric: Rubric, facts: Facts, prefs: Preferences, now: datetime,
             force: bool, describe: Describe | None) -> list[dict]:
-    expire_unscored(conn, now, prefs.max_age_days)
-    for row in jobs_missing_prescore(conn):  # jobs stored before pre-scores existed
-        _rank(conn, stats, row["id"], facts, prefs, cutoff=True)
-    candidates = jobs_needing_score(conn, rubric.version, -1, force=force)
+    expire_unscored(conn, user_id, now, prefs.max_age_days)
+    for row in jobs_missing_prescore(conn, user_id):  # jobs stored before pre-scores existed
+        _rank(conn, user_id, stats, row["id"], facts, prefs, cutoff=True)
+    candidates = jobs_needing_score(conn, user_id, rubric.version, -1, force=force)
     stats.candidates = len(candidates)
     if describe is not None:  # rescore works offline from stored jobs
-        _fill_linkedin_descriptions(conn, stats, candidates, facts, prefs, now, describe)
+        _fill_linkedin_descriptions(conn, user_id, stats, candidates, facts, prefs, now, describe)
     # Score the best-ranked jobs that have a description; jobs still waiting for one never block the rest.
-    return jobs_needing_score(conn, rubric.version, prefs.budgets.score_per_run, force=force, with_jd=True)
+    return jobs_needing_score(conn, user_id, rubric.version, prefs.budgets.score_per_run, force=force, with_jd=True)
 
 
-def _fill_linkedin_descriptions(conn, stats: RunStats, candidates: list[dict], facts: Facts, prefs: Preferences,
+def _fill_linkedin_descriptions(conn, user_id: int, stats: RunStats, candidates: list[dict], facts: Facts, prefs: Preferences,
                                 now: datetime, describe: Describe) -> None:
     cap = prefs.search.linkedin_descriptions_per_run
     blocked = blocked_companies(conn)
@@ -165,10 +168,10 @@ def _fill_linkedin_descriptions(conn, stats: RunStats, candidates: list[dict], f
         job = job_from_row(get_job(conn, row["id"]))
         reason = prefilter(job, prefs, now, blocked)  # the description may reveal 8+ years etc.
         if reason:
-            set_filter_reason(conn, row["id"], reason)
+            set_filter_reason(conn, user_id, row["id"], reason)
             stats.filtered += 1
             continue
-        _rank(conn, stats, row["id"], facts, prefs, cutoff=False)
+        _rank(conn, user_id, stats, row["id"], facts, prefs, cutoff=False)
     if failures:
         stats.errors.append(f"linkedin descriptions: {failures} failed (last: {last_error})")
 
@@ -177,10 +180,10 @@ def _run(conn, stats: RunStats, *, user_id: int, sources, client, llm: LLM, fact
          rubric: Rubric, now: datetime, fetch: bool, force_rescore: bool, describe: Describe) -> None:
     wake_snoozed(conn, now)
     if fetch:
-        _fetch(conn, stats, sources, client, facts, prefs, now)
+        _fetch(conn, user_id, stats, sources, client, facts, prefs, now)
 
     quota_hit = unavailable = False
-    for row in _select(conn, stats, rubric, facts, prefs, now, force_rescore, describe if fetch else None):
+    for row in _select(conn, user_id, stats, rubric, facts, prefs, now, force_rescore, describe if fetch else None):
         try:
             result = score_job(llm, job_from_row(row), facts, prefs, rubric, prefs.models.scoring)
         except (LLMQuotaExceeded, LLMUnavailable) as e:
