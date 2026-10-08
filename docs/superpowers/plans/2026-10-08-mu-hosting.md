@@ -1069,6 +1069,7 @@ Expected:
 
 Check each one and record the evidence (command output) in the session:
 - `curl -I https://<sub>.duckdns.org/healthz` returns 200;
+- after signing in, the first POST (e.g. saving a setting) succeeds rather than returning 403 (proves `BASE_URL` exactly equals the browser origin for OriginCheck);
 - `nc -z <ip> 8000` fails;
 - a second `bootstrap.sh` run prints "No changes.";
 - after `sudo reboot`, all four units are active;

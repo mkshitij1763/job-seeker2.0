@@ -27,7 +27,8 @@
 | `4f02f27` | extras T5, `jobseeker restore` |
 | `d3915b6` | extras T6, push/send.py |
 | `d8d5be8` | pipeline T2, profile_hash |
-| (this commit) | pipeline T6, build_plan + plan-driven JobSpy sources |
+| `554a847` | pipeline T6, build_plan + plan-driven JobSpy sources |
+| (this commit) | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
 
 - **Tests after pipeline T6:** 478 pytest, 19 node.
 - **NEXT:** batch done (extras T1–T6, pipeline T2 + T6). **Stand by** for `manager`. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge. Then run the executing-plans final whole-branch review.
