@@ -116,3 +116,131 @@ def migrate(db_path: Path, ctx: MigrationContext, backup_dir: Path, *, migration
         return report
     finally:
         conn.close()
+
+
+# ---- v1: users and per-user scoping. Frozen: schema.sql moves on, this DDL never changes. ----
+V1_DDL = """
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  google_sub TEXT UNIQUE,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  disabled_at TEXT,
+  created_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+CREATE TABLE invites (
+  email TEXT PRIMARY KEY,
+  invited_by INTEGER REFERENCES users (id),
+  created_at TEXT NOT NULL,
+  accepted_at TEXT
+);
+CREATE TABLE sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+CREATE INDEX idx_sessions_user ON sessions (user_id);
+CREATE TABLE user_jobs (
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  job_id INTEGER NOT NULL REFERENCES jobs (id),
+  filter_reason TEXT,
+  prescore INTEGER,
+  jd_hash TEXT NOT NULL,
+  evaluated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, job_id)
+);
+CREATE INDEX idx_user_jobs_open ON user_jobs (user_id, filter_reason);
+"""
+
+# user_id NOT NULL with no DEFAULT on purpose: an INSERT that forgets it must fail, never file the row under the owner.
+V1_REBUILT = {
+    "applications": """CREATE TABLE applications_new (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  job_id INTEGER NOT NULL REFERENCES jobs (id),
+  contact_id INTEGER REFERENCES contacts (id),
+  status TEXT NOT NULL DEFAULT 'new',
+  snoozed_until TEXT,
+  snoozed_from TEXT,
+  applied_via_portal INTEGER NOT NULL DEFAULT 0,
+  followups_sent INTEGER NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL DEFAULT '',
+  suggested_contact_role TEXT NOT NULL DEFAULT '',
+  suggested_contact_reason TEXT NOT NULL DEFAULT '',
+  linkedin_search_url TEXT NOT NULL DEFAULT '',
+  draft_warnings TEXT NOT NULL DEFAULT '[]',
+  find_status TEXT NOT NULL DEFAULT 'idle',
+  find_error TEXT NOT NULL DEFAULT '',
+  find_started_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (user_id, job_id)
+)""",
+    "scores": """CREATE TABLE scores_new (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  job_id INTEGER NOT NULL REFERENCES jobs (id),
+  score INTEGER NOT NULL,
+  breakdown TEXT NOT NULL,
+  matches TEXT NOT NULL,
+  gaps TEXT NOT NULL,
+  recommendation TEXT NOT NULL,
+  role_family TEXT NOT NULL,
+  model TEXT NOT NULL,
+  rubric_version TEXT NOT NULL,
+  jd_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+)""",
+    "blocklist": """CREATE TABLE blocklist_new (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  contact_id INTEGER REFERENCES contacts (id),
+  company TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  at TEXT NOT NULL
+)""",
+    "usage": """CREATE TABLE usage_new (
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  period TEXT NOT NULL,
+  service TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, period, service)
+)""",
+}
+V1_INDEXES = "CREATE INDEX idx_scores_user_job ON scores (user_id, job_id, id)"
+V1_CHECKED = ("applications", "scores", "blocklist", "usage", "drafts", "events", "jobs")
+
+
+def migrate_v1(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
+    if not ctx.owner_email.strip():
+        raise MigrationError("Set OWNER_EMAIL in .env before migrating (v1 makes that account the owner)")
+    before = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in V1_CHECKED}
+    now = ctx.now.isoformat(timespec="seconds")
+    for stmt in V1_DDL.split(";"):
+        if stmt.strip():
+            conn.execute(stmt)
+    conn.execute("INSERT INTO users (id, email, name, is_admin, created_at) VALUES (1, lower(?), '', 1, ?)",
+                 (ctx.owner_email.strip(), now))
+    conn.execute("""INSERT INTO user_jobs (user_id, job_id, filter_reason, prescore, jd_hash, evaluated_at)
+                    SELECT 1, id, filter_reason, prescore, jd_hash, first_seen_at FROM jobs""")
+    for table, ddl in V1_REBUILT.items():
+        cols = ", ".join(r[1] for r in conn.execute(f"PRAGMA table_info({table})"))
+        conn.execute(ddl)
+        conn.execute(f"INSERT INTO {table}_new (user_id, {cols}) SELECT 1, {cols} FROM {table}")
+        conn.execute(f"DROP TABLE {table}")
+        conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+    conn.execute(V1_INDEXES)
+    conn.execute("ALTER TABLE runs ADD COLUMN user_id INTEGER REFERENCES users (id)")
+    conn.execute("ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'legacy'")
+    conn.execute("UPDATE runs SET user_id = 1")
+    after = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in V1_CHECKED}
+    if before != after:
+        raise MigrationError(f"v1 row counts changed: {before} -> {after}")
+    if conn.execute("SELECT COUNT(*) FROM user_jobs").fetchone()[0] != after["jobs"]:
+        raise MigrationError("v1: user_jobs doesn't mirror jobs")
+    if conn.execute("SELECT COUNT(*) FROM applications WHERE user_id != 1").fetchone()[0]:
+        raise MigrationError("v1: an application isn't owned by user 1")
