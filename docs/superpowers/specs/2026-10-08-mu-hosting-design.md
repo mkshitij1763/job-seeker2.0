@@ -323,7 +323,7 @@ Infrastructure scripts are tested where it's cheap and safe; the real proof is t
 
 1. Every **(verify)** item in §2 and §5 is ticked, or a deviation is written into this spec before building on it.
 2. `bootstrap.sh` completes on a fresh Ubuntu 24.04 aarch64 A1 VM, and a second run reports no changes.
-3. `uv sync --frozen` succeeds on the VM with no source builds; `uv pip list` matches `uv.lock`.
+3. `uv sync --frozen` succeeds on the VM with no compiled source builds (the pure-Python `http-ece` sdist from the extras spec is the only sdist); `uv pip list` matches `uv.lock`.
 4. `curl -I https://<sub>.duckdns.org/healthz` returns `200` with a valid Let's Encrypt certificate. `http://` redirects to `https://`. Port 8000 is unreachable from outside (`nc -z <ip> 8000` fails).
 5. `iptables -S INPUT` shows 80/443 ACCEPT above the REJECT, and the rules survive a reboot.
 6. After a reboot, the web service, Caddy, `jobseeker-tick.timer` and `duckdns.timer` are active with no manual step.
