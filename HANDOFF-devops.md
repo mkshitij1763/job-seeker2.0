@@ -3,9 +3,9 @@
 > **START HERE (new session).** You are **devops-lead**, a senior dev on job-seeker2.0's multi-user hosted app. You report to the coordinator session **`manager`** (use `SendMessage` to `manager`), not to the user. Send design questions to `manager`; it makes the calls or passes them to the user. Background on the product: `HANDOFF.md` §1–§3. Treat §8 there as history; this file supersedes it for your work.
 
 ## 1. Where you work
-- **Worktree:** `/Users/user/Desktop/untitled folder/js-build`, branch **`build/devops`** (from `plans/devops` `7136ea9`). You are the only writer on it.
-- **The Bash cwd resets to the MAIN checkout after every call.** That checkout is on `main` and runs the LIVE app. Start every command with `cd "/Users/user/Desktop/untitled folder/js-build" && …`. **Never touch the main checkout or `multi-user`.** backend-lead owns `multi-user`, in `../js-mu-backend`.
-- **Git:** commit per task, ending messages with the attribution lines your session uses. Don't push. `manager` merges `build/devops` into `multi-user` after plan 2 lands.
+- **Worktree:** `/Users/user/Desktop/untitled folder/js-devops2`, branch **`build/devops2`** (from `origin/multi-user` `2f473a9`, the merge of `build/devops` into plan 2). You are the only writer on it. The old `js-build` / `build/devops` is merged and finished.
+- **The Bash cwd resets to the MAIN checkout after every call.** That checkout is on `main` and runs the LIVE app. Start every command with `cd "/Users/user/Desktop/untitled folder/js-devops2" && …`. **Never touch the main checkout or `multi-user`.** backend-lead owns `multi-user`, in `../js-mu-backend`.
+- **Git:** commit per task, ending messages with the attribution lines your session uses. Don't push. Push `build/devops2` only (never force, never main or multi-user); `manager` merges it into `multi-user`.
 - **zsh doesn't word-split `$VAR` commands;** use a shell function. Don't chain `grep … && git commit`, because grep also matches "failed".
 
 ## 2. Status (at pause)
@@ -28,10 +28,11 @@
 | `d3915b6` | extras T6, push/send.py |
 | `d8d5be8` | pipeline T2, profile_hash |
 | `554a847` | pipeline T6, build_plan + plan-driven JobSpy sources |
-| (this commit) | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
+| `16587fd` | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
+| `2f473a9` | `manager` merged `build/devops` into `multi-user` (550 pytest); `build/devops2` starts here |
 
-- **Tests after pipeline T6:** 478 pytest, 19 node.
-- **NEXT:** batch done (extras T1–T6, pipeline T2 + T6). **Stand by** for `manager`. Everything else (extras T7–T14, pipeline T3–T5 and T7–T16, hosting T5) waits for plans 2/3 and `manager`'s merge. Then run the executing-plans final whole-branch review.
+- **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
+- **NEXT:** waiting for `manager` to approve the buildable-now list (proposed: extras T9 `/healthz`, extras T13 landing, pipeline T7 `fetch_shared`). Plan 3 (migration v2, AppConfig, current_prefs, verdict, user_scoped_tables) is NOT built yet, so v3/v4 and everything that consumes them waits. Don't stub plan 3 interfaces. The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
