@@ -30,10 +30,11 @@
 | `554a847` | pipeline T6, build_plan + plan-driven JobSpy sources |
 | `16587fd` | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
 | `2f473a9` | `manager` merged `build/devops` into `multi-user` (550 pytest); `build/devops2` starts here |
-| (this commit) | extras T9, `/healthz` (GET/HEAD, read-only) |
+| `010f6a9` | extras T9, `/healthz` (GET/HEAD, read-only) |
+| (this commit) | extras T13, public landing + invite-only page |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT:** extras **T13** (landing page), then pipeline **T7** (`fetch_shared`), as approved by `manager`. Keep `web/app.py` edits minimal and in one place (plan 3 edits it too). Then report and stand by. Defer all of extras T11 (incl. sw.js) and everything needing plan 3 / migration v2+. The executing-plans final whole-branch review is still owed at the end.
+- **NEXT:** pipeline **T7** (`fetch_shared`), then report to `manager` and stand by. Defer all of extras T11 (incl. sw.js) and everything needing plan 3 / migration v2+. The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
@@ -59,6 +60,7 @@
 - Extras T1 commit has no pyproject/uv.lock change (deps already in `1b66009`).
 - Extras T4: the brief's Interfaces block says `archive.MEMBERS_ALLOWED`; the test and code use `member_allowed(name)`, which is what was built. `db.backup.snapshot(db_path, out) -> Path` added and `backup()` now calls it; take plan 2's version at merge.
 - Extras T9: `test_schema_mismatch_is_503` builds the client BEFORE setting `user_version = 0`, because plan 2's `create_app` refuses an out-of-date DB at startup; the test now models the schema changing under a running app.
+- Extras T13: `landing.html` extends `bare.html` (plan allows it), not `base.html`, so `base.html` is untouched for plan 3; `bare.html` gains one empty `{% block head %}`. The page wrapper is `<div class="landing">`, because `bare.html` already provides `<main>`. CSS uses ui.css's real tokens (`--line-strong`, px spacing): `--space-*`/`--border-strong` don't exist. The test_auth invite line uses the fallback ("Ask the person who shared this link"), because its fixture owner has no name. `test_web_guards` root assertion changed from 303→/login to 200 landing (plan 2's interim behaviour, replaced by this task). Google "G" path data is the standard 18px mark; verify against developers.google.com/identity/branding-guidelines before launch.
 - **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops` (that branch only, never force).
 
 ## 4. Gotchas

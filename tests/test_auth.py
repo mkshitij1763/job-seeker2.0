@@ -81,6 +81,8 @@ def test_verify_failure_and_token_endpoint_failure(web, monkeypatch):
 def test_uninvited_gets_403_with_owner_name_and_no_row(web, monkeypatch, settings):
     r = _callback(web, monkeypatch, {"sub": "g9", "email": "stranger@example.com"})
     assert r.status_code == 403 and "invite-only" in r.text and "Kshitij" not in r.text
+    assert 'class="landing' in r.text and "This app is invite-only. Ask the person who shared this link for an invite." in r.text
+    assert "Continue with Google" not in r.text
     assert connect(settings.db_path).execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
 
 

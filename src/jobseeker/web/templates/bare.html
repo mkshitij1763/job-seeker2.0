@@ -16,5 +16,6 @@
   <script src="{{ asset('swipe.js') }}" defer></script>
   <script src="{{ asset('keys.js') }}" defer></script>
   <script src="{{ asset('tabs.js') }}" defer></script>
+  {% block head %}{% endblock %}
 </head>
 <body><main class="main bare">{% block content %}{% endblock %}</main></body></html>

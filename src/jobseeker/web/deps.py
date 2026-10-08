@@ -22,6 +22,12 @@ def get_conn(request: Request):
         conn.close()
 
 
+def render_public(request: Request, conn, name: str, status_code: int = 200, **ctx):
+    """render() for signed-out pages: no nav counts or run notes, because there's no user."""
+    ctx.setdefault("msg", request.query_params.get("msg"))
+    return request.app.state.templates.TemplateResponse(request, name, ctx, status_code=status_code)
+
+
 def render(request: Request, conn, name: str, **ctx):
     user = request.state.user  # set by optional_user/current_user on every guarded route
     run = last_run(conn, user.id)
