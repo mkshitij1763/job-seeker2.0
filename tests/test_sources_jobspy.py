@@ -127,3 +127,14 @@ def test_naukri_row_without_description_has_empty_jd():
     job = to_raw_job("naukri", {"id": "nk-1", "title": "APM", "company": "C", "location": "Pune, India",
                                 "job_url": "https://n/1", "experience_range": "1-3 Yrs", "description": None}, "Pune")
     assert job.jd_text == ""
+
+
+def test_plan_overrides_searches():
+    from jobseeker.config import SearchConfig
+    from jobseeker.sources.jobspy_source import JobSpySource
+
+    calls = []
+    src = JobSpySource("naukri", SearchConfig(), scrape=lambda **kw: calls.append((kw["search_term"], kw["location"])) or [],
+                       sleep=lambda s: None, plan=[("Data Analyst", "Mumbai")])
+    src.fetch(None)
+    assert calls == [("Data Analyst", "Mumbai")]
