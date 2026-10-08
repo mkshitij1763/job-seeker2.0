@@ -31,10 +31,11 @@
 | `16587fd` | docs: env.example BASE_URL origin note + hosting T5 first-POST acceptance check (backend-lead2 via manager) |
 | `2f473a9` | `manager` merged `build/devops` into `multi-user` (550 pytest); `build/devops2` starts here |
 | `010f6a9` | extras T9, `/healthz` (GET/HEAD, read-only) |
-| (this commit) | extras T13, public landing + invite-only page |
+| `89cbaa9` | extras T13, public landing + invite-only page |
+| (this commit) | pipeline T7, `fetch_shared` |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT:** pipeline **T7** (`fetch_shared`), then report to `manager` and stand by. Defer all of extras T11 (incl. sw.js) and everything needing plan 3 / migration v2+. The executing-plans final whole-branch review is still owed at the end.
+- **NEXT:** devops2 batch done (extras T9, T13, pipeline T7). **Stand by** until `manager` merges `build/devops2` into `multi-user` after plan 3 lands. Then the WAIT list: extras T7, T8, T10, T11 (incl. sw.js), T12, T14; pipeline T3, T4, T5, T8–T16; hosting T5 (manual, with the user). The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
