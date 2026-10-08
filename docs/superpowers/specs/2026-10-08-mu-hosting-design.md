@@ -7,7 +7,7 @@ Source: `docs/superpowers/research/2026-10-08-hosting-proposal.md`, hosting spik
 
 Run Job Seeker on an always-on public server so the owner and two roommates can use it from phone and web without the Mac being awake and without Tailscale. The server costs nothing beyond what the user approved: Oracle Cloud Always Free on a Pay As You Go account with a ₹100 budget alert, a free DuckDNS subdomain, and Backblaze B2's free tier for off-site backups.
 
-**Success:** `https://<sub>.duckdns.org` serves the app over valid HTTPS. The daily run happens at 11:15 IST from the server. A deploy is one command from the Mac. The owner's existing data (3,948 jobs, all applications, drafts and contacts) is on the server and unchanged. Losing the VM costs at most one day of data and about an hour to rebuild.
+**Success:** `https://<sub>.duckdns.org` serves the app over valid HTTPS. The daily run happens at 11:15 IST from the server. A deploy is one command from the Mac. All of the owner's existing data (jobs, applications, drafts and contacts) is on the server and unchanged. Losing the VM costs at most one day of data and about an hour to rebuild.
 
 ## Non-goals
 
