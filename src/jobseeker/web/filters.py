@@ -34,9 +34,11 @@ def explain_stats(stats: dict) -> list[dict]:
         notes.append({"text": f"You've used today's {user.get('scored', 0)} scores; more tomorrow", "action": False})
     elif why in ("global_cap", "quota"):
         notes.append({"text": "The shared AI limit ran out today; scoring resumes tomorrow", "action": False})
-    if fetch.get("searches_trimmed"):
-        notes.append({"text": f"Searched {fetch.get('searches_run', 0)} of {fetch.get('searches_planned', 0)} role and city "
-                              "combinations today; the rest rotate in over the next runs", "action": False})
+    if fetch.get("searches_trimmed"):  # counts are searches (items), not role and city pairs
+        run = fetch.get("searches_run", 0)
+        total = fetch.get("searches_total") or fetch.get("searches_planned", 0) + fetch["searches_trimmed"]
+        notes.append({"text": f"Searched {run} of {total} searches; the other {total - run} rotate in over the next runs.",
+                      "action": False})
     return notes
 
 

@@ -29,10 +29,10 @@ def test_fetch_only_before_first_user_run(settings):
 
 def test_explain_stats():
     texts = [n["text"] for n in explain_stats({"user": {"stopped_by": "share", "scored": 25},
-                                               "fetch": {"searches_trimmed": 6, "searches_planned": 60,
-                                                         "searches_run": 54}})]
+                                               "fetch": {"searches_trimmed": 20, "searches_planned": 60,
+                                                         "searches_total": 80, "searches_run": 54}})]
     assert "You've used today's 25 scores; more tomorrow" in texts
-    assert any(t.startswith("Searched 54 of 60 role and city combinations today") for t in texts)
+    assert "Searched 54 of 80 searches; the other 26 rotate in over the next runs." in texts
     for reason in ("global_cap", "quota"):
         assert explain_stats({"user": {"stopped_by": reason}, "fetch": {}})[0]["text"] == \
             "The shared AI limit ran out today; scoring resumes tomorrow"

@@ -23,6 +23,7 @@ class FetchStats:
     searches_planned: int = 0
     searches_run: int = 0
     searches_trimmed: int = 0
+    searches_total: int = 0
     described: int = 0
     errors: list[str] = field(default_factory=list)
 

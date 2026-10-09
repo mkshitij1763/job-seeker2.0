@@ -20,8 +20,9 @@ class PlanUser:
 class Plan:
     linkedin: list[str]
     pairs: list[tuple[str, str]]
-    planned: int
-    trimmed: int
+    planned: int  # searches this run makes
+    trimmed: int  # searches wanted but left for later runs: total - planned
+    total: int  # every search wanted: each allowed LinkedIn query + one per site per pair
 
     def for_site(self, site: str) -> list[tuple[str, str]]:
         return [(q, "India") for q in self.linkedin] if site == "linkedin" else list(self.pairs)
@@ -54,9 +55,10 @@ def build_plan(users: list[PlanUser], sites: list[str], catalog: set[str], run_n
             linkedin.append(q)
             budget -= 1
 
+    linkedin_total = len(query_demand) if "linkedin" in sites else 0
     pair_cost = sum(1 for s in sites if s != "linkedin")
     if pair_cost == 0 or not users:
-        return Plan(linkedin, [], len(linkedin), 0)
+        return Plan(linkedin, [], len(linkedin), linkedin_total - len(linkedin), linkedin_total)
     user_pairs = {u.user_id: [(q, loc) for q in wants[u.user_id] for loc in u.locations] for u in users}
     pair_demand = Counter(p for ps in user_pairs.values() for p in set(ps))
     for uid, ps in user_pairs.items():
@@ -84,10 +86,10 @@ def build_plan(users: list[PlanUser], sites: list[str], catalog: set[str], run_n
     rest = [p for p in fair if p not in set(first_round)]
     left = slots - len(first_round)
     if len(rest) <= left:
-        chosen, trimmed = rest, 0
+        chosen = rest
     else:
         start = (run_no * left) % len(rest) if left else 0
         chosen = [rest[(start + i) % len(rest)] for i in range(left)]
-        trimmed = len(rest) - left
     pairs = first_round + chosen
-    return Plan(linkedin, pairs, len(linkedin) + pair_cost * len(pairs), trimmed)
+    planned, total = len(linkedin) + pair_cost * len(pairs), linkedin_total + pair_cost * len(fair)
+    return Plan(linkedin, pairs, planned, total - planned, total)

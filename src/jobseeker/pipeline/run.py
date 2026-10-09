@@ -73,7 +73,8 @@ def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, ll
             catalog = {r.query for r in cfg.roles}
             planners = plan_users([(uid, p, *_custom_and_updated(conn, uid)) for uid, (p, _) in contexts.items()])
             plan = build_plan(planners, list(cfg.search.sites), catalog, run_no, plan_cap, cfg.search.max_custom_queries)
-            report.fetch.searches_planned, report.fetch.searches_trimmed = plan.planned, plan.trimmed
+            fs = report.fetch
+            fs.searches_planned, fs.searches_trimmed, fs.searches_total = plan.planned, plan.trimmed, plan.total
             words = GENERIC_WORDS | {w for q in plan.linkedin + [q for q, _ in plan.pairs] for w in normalize_title(q).split()}
             sources = sources_factory(list(companies), active_companies(conn), cfg.search, plan)
             fetch_shared(conn, sources, client, now, words, report.fetch, heartbeat)

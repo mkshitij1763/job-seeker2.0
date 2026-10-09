@@ -10,7 +10,7 @@ OWNER = PlanUser(1, ["Product Analyst", "Associate Product Manager", "Product Ma
 def test_owner_alone_is_todays_55_searches():
     plan = build_plan([OWNER], SITES, CATALOG, run_no=0, cap=60, max_custom=3)
     assert len(plan.linkedin) == 5 and len(plan.pairs) == 25
-    assert plan.planned == 55 and plan.trimmed == 0
+    assert plan.planned == plan.total == 55 and plan.trimmed == 0
     assert plan.for_site("linkedin") == [(q, "India") for q in plan.linkedin]
     assert plan.for_site("naukri") == plan.pairs
 
@@ -22,7 +22,8 @@ def test_union_dedups_and_round_one_serves_everyone():
     plan = build_plan([a, b, c], SITES, CATALOG, run_no=0, cap=2 + 2 * 2, max_custom=3)  # 2 linkedin + 2 pairs
     assert sorted(plan.linkedin) == ["Data Analyst", "Product Analyst"]
     assert ("Product Analyst", "Bengaluru") in plan.pairs and ("Data Analyst", "Mumbai") in plan.pairs
-    assert plan.planned <= 6 and plan.trimmed == 1  # ("Product Analyst", "Pune") rotates in later
+    # every search wanted: 2 linkedin + 2 sites x 3 pairs; ("Product Analyst", "Pune") rotates in later
+    assert plan.planned == 6 and plan.total == 8 and plan.trimmed == 2
 
 
 def test_cap_never_exceeded_and_rotation_reaches_every_pair():
@@ -43,6 +44,13 @@ def test_custom_queries_capped_oldest_first():
 
 
 def test_no_linkedin_site_and_empty_users():
-    assert build_plan([], SITES, CATALOG, 0, 60, 3) == Plan([], [], 0, 0)
+    assert build_plan([], SITES, CATALOG, 0, 60, 3) == Plan([], [], 0, 0, 0)
     plan = build_plan([OWNER], ["naukri"], CATALOG, 0, 60, 3)
-    assert plan.linkedin == [] and plan.planned == 25
+    assert plan.linkedin == [] and plan.planned == plan.total == 25 and plan.trimmed == 0
+
+
+def test_trimmed_counts_linkedin_queries_cut_by_the_cap():
+    a = PlanUser(1, ["Product Analyst", "Data Analyst"], ["Pune"], "", "1")
+    plan = build_plan([a], SITES, CATALOG, run_no=0, cap=1, max_custom=3)
+    assert len(plan.linkedin) == 1 and plan.pairs == []
+    assert plan.planned == 1 and plan.total == 2 + 2 * 2 and plan.trimmed == 5
