@@ -4,7 +4,7 @@ COPY = ["Your daily shortlist of product and analytics roles in India.",
         "Every morning it searches LinkedIn, Naukri, Indeed and company career pages for your roles and cities.",
         "Each job is scored against your resume, with the reasons, so you read 10 jobs, not 600.",
         "Built for your phone: add it to your Home Screen.",
-        "Your resume, preferences and applications are visible only to you. Download or delete them any time in Settings.",
+        "Your resume and drafts are visible only to you. The admin (the person who invited you) can see your job preferences and application statuses. Download or delete your data any time in Settings.",
         "A personal project, not affiliated with LinkedIn, Naukri, Indeed or Google."]
 
 
