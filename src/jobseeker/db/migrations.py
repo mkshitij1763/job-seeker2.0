@@ -323,6 +323,9 @@ def migrate_v4(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
                     status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
                     run_id INTEGER REFERENCES runs(id), finished_at TEXT)""")
     conn.execute("CREATE INDEX idx_run_requests_status ON run_requests (status, requested_at)")
+    # One queued-or-running request per user (security review #2; added to v4 in place, before v4 shipped anywhere).
+    conn.execute("CREATE UNIQUE INDEX idx_run_requests_one_pending ON run_requests (user_id) "
+                 "WHERE status IN ('queued', 'running')")
     conn.execute("CREATE INDEX idx_runs_kind ON runs (kind, trigger, started_at)")
     from jobseeker.config import load_app_config
     from jobseeker.db.profile import load_user_context

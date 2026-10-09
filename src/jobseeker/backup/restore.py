@@ -40,11 +40,20 @@ def restore(path: Path, to: Path, key: bytes | None) -> dict:
             for m in members:
                 if not member_allowed(m.name) or not m.isfile():
                     raise RestoreError(f"archive member {m.name!r} is not allowed")
+            names = {m.name for m in members}
+            if "MANIFEST.json" not in names:
+                raise RestoreError("archive has no MANIFEST.json")
+            manifest = json.loads(tar.extractfile("MANIFEST.json").read())
+            listed = [f["path"] for f in manifest["files"]]
+            for name in listed:
+                if not isinstance(name, str) or name == "MANIFEST.json" or not member_allowed(name):
+                    raise RestoreError(f"manifest path {name!r} is not allowed")
+            if sorted(listed) != sorted(names - {"MANIFEST.json"}):  # every file is listed once, and nothing more
+                raise RestoreError("manifest does not match the archive's files")
             for m in members:
                 dest = to / m.name
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(tar.extractfile(m).read())
-        manifest = json.loads((to / "MANIFEST.json").read_text())
         for f in manifest["files"]:
             if hashlib.sha256((to / f["path"]).read_bytes()).hexdigest() != f["sha256"]:
                 raise RestoreError(f"sha256 mismatch for {f['path']}")
@@ -57,7 +66,7 @@ def restore(path: Path, to: Path, key: bytes | None) -> dict:
         finally:
             conn.close()
         return {"manifest_counts": manifest["row_counts"], "restored_counts": counts}
-    except (RestoreError, OSError, tarfile.TarError, KeyError, json.JSONDecodeError) as e:
+    except (RestoreError, OSError, tarfile.TarError, KeyError, TypeError, json.JSONDecodeError) as e:
         if created:
             shutil.rmtree(to, ignore_errors=True)
         else:

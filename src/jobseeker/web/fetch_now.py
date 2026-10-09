@@ -1,6 +1,7 @@
 """'Fetch now': the web only queues; the next tick (within 5 minutes) runs it."""
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
@@ -32,6 +33,27 @@ def fetch_now_state(conn, user_id: int, now: datetime, cfg) -> dict:
     return {"state": "ready", "text": "", "poll": False}
 
 
+def queue_if_allowed(conn, user_id: int, now: datetime, cfg) -> dict:
+    """Check and queue in one write transaction, so concurrent POSTs (one user's double tap, or several users at the
+    daily cap) can't all pass the check before any of them inserts. Returns the state seen; "ready" means queued."""
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        state = fetch_now_state(conn, user_id, now, cfg)
+        if state["state"] != "ready":
+            conn.rollback()
+            return state
+        run_requests.queue(conn, user_id, now)  # commits
+        return state
+    except sqlite3.IntegrityError:  # the one-pending-per-user index: another request of theirs got in first
+        conn.rollback()
+        return {"state": "queued", "text": "Queued, starts in a few minutes", "poll": True}
+    except BaseException:
+        conn.rollback()
+        raise
+
+
 def _back(request: Request, msg: str) -> RedirectResponse:
     target = request.headers.get("referer") or "/today"
     path = "/" + target.split("://", 1)[-1].split("/", 1)[-1] if "://" in target else target
@@ -43,12 +65,11 @@ def _back(request: Request, msg: str) -> RedirectResponse:
 def fetch_now(request: Request, user=Depends(current_user), conn=Depends(get_conn)):
     now = datetime.now(UTC)
     cfg = request.app.state.app_config
-    state = fetch_now_state(conn, user.id, now, cfg)
+    state = queue_if_allowed(conn, user.id, now, cfg)
     if state["state"] in ("queued", "running"):
         return _back(request, "Already queued")
     if state["state"] in ("wait", "used_up"):
         return _back(request, state["text"])
-    run_requests.queue(conn, user.id, now)
     busy = held_since(conn, "run") is not None
     return _back(request, "Queued: starts after the current run" if busy else "Queued, starts in a few minutes")
 

@@ -11,13 +11,14 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, field_validator
 
 from jobseeker.db.core import iso
-from jobseeker.push.send import send_one, valid_keys, vapid_from_settings
+from jobseeker.push.send import InvalidSubscription, allowed_endpoint, send_one, valid_keys, vapid_from_settings
 from jobseeker.web.deps import current_user, get_conn
 
 SW = (Path(__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
 public = APIRouter()
 router = APIRouter(prefix="/push", dependencies=[Depends(current_user)])
 _last_test: dict[int, float] = {}
+MAX_SUBSCRIPTIONS = 5
 
 
 class Keys(BaseModel):
@@ -34,6 +35,8 @@ class Subscription(BaseModel):
     def _https(cls, v: str) -> str:
         if not v.startswith("https://") or len(v) > 1024:
             raise ValueError("endpoint must be https and at most 1 KB")
+        if not allowed_endpoint(v):
+            raise ValueError("endpoint is not a supported push service")
         return v
 
 
@@ -59,12 +62,15 @@ def service_worker():
 def subscribe(sub: Subscription, request: Request, user=Depends(current_user), conn=Depends(get_conn)):
     if not valid_keys(sub.keys.p256dh, sub.keys.auth):
         return PlainTextResponse("Invalid subscription keys", status_code=422)
+    # Delete-then-insert (not upsert) so the newest id is the most recent subscribe, which the cap below keeps.
+    conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (sub.endpoint,))
     conn.execute("""INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh,
-                      auth = excluded.auth, user_agent = excluded.user_agent, failures = 0""",
+                    VALUES (?, ?, ?, ?, ?, ?)""",
                  (user.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth,
                   request.headers.get("user-agent", "")[:200], iso(datetime.now(UTC))))
+    conn.execute("""DELETE FROM push_subscriptions WHERE user_id = ? AND id NOT IN
+                    (SELECT id FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC LIMIT ?)""",
+                 (user.id, user.id, MAX_SUBSCRIPTIONS))
     conn.commit()
     return Response(status_code=204)
 
@@ -92,6 +98,11 @@ def test_alert(body: Endpoint, request: Request, user=Depends(current_user), con
     try:
         with httpx.Client() as client:
             status = send_one(client, sub["endpoint"], sub["p256dh"], sub["auth"], payload, keys, datetime.now(UTC))
+    except InvalidSubscription:
+        conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
+        conn.commit()
+        return PlainTextResponse("This device's subscription was invalid and has been removed; "
+                                 "turn alerts off and on again", status_code=422)
     except httpx.HTTPError:
         status = 0
     if 200 <= status < 300:

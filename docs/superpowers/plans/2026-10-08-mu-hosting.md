@@ -1058,6 +1058,8 @@ Run each pass from the repo root on the Mac:
 
 Follow spec §10 steps 1–7 exactly, recording the row counts before and after in the session.
 
+After migrating, run `js refilter` (a dry run) and then `js refilter --apply` once for the owner. The rules changed since the old verdicts were taken, so the live copy showed 5 jobs to hide and 5 to restore, with 1 app skipped (undoably). The daily `evaluate` re-judges only new or description-changed jobs, so it won't correct these.
+
 Expected:
 - every pre-existing table's count matches;
 - the owner signs in and sees the same Today, Jobs, Job detail and Pipeline;

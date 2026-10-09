@@ -96,3 +96,29 @@ def test_apply_shortlists_new_application(tmp_path, prefs, facts, rubric):
     score_round_robin(conn, [s], FakeLLM(handler=lambda sc, p: SCORE), rubric, _cfg(), NOW)
     assert conn.execute("SELECT status FROM applications WHERE user_id = 1").fetchone()[0] in ("shortlisted", "new")
     assert s.stats.shortlisted == (1 if conn.execute("SELECT recommendation FROM scores").fetchone()[0] == "apply" else 0)
+
+
+def _onboard(conn, users):
+    for u in users:
+        conn.execute("""INSERT OR REPLACE INTO user_prefs (user_id, data, version, onboarding_step, onboarded_at,
+                        updated_at) VALUES (?, '{}', 1, NULL, 't', 't')""", (u,))
+    conn.commit()
+
+
+def test_one_user_run_gets_only_its_slice_of_the_global_cap(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, users=(1, 2, 3, 4), jobs_per_user=60)
+    _onboard(conn, (1, 2, 3, 4))
+    scorers = _scorers(prefs, facts, users=(1,))  # a Fetch now run among 4 eligible users
+    score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=150), NOW)
+    assert scorers[0].stats.scored == 150 // 4
+    assert scorers[0].stats.stopped_by == "share"
+
+
+def test_disabled_and_unonboarded_users_do_not_dilute_the_share(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, users=(1, 2, 3, 4), jobs_per_user=90)
+    _onboard(conn, (1, 2, 3))
+    conn.execute("UPDATE users SET disabled_at = 't' WHERE id = 3")
+    conn.commit()
+    scorers = _scorers(prefs, facts, users=(1,))
+    score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=150), NOW)
+    assert scorers[0].stats.scored == 150 // 2  # users 1 and 2 are eligible

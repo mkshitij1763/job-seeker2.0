@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Server half of scripts/deploy.sh; runs as root:  bash -s -- <SHA|--rollback> < update.sh
 # DRY_RUN=1 prints commands instead of running them (tests use DRY_* knobs, see tests/test_deploy.py).
-set -euo pipefail
+set -Eeuo pipefail  # -E: the ERR trap below must also fire for failures inside as_app/run
 HOME_DIR=${HOME_DIR:-/srv/jobseeker}
 APP=$HOME_DIR/app
 LOG=$HOME_DIR/data/deploy.log
@@ -52,12 +52,27 @@ healthy() {
   done
   return 1
 }
-restart_old_code() {
+old_code_healthy() {  # DRY_ROLLBACK_HEALTHY=1 makes the post-rollback check pass in a dry run
+  if [[ $DRY_RUN == 1 && ${DRY_ROLLBACK_HEALTHY:-0} == 1 ]]; then echo "+ curl -fsS -o /dev/null $(base_url)/healthz"; return 0; fi
+  healthy
+}
+restart_old_code() {  # $1 = what went wrong. Restart (not start): the web may already be running the new code.
   as_app "git checkout -q --detach $old" || true
   as_app "$HOME_DIR/.local/bin/uv sync --frozen" || true
-  run systemctl start jobseeker-web || true
+  run systemctl restart jobseeker-web || true
   run systemctl start jobseeker-tick.timer || true
-  run journalctl -u jobseeker-web -n 30 --no-pager || true
+  if old_code_healthy; then
+    echo "$1; rolled back to $old and /healthz is OK" >&2
+  else
+    echo "$1; rolled back to $old, but /healthz still fails. Last web log lines:" >&2
+    run journalctl -u jobseeker-web -n 30 --no-pager || true
+  fi
+}
+restore_steps() {  # $1 = user_version before the migration. Services must be stopped before the WAL files go.
+  echo "  1. sudo systemctl stop jobseeker-web jobseeker-tick.timer"
+  echo "  2. sudo rm -f $DB-wal $DB-shm"
+  echo "  3. sudo cp $HOME_DIR/data/backups/pre-migrate-v$1-<timestamp>.db $DB"
+  echo "  4. scripts/deploy.sh --sha $old"
 }
 
 if [[ $target == --rollback ]]; then
@@ -65,25 +80,36 @@ if [[ $target == --rollback ]]; then
   if [[ -z $target ]]; then echo "No previous deploy recorded in $LOG" >&2; exit 1; fi
 fi
 
+# Stop the timer FIRST, then look: a tick can't start between the check and the stop.
+run systemctl stop jobseeker-tick.timer
 if tick_running; then
   since=$(systemctl show -p ActiveEnterTimestamp --value jobseeker-tick.service 2>/dev/null || echo "unknown")
+  run systemctl start jobseeker-tick.timer
   echo "A run is in progress since $since; try again later. Nothing was changed." >&2
   exit 2
 fi
 
 old=$(current_sha)
-run systemctl stop jobseeker-tick.timer
+before_migrate_failed() {
+  trap - ERR
+  restart_old_code "deploying $target failed before migrating"
+  exit 1
+}
+trap before_migrate_failed ERR  # a failed fetch/checkout/sync must not leave the timer stopped or the code half-moved
 as_app "git fetch -q origin && git checkout -q --detach $target"
 as_app "$HOME_DIR/.local/bin/uv sync --frozen"
-
 uv_before=$(user_version before)
+trap - ERR
+
 run systemctl stop jobseeker-web
 if ! run "$JS" migrate; then
   if [[ $(user_version after) == "$uv_before" ]]; then
-    restart_old_code
-    echo "migrate failed; schema unchanged, rolled back to $old" >&2
+    restart_old_code "migrate failed; schema unchanged"
   else
-    echo "migrate failed after changing the schema; restore data/backups/pre-migrate-v$uv_before-* by hand" >&2
+    {
+      echo "migrate failed after changing the schema. To restore:"
+      restore_steps "$uv_before"
+    } >&2
   fi
   exit 1
 fi
@@ -93,15 +119,13 @@ run bash -c "echo \"$(date -u +%FT%TZ) $old -> $target user_version=$uv_before->
 run systemctl start jobseeker-web
 if ! healthy; then
   if [[ $uv_after == "$uv_before" ]]; then
-    restart_old_code
-    echo "/healthz failed after deploying $target; rolled back to $old" >&2
+    restart_old_code "/healthz failed after deploying $target"
   else
     run systemctl stop jobseeker-web || true
     {
       echo "/healthz failed and the schema changed (user_version $uv_before -> $uv_after)."
       echo "The old code can't run on the new schema, so the web service stays stopped. To restore:"
-      echo "  1. sudo cp $HOME_DIR/data/backups/pre-migrate-v$uv_before-<timestamp>.db $DB"
-      echo "  2. scripts/deploy.sh --sha $old"
+      restore_steps "$uv_before"
     } >&2
   fi
   exit 1

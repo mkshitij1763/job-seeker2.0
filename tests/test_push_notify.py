@@ -100,3 +100,27 @@ def test_owner_alert_is_independent(two):
     conn, sent = two
     notify_new_matches(conn, 1, RUN, NOW, keys=KEYS)
     assert sent == []  # owner has no subscription and no new matches since RUN
+
+
+def test_one_bad_subscription_is_pruned_and_the_rest_still_get_sent(two, monkeypatch):
+    from jobseeker.push.send import InvalidSubscription
+    conn, sent = two
+    conn.execute("""INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+                    VALUES (2, 'https://web.push.apple.com/r0', 'p', 'a', 'now'),
+                           (2, 'https://web.push.apple.com/r9', 'p', 'a', 'now')""")
+    conn.commit()
+
+    def send(client, endpoint, p256dh, auth, payload, keys, now):
+        if endpoint.endswith("/r0"):
+            raise InvalidSubscription("key is not a P-256 point")
+        if endpoint.endswith("/r9"):
+            raise RuntimeError("anything else")
+        sent.append((endpoint, payload))
+        return 201
+
+    monkeypatch.setattr("jobseeker.push.notify.send_one", send)
+    assert notify_new_matches(conn, 2, RUN, NOW, keys=KEYS) is None
+    assert [e for e, _ in sent] == ["https://web.push.apple.com/r1"]
+    rows = {r["endpoint"]: r["failures"] for r in conn.execute("SELECT endpoint, failures FROM push_subscriptions")}
+    assert "https://web.push.apple.com/r0" not in rows  # invalid: pruned
+    assert rows["https://web.push.apple.com/r9"] == 1  # unexpected error: counted as a failure, not fatal

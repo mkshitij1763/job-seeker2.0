@@ -85,3 +85,45 @@ def test_restore_cli(settings, tmp_path, monkeypatch):
     result = CliRunner().invoke(app, ["restore", str(out), "--to", str(tmp_path / "cli")])
     assert result.exit_code == 0, result.output
     assert "runs" in result.output and "integrity ok" in result.output
+
+
+def _rewrite(out, dst, *, manifest=None, extra=None):
+    """Copy archive `out` to `dst`, optionally editing MANIFEST.json (a function of its dict) or adding a member."""
+    import json
+    with tarfile.open(out) as src, tarfile.open(dst, "w:gz") as tar:
+        for m in src.getmembers():
+            data = src.extractfile(m).read()
+            if m.name == "MANIFEST.json" and manifest:
+                data = json.dumps(manifest(json.loads(data))).encode()
+                m.size = len(data)
+            tar.addfile(m, io.BytesIO(data))
+        if extra:
+            info = tarfile.TarInfo(extra)
+            info.size = 1
+            tar.addfile(info, io.BytesIO(b"x"))
+    return dst
+
+
+def test_restore_rejects_a_manifest_path_outside_the_allow_list(settings, tmp_path):
+    def evil(m):
+        m["files"].append({"path": "/etc/shadow", "sha256": "0" * 64})
+        return m
+    bad = _rewrite(_archive(settings, tmp_path), tmp_path / "m.tar.gz", manifest=evil)
+    with pytest.raises(RestoreError, match="manifest path '/etc/shadow' is not allowed"):
+        restore(bad, tmp_path / "r", None)
+    assert not (tmp_path / "r").exists()
+
+
+def test_restore_rejects_a_member_the_manifest_does_not_list(settings, tmp_path):
+    bad = _rewrite(_archive(settings, tmp_path), tmp_path / "x.tar.gz", extra="data/users/1/unlisted.txt")
+    with pytest.raises(RestoreError, match="manifest does not match"):
+        restore(bad, tmp_path / "r", None)
+
+
+def test_restore_rejects_a_manifest_entry_with_no_member(settings, tmp_path):
+    def ghost(m):
+        m["files"].append({"path": "data/users/1/ghost.pdf", "sha256": "0" * 64})
+        return m
+    bad = _rewrite(_archive(settings, tmp_path), tmp_path / "g.tar.gz", manifest=ghost)
+    with pytest.raises(RestoreError, match="manifest does not match"):
+        restore(bad, tmp_path / "r", None)

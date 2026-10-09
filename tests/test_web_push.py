@@ -72,3 +72,34 @@ def test_push_test_unconfigured_and_rate_limited(client_as, monkeypatch, setting
     monkeypatch.setattr("jobseeker.web.push.send_one", lambda *a: 201)
     assert c.post("/push/test", json={"endpoint": _sub()["endpoint"]}).status_code == 200
     assert c.post("/push/test", json={"endpoint": _sub()["endpoint"]}).status_code == 429
+
+
+def test_subscribe_rejects_endpoints_outside_the_push_services(client_as, settings):
+    c = client_as(1)
+    for endpoint in ("https://evil.example/x", "https://127.0.0.1/x", "https://fcm.googleapis.com:8443/x"):
+        assert c.post("/push/subscribe", json=_sub(endpoint)).status_code == 422, endpoint
+    assert _rows(settings) == []
+
+
+def test_at_most_five_subscriptions_per_user_oldest_dropped(client_as, settings):
+    c = client_as(1)
+    for i in range(1, 7):
+        assert c.post("/push/subscribe", json=_sub(f"https://web.push.apple.com/dev{i}")).status_code == 204
+    assert [e for _, e in _rows(settings)] == [f"https://web.push.apple.com/dev{i}" for i in range(2, 7)]
+    c.post("/push/subscribe", json=_sub("https://web.push.apple.com/dev2"))  # re-subscribing refreshes it
+    c.post("/push/subscribe", json=_sub("https://web.push.apple.com/dev7"))
+    assert "https://web.push.apple.com/dev2" in [e for _, e in _rows(settings)]
+    assert "https://web.push.apple.com/dev3" not in [e for _, e in _rows(settings)]
+
+
+def test_push_test_with_an_invalid_stored_key_prunes_it(client_as, monkeypatch, settings):
+    from jobseeker.push.send import VapidKeys
+    c = client_as(1)
+    c.post("/push/subscribe", json=_sub())
+    conn = connect(settings.db_path)
+    conn.execute("UPDATE push_subscriptions SET p256dh = ?", (urlsafe_encode(b"\x04" + b"\x01" * 64),))
+    conn.commit()
+    monkeypatch.setattr("jobseeker.web.push._keys", lambda request: VapidKeys("x", "y", "mailto:o@x"))
+    r = c.post("/push/test", json={"endpoint": _sub()["endpoint"]})
+    assert r.status_code == 422 and "turn alerts off and on" in r.text
+    assert _rows(settings) == []

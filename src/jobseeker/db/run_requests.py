@@ -47,6 +47,11 @@ def last_fetch_now_started(conn, user_id: int) -> str | None:
     return row[0]
 
 
-def fetch_now_count_today(conn, now: datetime) -> int:
-    return conn.execute("SELECT COUNT(*) FROM runs WHERE kind = 'fetch' AND trigger = 'fetch_now' AND started_at >= ?",
-                        (iso(day_start_utc(app_today(now))),)).fetchone()[0]
+def fetch_now_count_today(conn, now: datetime, *, include_queued: bool = True) -> int:
+    """Fetch now runs started today, plus requests still queued (each will start one). The tick re-checks with
+    include_queued=False just before running a request, so the queue can never push the day past the cap."""
+    started = conn.execute("SELECT COUNT(*) FROM runs WHERE kind = 'fetch' AND trigger = 'fetch_now' AND started_at >= ?",
+                           (iso(day_start_utc(app_today(now))),)).fetchone()[0]
+    if not include_queued:
+        return started
+    return started + conn.execute("SELECT COUNT(*) FROM run_requests WHERE status = 'queued'").fetchone()[0]
