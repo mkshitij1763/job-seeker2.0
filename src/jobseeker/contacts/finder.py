@@ -56,12 +56,12 @@ def _search(deps: Deps, conn: sqlite3.Connection, company: str, budget: Budget, 
     hit = cached_search(conn, company, key, "tavily", deps.now())
     if hit is not None:
         return hit
-    if not budget.can("tavily"):
+    if not budget.take("tavily"):
         notes.append(budget.exhausted_note("tavily", "Tavily"))
         return []
-    budget.spend("tavily")
     results = deps.tavily.search(query, **kw)
-    store_search(conn, company, key, "tavily", results, deps.now())
+    if results:  # an empty answer may be a blip: don't hide this query from everyone for a month
+        store_search(conn, company, key, "tavily", results, deps.now())
     return results
 
 
@@ -93,11 +93,11 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         found_people = None
         if cached is not None:
             found_people = [Candidate(**c) for c in cached]
-        elif budget.can("apify", deps.apify.SEARCH_PAGE_USD):
-            budget.spend("apify", deps.apify.SEARCH_PAGE_USD)
+        elif budget.take("apify", deps.apify.SEARCH_PAGE_USD):
             try:
                 found_people = deps.apify.search_people(company, words, job["location_city"])
-                store_search(conn, company, key, "apify", [asdict(c) for c in found_people], deps.now())
+                if found_people:
+                    store_search(conn, company, key, "apify", [asdict(c) for c in found_people], deps.now())
             except Exception as e:  # a fallback failing must not lose the run
                 notes.append(f"Apify people search failed ({type(e).__name__})")
                 found_people = []
@@ -112,9 +112,8 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         cands = [c for c in cands if (nm := names.clean_name(c.name)) is None or (nm.first, nm.last) not in blocked]
     if not cands:
         raise FinderError(" ".join(notes) or f"No people found at {company} for this role")
-    if not budget.can("draft"):  # ranking is an LLM call: it spends the user's drafting share
+    if not budget.take("draft"):  # ranking is an LLM call: it spends the user's drafting share
         raise FinderError(budget.exhausted_note("draft", "drafting"))
-    budget.spend("draft")
     ranked = rank(deps.llm, prefs.models.drafting, job["title"], company, job["jd_text"], cands)
     if not ranked:
         raise FinderError(f"No relevant people found at {company} for this role")
@@ -131,8 +130,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     domain = dom.get("domain") or domain_from_text(job["jd_text"], company)
     if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
         query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
-        if budget.can("draft"):  # so is picking the website
-            budget.spend("draft")
+        if budget.take("draft"):  # so is picking the website
             domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
                                  job["jd_text"], _search(deps, conn, company, budget, notes, query, max_results=8),
                                  has_mail=lambda d: deps.resolver(d) is not None)
@@ -164,8 +162,8 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         sender = prefs.contacts.sender_email or prefs.email
         try:
             with SmtpVerifier(mx, sender, socket.gethostname(), smtp_factory=deps.smtp_factory, sleep=deps.sleep,
-                              pause=prefs.contacts.smtp_pause_seconds, allow=lambda: budget.can("smtp"),
-                              spend=lambda: budget.spend("smtp")) as v:
+                              pause=prefs.contacts.smtp_pause_seconds, allow=lambda: budget.take("smtp"),
+                              spend=lambda: None) as v:  # take() at allow: the RCPT is always spent
                 if catch_all is None:
                     catch_all = v.is_catch_all(domain)
                     learned_at = iso(deps.now())
@@ -196,10 +194,9 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     for i, (c, _, _) in enumerate(top):
         if i in results or deps.apify is None:
             continue
-        if not budget.can("apify", deps.apify.PROFILE_EMAIL_USD):
+        if not budget.take("apify", deps.apify.PROFILE_EMAIL_USD):
             notes.append(budget.exhausted_note("apify", "Apify"))
             break
-        budget.spend("apify", deps.apify.PROFILE_EMAIL_USD)
         try:
             email = (deps.apify.profile_email(c.linkedin_url) or "").lower()
         except Exception as e:  # keep what SMTP already verified
@@ -221,8 +218,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             remember(domain=domain, mx_host=mx, pattern=learned)
     missing = [i for i in range(len(top)) if i not in results]
     if domain and mx and missing and deps.hunter is not None and not hints:
-        if budget.can("hunter"):
-            budget.spend("hunter")
+        if budget.take("hunter"):
             try:
                 found = deps.hunter.domain_search(domain)
             except Exception as e:

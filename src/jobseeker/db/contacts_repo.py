@@ -278,7 +278,22 @@ def _own_finder_copy(conn: sqlite3.Connection, user_id: int, company: str, name:
 def edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int, name: str, email: str,
                  email_status: str) -> int:
     """A user's edit never changes another user's view: shared rows are copied on write, except a bounce,
-    which is a fact about the address and is recorded on the shared row for everyone."""
+    which is a fact about the address and is recorded on the shared row for everyone. One write transaction from
+    the read on, so a double submit edits the first one's copy instead of making a second."""
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        cid = _edit_contact(conn, user_id, app_id, rank, name, email, email_status)
+    except BaseException:
+        conn.rollback()
+        raise
+    conn.commit()
+    return cid
+
+
+def _edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int, name: str, email: str,
+                  email_status: str) -> int:
     row = conn.execute("""SELECT c.* FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
                           WHERE ac.application_id = ? AND ac.rank = ?""", (app_id, rank)).fetchone()
     if row is None:
@@ -297,10 +312,10 @@ def edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int,
             (row["company"], name, row["role"], row["linkedin_url"], email, email_status, user_id)).lastrowid
         conn.execute("UPDATE application_contacts SET contact_id = ? WHERE application_id = ? AND rank = ?",
                      (cid, app_id, rank))
+        # the main contact follows this rank's link (read above, under the lock); a hand-added main contact stays
         conn.execute("UPDATE applications SET contact_id = ? WHERE id = ? AND contact_id = ?", (cid, app_id, row["id"]))
     conn.execute("UPDATE application_contacts SET email_source = 'manual' WHERE application_id = ? AND rank = ?",
                  (app_id, rank))
-    conn.commit()
     return cid
 
 

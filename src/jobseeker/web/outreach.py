@@ -70,13 +70,13 @@ def draft_now(request: Request, app_id: int, user=Depends(current_user), prefs=D
         return _back(app_id, err="No resume facts yet. Add your resume in Settings")
     budget = Budget(conn, user.id, outreach_limits(conn, prefs.contacts, state.app_config.budgets.global_drafts_per_day),
                     app_now())
-    if not budget.can("draft"):
+    if not budget.take("draft"):
         return _back(app_id, err=budget.exhausted_note("draft", "drafting"))
     try:
         draft_application(conn, app_id, state.llm_factory(), facts, prefs)
     except LLMError as e:
+        budget.refund("draft")
         return _back(app_id, err=f"Drafting failed: {e}")
-    budget.spend("draft")
     if status == "approved":
         transition(conn, app_id, "drafted", {"reason": "regenerated after approval"})
         return _back(app_id, msg="Drafts regenerated. Approving again creates a new Gmail draft; "

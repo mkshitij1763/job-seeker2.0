@@ -73,7 +73,7 @@ def score_round_robin(conn, scorers: list[Scorer], llm, rubric, cfg, now: dateti
                 active.remove(s)
                 continue
             for row in rows:
-                if not s.budget.can("score"):
+                if not s.budget.take("score"):  # spent up front, refunded below when no score came back
                     stop = "global_cap" if s.budget.used_all("score") + 1 > s.budget.limits["score"].global_cap \
                         else None
                     s.stats.stopped_by = stop or "share"
@@ -82,20 +82,22 @@ def score_round_robin(conn, scorers: list[Scorer], llm, rubric, cfg, now: dateti
                 try:
                     result = score_job(llm, job_from_row(row), s.facts, s.prefs, rubric, cfg.models.scoring)
                 except LLMQuotaExceeded as e:
+                    s.budget.refund("score")
                     stop = "quota"
                     s.stats.errors.append(f"scoring stopped: {e}")
                     break
                 except LLMUnavailable as e:
+                    s.budget.refund("score")
                     stop = "unavailable"
                     s.stats.errors.append(f"scoring stopped: {e}")
                     break
                 except LLMError as e:
+                    s.budget.refund("score")
                     s.stats.errors.append(f"score job {row['id']}: {e}")
                     continue
                 model = getattr(llm, "last_model", None) or cfg.models.scoring
                 save_score(conn, s.user_id, row["id"], result, model, rubric.version, row["jd_hash"],
                            profile_hash=s.profile_hash)
-                s.budget.spend("score")
                 s.room -= 1
                 s.stats.scored += 1
                 s.stats.score_share_left -= 1

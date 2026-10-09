@@ -154,3 +154,38 @@ def test_review_4_replay_block_on_a_private_copy_stops_relinking(settings, seede
     assert private != shared
     mark_not_interested(conn, a1, block_company=False)
     assert upsert_contact(conn, 1, company, "Hira Manager", "PM", "https://li/hm", "hm@acme.com", "verified") is None
+
+
+class _Interleave:
+    """A connection that runs `other` just before its first INSERT INTO contacts: the moment a second request
+    (a double submit) would sneak in between this request's read and its write."""
+
+    def __init__(self, conn, other):
+        self._conn, self._other = conn, other
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def execute(self, sql, *args):
+        if self._other and sql.lstrip().startswith("INSERT INTO contacts"):
+            other, self._other = self._other, None
+            other()
+        return self._conn.execute(sql, *args)
+
+
+def test_review_9_double_submitted_edit_makes_one_copy_and_keeps_the_main_contact(settings, seeded_two):
+    import sqlite3
+    conn, a1, a2, shared = _two_apps_same_person(settings, seeded_two)
+
+    def second_submit():
+        other = connect(settings.db_path)
+        other.execute("PRAGMA busy_timeout = 100")
+        try:
+            edit_contact(other, 2, a2, 1, "Hira Manager", "me@b.com", "verified")
+        except sqlite3.OperationalError:  # locked out until the first edit commits: it then edits in place
+            pass
+    edit_contact(_Interleave(conn, second_submit), 2, a2, 1, "Hira Manager", "me@b.com", "verified")
+    copies = conn.execute("SELECT id FROM contacts WHERE owner_user_id = 2").fetchall()
+    assert len(copies) == 1
+    main = conn.execute("SELECT contact_id FROM applications WHERE id = ?", (a2,)).fetchone()[0]
+    assert main == people(conn, a2)[0]["contact_id"] == copies[0][0]   # no orphaned second "main" contact

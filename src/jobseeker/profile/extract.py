@@ -25,11 +25,10 @@ def run_extract(db_path, home, user_id: int, sha: str, app_config, llm_factory) 
     conn = connect(db_path)
     try:
         budget = Budget(conn, user_id, facts_limits(app_config), datetime.now(IST))
-        if not budget.can("groq:facts"):
+        if not budget.take("groq:facts"):
             set_extract_status(conn, user_id, "failed",
                                "You can re-read your resume again tomorrow; your current facts stay.")
             return
-        budget.spend("groq:facts")
         data = resume_path(home, user_id).read_bytes()
         if hashlib.sha256(data).hexdigest() != sha:  # the file changed since this read was queued
             set_extract_status(conn, user_id, "failed", "Your resume changed while we were reading it. Upload it again.")

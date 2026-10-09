@@ -68,6 +68,28 @@ class Budget:
             (self.user_id, self._period(service), service, amount))
         self.conn.commit()
 
+    def take(self, service: str, amount: float = 1) -> bool:
+        """can() and spend() in one write transaction, so concurrent requests can't all pass the check before any
+        of them records its spend. Spend first, then do the work; refund() when the work didn't happen."""
+        if self.conn.in_transaction:
+            self.conn.commit()
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            if not self.can(service, amount):
+                self.conn.rollback()
+                return False
+            self.spend(service, amount)  # commits
+            return True
+        except BaseException:
+            self.conn.rollback()
+            raise
+
+    def refund(self, service: str, amount: float = 1) -> None:
+        self.conn.execute("""UPDATE usage SET amount = MAX(0, amount - ?)
+                             WHERE user_id = ? AND period = ? AND service = ?""",
+                          (amount, self.user_id, self._period(service), service))
+        self.conn.commit()
+
     def summary(self) -> str:
         lim = self.limits
 

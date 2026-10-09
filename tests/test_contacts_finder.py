@@ -502,3 +502,20 @@ def test_ranking_and_domain_pick_each_spend_a_draft_unit(prefs):
     conn, app = setup_app()
     find_contacts(conn, app, prefs, deps()[0])                             # ranks people, then picks the website
     assert Budget(conn, 1, outreach_limits(conn, prefs.contacts, 20), NOW).used("draft") == 2
+
+
+def test_review_11_an_empty_search_is_not_cached(prefs):
+    from jobseeker.contacts.finder import _search
+    from jobseeker.db.usage import Budget, outreach_limits
+
+    class Empty(FakeTavily):
+        def search(self, query, include_domains=None, max_results=10):
+            self.queries.append(query)
+            return []
+    conn, _ = setup_app()
+    d, _ = deps(tavily=Empty())
+    budget = Budget(conn, 1, outreach_limits(conn, prefs.contacts, 20), NOW)
+    assert _search(d, conn, "Zepto", budget, [], "q") == []
+    assert _search(d, conn, "Zepto", budget, [], "q") == []
+    assert d.tavily.queries == ["q", "q"]                             # asked again: nothing was cached
+    assert conn.execute("SELECT COUNT(*) FROM people_searches").fetchone()[0] == 0
