@@ -8,7 +8,7 @@ from datetime import datetime
 
 import httpx
 
-from jobseeker.db.companies import bump_jobs_seen, mark_inactive
+from jobseeker.db.companies import bump_jobs_seen, mark_inactive, record_board_fetch
 from jobseeker.db.jobs import upsert_job
 from jobseeker.pipeline.discovery import discover
 from jobseeker.pipeline.normalize import normalize, normalize_company, normalize_title
@@ -58,6 +58,8 @@ def fetch_shared(conn, sources, client, now: datetime, generic_words: set[str], 
                     unrecorded[norm] += 1
             else:
                 stats.duplicates += 1
+        if hasattr(src, "company"):  # an ATS board whose jobs are stored: Fetch now skips it for a while
+            record_board_fetch(conn, src.name, now)
         heartbeat()
     if client is not None and seen:
         stats.discovered = discover(conn, client, seen, known, now, generic=generic_words)

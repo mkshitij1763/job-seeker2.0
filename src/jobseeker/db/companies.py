@@ -42,6 +42,18 @@ def active_companies(conn: sqlite3.Connection) -> list[tuple[str, Company]]:
     return [(r["name_norm"], Company(name=r["display_name"], ats=r["ats"], slug=r["slug"])) for r in rows]
 
 
+def record_board_fetch(conn: sqlite3.Connection, board: str, now: datetime) -> None:
+    conn.execute("INSERT INTO board_fetches (board, last_fetched_at) VALUES (?, ?) "
+                 "ON CONFLICT (board) DO UPDATE SET last_fetched_at = excluded.last_fetched_at", (board, iso(now)))
+    conn.commit()
+
+
+def fresh_boards(conn: sqlite3.Connection, since: datetime) -> set[str]:
+    """ATS boards (source names like 'greenhouse:slug') fetched OK at or after `since`."""
+    rows = conn.execute("SELECT board FROM board_fetches WHERE last_fetched_at >= ?", (iso(since),)).fetchall()
+    return {r[0] for r in rows}
+
+
 def mark_inactive(conn: sqlite3.Connection, name_norm: str, now: datetime) -> None:
     conn.execute("UPDATE discovered_companies SET status = 'inactive', checked_at = ? WHERE name_norm = ?",
                  (iso(now), name_norm))

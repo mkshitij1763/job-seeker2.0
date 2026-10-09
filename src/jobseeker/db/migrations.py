@@ -327,6 +327,8 @@ def migrate_v4(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
     conn.execute("CREATE UNIQUE INDEX idx_run_requests_one_pending ON run_requests (user_id) "
                  "WHERE status IN ('queued', 'running')")
     conn.execute("CREATE INDEX idx_runs_kind ON runs (kind, trigger, started_at)")
+    # When each ATS board last fetched OK, so Fetch now can skip fresh ones (trial run fix 3; added to v4 in place).
+    conn.execute("CREATE TABLE board_fetches (board TEXT PRIMARY KEY, last_fetched_at TEXT NOT NULL)")
     from jobseeker.config import load_app_config
     from jobseeker.db.profile import load_user_context
     from jobseeker.pipeline.profile_hash import profile_hash

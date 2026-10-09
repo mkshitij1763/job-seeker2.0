@@ -271,6 +271,10 @@ CREATE INDEX IF NOT EXISTS idx_run_requests_status ON run_requests (status, requ
 CREATE UNIQUE INDEX IF NOT EXISTS idx_run_requests_one_pending ON run_requests (user_id)
   WHERE status IN ('queued', 'running');
 CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs (kind, trigger, started_at);
+CREATE TABLE IF NOT EXISTS board_fetches (
+  board TEXT PRIMARY KEY,
+  last_fetched_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS people_searches (
   company_norm TEXT NOT NULL,
   query TEXT NOT NULL,

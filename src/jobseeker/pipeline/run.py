@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from jobseeker.db.locks import LockLost
 from jobseeker.db.runs import finish_run, start_run
@@ -23,6 +23,7 @@ from jobseeker.sources.registry import build_sources
 
 ALERT_NOTE = "Couldn't send the match alert"
 NO_FACTS = "No resume facts yet, so nothing was scored"
+BOARD_FRESH = timedelta(hours=12)  # Fetch now skips ATS boards fetched OK this recently
 
 
 @dataclass
@@ -66,7 +67,7 @@ def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, ll
             else:
                 contexts[u.id] = (prefs, facts)
         if fetch:
-            from jobseeker.db.companies import active_companies
+            from jobseeker.db.companies import active_companies, fresh_boards
             run_no = conn.execute("SELECT COUNT(*) FROM runs WHERE kind = 'fetch'").fetchone()[0]
             report.fetch_run_id = start_run(conn, now, None, kind="fetch", trigger=trigger)
             report.fetch = FetchStats()
@@ -77,6 +78,9 @@ def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, ll
             fs.searches_planned, fs.searches_trimmed, fs.searches_total = plan.planned, plan.trimmed, plan.total
             words = GENERIC_WORDS | {w for q in plan.linkedin + [q for q, _ in plan.pairs] for w in normalize_title(q).split()}
             sources = sources_factory(list(companies), active_companies(conn), cfg.search, plan)
+            if trigger == "fetch_now":  # the scheduled run still sweeps every board
+                fresh = fresh_boards(conn, now - BOARD_FRESH)
+                sources = [s for s in sources if not (hasattr(s, "company") and s.name in fresh)]
             fetch_shared(conn, sources, client, now, words, report.fetch, heartbeat)
         for u in users:
             user_runs[u.id] = start_run(conn, now, u.id, kind="user", trigger=trigger, parent_id=report.fetch_run_id)
