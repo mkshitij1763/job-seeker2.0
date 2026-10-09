@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS scores (
   model TEXT NOT NULL,
   rubric_version TEXT NOT NULL,
   jd_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  profile_hash TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scores_user_job ON scores (user_id, job_id, id);
 
@@ -148,7 +149,9 @@ CREATE TABLE IF NOT EXISTS runs (
   stats TEXT NOT NULL DEFAULT '{}',
   errors TEXT NOT NULL DEFAULT '[]',
   user_id INTEGER REFERENCES users (id),
-  kind TEXT NOT NULL DEFAULT 'legacy'
+  kind TEXT NOT NULL DEFAULT 'legacy',
+  trigger TEXT NOT NULL DEFAULT 'cli',
+  parent_id INTEGER REFERENCES runs (id)
 );
 
 CREATE TABLE IF NOT EXISTS discovered_companies (
@@ -247,3 +250,19 @@ CREATE TABLE IF NOT EXISTS backups (
   upload_error TEXT,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS locks (
+  name TEXT PRIMARY KEY,
+  holder TEXT NOT NULL,
+  acquired_at TEXT NOT NULL,
+  heartbeat_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS run_requests (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  requested_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
+  run_id INTEGER REFERENCES runs (id),
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_run_requests_status ON run_requests (status, requested_at);
+CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs (kind, trigger, started_at);

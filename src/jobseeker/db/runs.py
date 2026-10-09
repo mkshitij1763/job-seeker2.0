@@ -7,8 +7,10 @@ from datetime import datetime
 from jobseeker.db.core import iso
 
 
-def start_run(conn: sqlite3.Connection, now: datetime, user_id: int | None = None, kind: str = "legacy") -> int:
-    cur = conn.execute("INSERT INTO runs (started_at, user_id, kind) VALUES (?, ?, ?)", (iso(now), user_id, kind))
+def start_run(conn: sqlite3.Connection, now: datetime, user_id: int | None = None, kind: str = "legacy",
+              trigger: str = "cli", parent_id: int | None = None) -> int:
+    cur = conn.execute("INSERT INTO runs (started_at, user_id, kind, trigger, parent_id) VALUES (?, ?, ?, ?, ?)",
+                       (iso(now), user_id, kind, trigger, parent_id))
     conn.commit()
     return cur.lastrowid
 
