@@ -59,7 +59,7 @@
   | Review fixes C4 races (#9, #11, #12) | `d213978` |
   | Refund audit: every no-result path gives its unit back | `e46bcce` |
 | Merge `origin/build/devops2` `ede0fbf` (trial fixes 1–4; fast-forward) | `ede0fbf` |
-| Merge-readiness pass: README, `.env.example`, `HANDOFF.md` §8, PR description | (this commit) |
+| Merge-readiness pass: README, `.env.example`, `HANDOFF.md` §8, PR description | `477da80` |
 
 - **Tests after the devops2 merge + readiness pass (all of plans 2–6):** 831 pytest (also under TZ=UTC and TZ=America/New_York), 26 node (node baseline is now 26, not 19). `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
