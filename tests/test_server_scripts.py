@@ -85,3 +85,37 @@ def test_bootstrap_refuses_non_root():
 def test_bootstrap_never_copies_checkout_config_into_home():
     text = (SERVER / "bootstrap.sh").read_text(encoding="utf-8")
     assert "companies.yaml" not in text and "rubric.yaml" not in text
+
+
+def _sshd_block(tmp_path, sshd_ok: bool):
+    """Run bootstrap.sh's sshd block with stubs: the drop-in dir is redirected to tmp_path, sshd -t passes or fails."""
+    text = (SERVER / "bootstrap.sh").read_text(encoding="utf-8")
+    block = text.split("# --- sshd hardening ---", 1)[1].split("# --- end sshd hardening ---", 1)[0]
+    d = tmp_path / "sshd_config.d"
+    d.mkdir()
+    (d / "jobseeker.conf").write_text("old name")
+    log = tmp_path / "calls"
+    script = f"""set -euo pipefail
+put_file() {{ cat > "$1"; }}
+render() {{ echo "PasswordAuthentication no"; }}
+sshd() {{ echo "sshd $*" >> {log}; return {0 if sshd_ok else 1}; }}
+systemctl() {{ echo "systemctl $*" >> {log}; }}
+{block.replace("/etc/ssh/sshd_config.d", str(d))}
+echo reached-end
+"""
+    result = sh(["bash", "-c", script])
+    return result, d, (log.read_text() if log.exists() else "")
+
+
+def test_sshd_dropin_sorts_first_and_reloads_when_valid(tmp_path):
+    result, d, calls = _sshd_block(tmp_path, sshd_ok=True)
+    assert result.returncode == 0 and "reached-end" in result.stdout
+    assert sorted(p.name for p in d.iterdir()) == ["00-jobseeker.conf"]  # the pre-review name is gone
+    assert "sshd -t" in calls and "systemctl reload ssh" in calls
+
+
+def test_sshd_dropin_is_removed_and_bootstrap_stops_when_sshd_t_fails(tmp_path):
+    result, d, calls = _sshd_block(tmp_path, sshd_ok=False)
+    assert result.returncode != 0 and "reached-end" not in result.stdout
+    assert list(d.iterdir()) == []
+    assert "systemctl" not in calls and "removed" in result.stderr

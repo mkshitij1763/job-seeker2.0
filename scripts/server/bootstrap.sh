@@ -114,9 +114,18 @@ put_file /etc/apt/apt.conf.d/52jobseeker-upgrades 644 < <(render 52jobseeker-upg
 if put_file /etc/systemd/journald.conf.d/jobseeker.conf 644 < <(render journald-jobseeker.conf); then
   systemctl restart systemd-journald
 fi
-if put_file /etc/ssh/sshd_config.d/jobseeker.conf 644 < <(render sshd-jobseeker.conf); then
-  sshd -t && systemctl reload ssh
+# --- sshd hardening ---
+# sshd keeps the FIRST value it reads, so the drop-in must sort before cloud-init's 50-/60- files.
+rm -f /etc/ssh/sshd_config.d/jobseeker.conf  # the pre-review name, which sorted after them
+if put_file /etc/ssh/sshd_config.d/00-jobseeker.conf 644 < <(render sshd-jobseeker.conf); then
+  if ! sshd -t; then
+    rm -f /etc/ssh/sshd_config.d/00-jobseeker.conf
+    echo "sshd -t rejected the hardening drop-in; removed it and left sshd as it was. Fix it, then re-run." >&2
+    exit 1
+  fi
+  systemctl reload ssh
 fi
+# --- end sshd hardening ---
 if [[ ! -f /etc/duckdns.env ]]; then
   put_file /etc/duckdns.env 600 < <(printf 'DUCKDNS_DOMAIN=%s\nDUCKDNS_TOKEN=\n' "${DOMAIN%%.*}") || true
   echo "Put your DuckDNS token in /etc/duckdns.env (sudo nano /etc/duckdns.env), then re-run."
