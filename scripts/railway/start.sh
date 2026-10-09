@@ -48,13 +48,14 @@ memory_peak() {
     fi
 }
 
-# What the systemd timer does on a VM: a tick every TICK_INTERVAL seconds, each capped at 3h. A failed tick is logged
-# and the loop goes on. SIGTERM stops the running tick (or sleep) and ends the loop.
+# What the systemd timer does on a VM: a tick every TICK_INTERVAL seconds, each capped at 3h and at nice 10 (the
+# unit's Nice=10), so the web keeps the CPU when a tick is busy. A failed tick is logged and the loop goes on.
+# SIGTERM stops the running tick (or sleep) and ends the loop.
 tick_loop() {
     child=""
     trap 'if [ -n "$child" ]; then kill "$child" 2>/dev/null; fi; exit 0' TERM
     while :; do
-        timeout 3h jobseeker tick &
+        timeout 3h nice -n 10 jobseeker tick &
         child=$!
         wait "$child"
         code=$?

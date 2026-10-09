@@ -1102,7 +1102,7 @@ git commit -m "docs: server is live; provisioning notes and deviations"
 
 ### Railway runbook (trial host, added 2026-10-09)
 
-**Why:** GCP, Azure and AWS signups all failed or were refused (HANDOFF-devops §3 "Host history"). The user chose **Railway's trial**: no card, $5 or 30 days, 0.5 GB RAM and 2 vCPU per service, **0.5 GB volume**. After that, the app moves to a real VM through backup + restore ("Trial end" below). The VM plan above (Tasks 1–5) stays valid for that move.
+**Why:** GCP, Azure and AWS signups all failed or were refused (HANDOFF-devops §3 "Host history"). The user chose **Railway's trial**: no card, $5 or 30 days, 2 vCPU per service and **1 GB RAM** (Railway's MEMORY_LIMIT_GB metric, 2026-10-10; we first assumed 0.5 GB), **0.5 GB volume**. After that, the app moves to a real VM through backup + restore ("Trial end" below). The VM plan above (Tasks 1–5) stays valid for that move.
 
 **Code (build/devops2):** `Dockerfile`, `.dockerignore`, `scripts/railway/start.sh`, `serve --host` + `FORWARDED_ALLOW_IPS`. What start.sh does:
 - as root: `chown`s the volume, then re-runs itself as `app` (setpriv);

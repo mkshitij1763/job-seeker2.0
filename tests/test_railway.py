@@ -86,7 +86,8 @@ def test_app_user_exists_and_the_image_does_not_switch_to_it():
     # Railway mounts the volume root-owned: start.sh starts as root, chowns /data, then drops to `app` with setpriv.
     runs = " ".join(_args("RUN"))
     assert re.search(r"useradd\b.*\bapp\b", runs)
-    assert "setpriv --version" in runs and "timeout --version" in runs  # start.sh's tools, checked at build time
+    # start.sh's tools, checked at build time
+    assert "setpriv --version" in runs and "timeout --version" in runs and "nice --version" in runs
     assert _args("USER") == []
 
 
@@ -100,7 +101,7 @@ def test_dockerignore_keeps_secrets_and_local_state_out():
         assert needed not in lines and f"{needed}/" not in lines, needed
 
 
-# --- scripts/railway/start.sh, run under bash with stub `jobseeker` and `timeout` on PATH (no docker, timeout or
+# --- scripts/railway/start.sh, run under bash with stub `jobseeker`, `timeout` and `nice` on PATH (no docker, timeout or
 # setpriv on the Mac). The tests run as a normal user, so the root branch (chown + setpriv) is checked statically.
 START = ROOT / "scripts" / "railway" / "start.sh"
 
@@ -117,13 +118,18 @@ echo "$1" >> "$STUB_LOG.timeouts"
 shift
 exec "$@"
 """
+NICE_STUB = """#!/bin/bash
+echo "$1 $2" >> "$STUB_LOG.nice"
+shift 2
+exec "$@"
+"""
 
 
 @pytest.fixture
 def railway(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for name, body in (("jobseeker", JOBSEEKER_STUB), ("timeout", TIMEOUT_STUB)):
+    for name, body in (("jobseeker", JOBSEEKER_STUB), ("timeout", TIMEOUT_STUB), ("nice", NICE_STUB)):
         (bin_dir / name).write_text(body)
         (bin_dir / name).chmod(0o755)
     home = tmp_path / "data"
@@ -206,6 +212,8 @@ def test_migrates_then_serves_on_railways_port_and_ticks(railway):
     assert calls()[0] == "migrate"
     assert "serve --host 0.0.0.0 --port 8123 --proxy-headers" in calls()
     assert set(log.with_name("calls.log.timeouts").read_text().split()) == {"3h"}
+    # Each tick runs at nice 10 (the VM unit's Nice=10), so the web keeps the CPU when a tick is busy.
+    assert set(log.with_name("calls.log.nice").read_text().splitlines()) == {"-n 10"}
     code, _ = _stop(p)
     assert code == 0
 
