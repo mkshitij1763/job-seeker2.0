@@ -417,3 +417,6 @@ input, select, textarea { min-width: 0; }
 .field-err { color: var(--weak-fg); font-size: .9rem; margin: 4px 0 0; }
 .onboarding .sticky-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
 @media (max-width: 640px) { .onboarding .sticky-actions { position: sticky; bottom: 0; background: var(--surface); padding: .75rem 0; } }
+.role-row { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+@media (max-width: 640px) { .role-row { grid-template-columns: 1fr 1fr; } }
+.facts-form textarea { width: 100%; margin-bottom: 6px; }

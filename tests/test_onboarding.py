@@ -2,6 +2,7 @@ import pytest
 
 from jobseeker.db.core import connect
 from jobseeker.db.profile import get_onboarding, get_user_prefs
+from tests.test_resume import GOOD, pdf_bytes
 
 
 @pytest.fixture
@@ -60,3 +61,57 @@ def test_where_step_records_the_choice(newbie, client_as, settings):
     web = client_as(newbie, follow_redirects=False)
     web.post("/onboarding/where", data={"remote_india_ok": "on"})  # remote only, chosen on the step
     assert get_user_prefs(connect(settings.db_path), newbie).where_confirmed is True
+
+
+def _to_resume_step(web):
+    web.post("/onboarding/roles", data={"roles": ["Data Analyst"]})
+    web.post("/onboarding/where", data={"cities": ["Pune"]})
+    web.post("/onboarding/experience", data={"experience_years": "1", "drop_if_min_years_at_least": "2.5",
+                                             "experience_summary": "One year in analytics."})
+
+
+def test_upload_extracts_once_per_sha(newbie, client_as, settings, monkeypatch, facts):
+    calls = []
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", lambda llm, text, model: calls.append(1) or facts)
+    web = client_as(newbie, follow_redirects=False)
+    _to_resume_step(web)
+    files = {"resume": ("cv.pdf", pdf_bytes(), "application/pdf")}
+    assert web.post("/onboarding/resume", files=files).status_code == 303
+    assert web.post("/onboarding/resume", files=files).status_code == 303   # same file: cached
+    assert calls == [1]
+    assert "Check what we read" in web.get("/onboarding/resume/status").text
+
+
+def test_fourth_extraction_today_refused(newbie, client_as, settings, monkeypatch, facts):
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", lambda llm, text, model: facts)
+    web = client_as(newbie, follow_redirects=False)
+    _to_resume_step(web)
+    for i in range(3):
+        web.post("/onboarding/resume", files={"resume": ("cv.pdf", pdf_bytes(f"v{i} " + GOOD), "application/pdf")})
+    web.post("/onboarding/resume", files={"resume": ("cv.pdf", pdf_bytes("v9 " + GOOD), "application/pdf")})
+    assert "re-read your resume again tomorrow" in web.get("/onboarding/resume/status").text
+
+
+def test_manual_skills_when_quota_gone_then_finish(newbie, client_as, settings, monkeypatch):
+    from jobseeker.llm import LLMQuotaExceeded
+
+    def gone(llm, text, model):
+        raise LLMQuotaExceeded("used up")
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", gone)
+    queued = []
+    monkeypatch.setattr("jobseeker.web.onboarding.first_evaluation", lambda *a: queued.append(a))
+    web = client_as(newbie, follow_redirects=False)
+    _to_resume_step(web)
+    web.post("/onboarding/resume", files={"resume": ("cv.pdf", pdf_bytes(), "application/pdf")})
+    assert "Enter my skills myself" in web.get("/onboarding/resume/status").text
+    r = web.post("/onboarding/facts/manual", data={"headline": "Analyst", "skills_text": "SQL, Excel",
+                                                   "achievement": ["Built a dashboard used by 40 people"]})
+    assert r.status_code == 303
+    assert web.post("/onboarding/finish").headers["location"] == "/onboarding/done"
+    assert queued and client_as(newbie, follow_redirects=False).get("/").status_code == 200
+
+
+def test_finish_with_gap_sends_back(newbie, client_as):
+    web = client_as(newbie, follow_redirects=False)
+    web.post("/onboarding/roles", data={"roles": ["Data Analyst"]})
+    assert web.post("/onboarding/finish").headers["location"].startswith("/onboarding/where")

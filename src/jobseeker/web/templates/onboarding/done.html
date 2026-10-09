@@ -1,0 +1,9 @@
+{% extends "bare.html" %}
+{% block title %}You're set · Job Seeker{% endblock %}
+{% block content %}
+<div class="card block onboarding">
+  <h1>You're set.</h1>
+  {% include "onboarding/_done_status.html" %}
+  <a class="btn btn-primary" href="/">Go to Jobs</a>
+</div>
+{% endblock %}

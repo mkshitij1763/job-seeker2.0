@@ -1,0 +1,34 @@
+{# Facts review / manual entry. Context: facts (or none), action, manual, button, errors, up (optional). #}
+{% macro err(k) %}{% if errors and errors[k] %}<p class="field-err">{{ errors[k] }}</p>{% endif %}{% endmacro %}
+<form method="post" action="{{ action }}" class="facts-form">
+  <label class="field">Headline
+    <input name="headline" maxlength="160" value="{{ facts.headline if facts else '' }}" placeholder="e.g. Product Analyst, 2 years in fintech">
+  </label>{{ err("headline") }}
+  {% if not manual %}
+  <fieldset class="field"><legend>Roles</legend>
+    {% for r in (facts.roles if facts else []) %}
+    <div class="role-row">
+      <input name="role_title" value="{{ r.title }}" aria-label="Title"><input name="role_org" value="{{ r.org }}" aria-label="Organisation">
+      <input name="role_start" value="{{ r.start }}" aria-label="Start"><input name="role_end" value="{{ r.end }}" aria-label="End">
+    </div>
+    {% endfor %}
+    <p class="muted">Clear a title to remove that role.</p>
+  </fieldset>
+  {% endif %}
+  <label class="field">Skills (comma-separated)
+    <input name="skills_text" value="{{ facts.skills|join(', ') if facts else '' }}" placeholder="e.g. SQL, Excel, A/B testing">
+  </label>{{ err("skills") }}
+  <fieldset class="field"><legend>Achievements{% if manual %} (up to {{ manual_max or 6 }}){% endif %}</legend>
+    {% set items = facts.achievements if facts else [] %}
+    {% for a in items %}<input type="hidden" name="achievement_org" value="{{ a.org }}"><textarea name="achievement" rows="2">{{ a.text }}</textarea>{% endfor %}
+    {% for _ in range([(manual_max or 6) - items|length, 1]|max if manual else 1) %}<input type="hidden" name="achievement_org" value=""><textarea name="achievement" rows="2" placeholder="One result, with its numbers"></textarea>{% endfor %}
+    <p class="muted">Clear one to remove it. Numbers are picked up automatically.</p>
+  </fieldset>
+  {% for e in (facts.education if facts else []) %}<input type="hidden" name="education" value="{{ e }}">{% endfor %}
+  {% if up is defined and up %}
+  <label class="field">Your experience in a sentence or two
+    <textarea name="experience_summary" rows="2">{{ up.experience_summary }}</textarea>
+  </label>
+  {% endif %}
+  <button class="btn">{{ button }}</button>
+</form>

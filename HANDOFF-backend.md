@@ -33,11 +33,12 @@
   | P3-T2 migration v2, profile importer (+ where_confirmed) | `4f68793` |
   | P3-T3 request-scoped prefs, DB facts, CLI --user | `08ec981` |
   | P3-T4 require_onboarded, onboarding steps 1-3 | `b86497d` |
-  | P3-T5 two-way reevaluate replaces refilter | `this commit` |
+  | P3-T5 two-way reevaluate replaces refilter | `69585bc` |
+  | P3-T6 resume upload, fact extraction, review, Finish | `this commit` |
 
-- **Tests at `P3-T5`:** 599 pytest, 19 node. `git status` is clean.
+- **Tests at `P3-T6`:** 611 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 3 **Task 6** (resume upload, fact extraction, review, Finish), then T7–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** plan 3 **Task 7** (the Settings page; reuse the `accept_upload`, `status_context` and `save_facts_form` helpers in `web/onboarding.py`), then T8–T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -67,6 +68,7 @@
 - P3-T4: the existing `.chip` style is kept, and only `.chip:has(input:checked)`, `.chip-group`, `.field`, `.field-err` and the sticky actions were added. The Where step saves `where_confirmed=True`. `/onboarding/resume` returns 404 until P3-T6.
 - Today for non-owners (ruling by `manager`): the tiles are "New today" and "Shortlisted", and there is a "Shortlisted" section ("Apply on the company site, then tap Mark applied"). Send, Follow-ups, Ready and Find are hidden. `queries.today()` gains `shortlisted`. This closes the open item in the `can_outreach` ruling above.
 - P3-T5: `reevaluate` skips a pre-outreach application whenever its job goes from unfiltered or never-judged to filtered; the plan skipped only on jobs that already had a verdict row. `verdict(job, prefs, facts, now, blocked, scored)` keeps the plan 2 contract. `pipeline/refilter.py` is gone; `jobseeker refilter [--user] [--apply]` wraps `reevaluate` and also lists restored jobs.
+- P3-T6: resume and facts logic lives in shared helpers in `web/onboarding.py` (`accept_upload`, `status_context(conn, uid, base)`, `parse_facts_form`, `save_facts_form`), which Settings reuses with `base="/settings"`. `run_extract(db_path, home, uid, sha, app_config, llm_factory)`. The test PDF helper writes short lines, because PyMuPDF clips long ones.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;
