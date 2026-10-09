@@ -35,11 +35,12 @@
   | P3-T4 require_onboarded, onboarding steps 1-3 | `b86497d` |
   | P3-T5 two-way reevaluate replaces refilter | `69585bc` |
   | P3-T6 resume upload, fact extraction, review, Finish | `c0fe3e5` |
-  | P3-T7 Settings page | `this commit` |
+  | P3-T7 Settings page | `b1b3eed` |
+  | P3-T8 export and delete account | `this commit` |
 
-- **Tests at `P3-T7`:** 619 pytest, 19 node. `git status` is clean.
+- **Tests at `P3-T8`:** 627 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 3 **Task 8** (export, delete account), then T9. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** plan 3 **Task 9** (no runtime profile reads, acceptance, handoff). Also fold in from `manager`: Settings → Roles "Advanced (custom matching)" disclosure, shown only when `title_allow_extra` or `target_roles_text` is set, with "Title must contain" and "Target roles as the AI sees them" fields plus a "Use the role chips instead" button that clears both. The golden must stay byte-identical when nothing is edited. Then the final whole-branch review of plan 3. Ledger `.superpowers/sdd/2026-10-08-mu-onboarding-settings/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -71,6 +72,7 @@
 - P3-T5: `reevaluate` skips a pre-outreach application whenever its job goes from unfiltered or never-judged to filtered; the plan skipped only on jobs that already had a verdict row. `verdict(job, prefs, facts, now, blocked, scored)` keeps the plan 2 contract. `pipeline/refilter.py` is gone; `jobseeker refilter [--user] [--apply]` wraps `reevaluate` and also lists restored jobs.
 - P3-T6: resume and facts logic lives in shared helpers in `web/onboarding.py` (`accept_upload`, `status_context(conn, uid, base)`, `parse_facts_form`, `save_facts_form`), which Settings reuses with `base="/settings"`. `run_extract(db_path, home, uid, sha, app_config, llm_factory)`. The test PDF helper writes short lines, because PyMuPDF clips long ones.
 - P3-T7: `title_deny` is capped at 30 items rather than 10, because the default exclusions alone are 18 words. Settings is the 4th tab, and the phone tab bar is 4 columns. Sign out has moved from the sidebar and top bar into Settings → Account. Settings reuses the P3-T6 helpers.
+- P3-T8: `delete_account` nulls `invites.invited_by` for the deleted user, and their invites stay valid. `user_scoped_tables()` is the schema-walk oracle; `invites` is keyed by email and deleted explicitly. Export and delete sit on `settings.account_router` (signed in, not `require_onboarded`). The last admin gets a 403, and the button is disabled.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

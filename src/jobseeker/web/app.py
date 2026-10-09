@@ -90,6 +90,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.include_router(pipeline.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
     app.include_router(admin.router, dependencies=[Depends(require_onboarded)])
     app.include_router(settings_routes.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
+    app.include_router(settings_routes.account_router, dependencies=[Depends(current_user)])  # export/delete: always
     app.add_middleware(OriginCheck, base_url=settings.base_url)
 
     @app.exception_handler(NotAuthenticated)

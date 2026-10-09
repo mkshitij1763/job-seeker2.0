@@ -5,13 +5,16 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 from jobseeker.config import effective_prefs
+from jobseeker.db.account import delete_account, export_zip
 from jobseeker.db.profile import facts_row, get_user_prefs, load_user_context, save_user_prefs
+from jobseeker.db.users import LastAdmin
 from jobseeker.pipeline.evaluate import reevaluate
 from jobseeker.profile.resume import ResumeRejected
 from jobseeker.web.deps import current_user, get_conn, render
+from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.onboarding import accept_upload, parse_step, save_facts_form, status_context
 
 router = APIRouter(prefix="/settings")
@@ -105,3 +108,44 @@ async def facts_manual(request: Request, user=Depends(current_user), conn=Depend
     if errors:
         return _page(request, conn, user, 422, errors=errors, open_section="resume")
     return _back(msg="Facts saved")
+
+
+# Export and delete: signed in, but not require_onboarded, so a user can always take their data or leave.
+account_router = APIRouter(prefix="/settings")
+
+
+def _only_admin(conn, user) -> bool:
+    return bool(user.is_admin) and not conn.execute(
+        "SELECT 1 FROM users WHERE is_admin = 1 AND disabled_at IS NULL AND id != ?", (user.id,)).fetchone()
+
+
+@account_router.get("/export")
+def export(request: Request, user=Depends(current_user), conn=Depends(get_conn)):
+    data = export_zip(conn, request.app.state.settings.jobseeker_home, user.id)
+    name = f"jobseeker-{user.email}-{datetime.now(UTC):%Y-%m-%d}.zip"
+    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+def _delete_page(request, conn, user, status=200, error=""):
+    return request.app.state.templates.TemplateResponse(
+        request, "settings_delete.html", {"user": user, "only_admin": _only_admin(conn, user), "error": error},
+        status_code=status)
+
+
+@account_router.get("/delete")
+def delete_page(request: Request, user=Depends(current_user), conn=Depends(get_conn)):
+    return _delete_page(request, conn, user)
+
+
+@account_router.post("/delete")
+def delete(request: Request, email: str = Form(""), user=Depends(current_user), conn=Depends(get_conn)):
+    if email.strip().lower() != user.email.lower():
+        return _delete_page(request, conn, user, 422, "The email doesn't match")
+    try:
+        delete_account(conn, request.app.state.settings.jobseeker_home, user.id)
+    except LastAdmin:
+        return _delete_page(request, conn, user, 403, "You're the only admin")
+    s = request.app.state.settings
+    resp = RedirectResponse("/login", 303)
+    resp.delete_cookie(SESSION_COOKIE, path="/", secure=s.cookie_secure, httponly=True, samesite="lax")
+    return resp
