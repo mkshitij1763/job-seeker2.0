@@ -57,7 +57,8 @@
 | `f79d063` | merge origin/multi-user `ee7bed9` (build/devops2 merged as 765f56c + outreach plan) |
 | `705e949` | extras T14, admin Backups card; pins delete/export coverage of `push_subscriptions` (admin.py: 1 import + 1 context arg; admin.html: 1 include) |
 | `513521d` | pipeline T14, Fetch now (`web/fetch_now.py`; app.py: 1 import + 1 include_router; today/settings/onboarding-done templates: 1 include line each) |
-| (this commit) | pipeline T16, delete covers `run_requests` (db/account.py: `runs` deleted last, 1 sort) + final verification; per-user pipeline sub-project complete |
+| `74d041e` | pipeline T16, delete covers `run_requests` (db/account.py: `runs` deleted last, 1 sort) + final verification; per-user pipeline sub-project complete |
+| (this commit) | docs: hosting T5 Step 3 gains the one-off `js refilter --apply` after migrating |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **NEXT:** all buildable tasks are done: extras T1–T14, pipeline T1–T16, hosting T1–T4. **Stand by** for `manager`. Remaining: hosting T5 (manual, with the user, at cutover) and the executing-plans **final whole-branch review** (owed; `manager` decides when). Final verification at this commit: 726 pytest, 726 with `TZ=UTC`, 26 node; no `run_daily`/`RunStats` left in `src`.
