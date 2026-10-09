@@ -235,3 +235,13 @@ def test_extraction_failure_says_why(newbie, settings, monkeypatch, app_config, 
     run_extract(settings.db_path, settings.jobseeker_home, newbie, sha, app_config, lambda: None)
     row = facts_row(connect(settings.db_path), newbie)
     assert (row["extract_status"], row["extract_error"]) == ("failed", note)
+
+
+def test_bare_onboarding_goes_to_the_current_step_or_today(newbie, client_as):
+    web = client_as(newbie, follow_redirects=False)
+    assert web.get("/onboarding").headers["location"] == "/onboarding/roles"
+    web.post("/onboarding/roles", data={"roles": ["Data Analyst"]})
+    r = web.get("/onboarding")
+    assert r.status_code == 303 and r.headers["location"] == "/onboarding/where"
+    owner = client_as(1, follow_redirects=False).get("/onboarding")
+    assert owner.status_code == 303 and owner.headers["location"] == "/today"

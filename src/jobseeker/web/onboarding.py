@@ -277,6 +277,12 @@ def done_status(request: Request, user=Depends(current_user), conn=Depends(get_c
                                                         {"checked": checked, "matching": matching})
 
 
+@router.get("")
+def start(user=Depends(current_user), conn=Depends(get_conn)):
+    step, done = get_onboarding(conn, user.id)
+    return RedirectResponse("/today" if done else f"/onboarding/{step or 'roles'}", 303)
+
+
 @router.get("/{step}")
 def show(request: Request, step: str, user=Depends(current_user), conn=Depends(get_conn)):
     if step not in STEPS[:3]:
