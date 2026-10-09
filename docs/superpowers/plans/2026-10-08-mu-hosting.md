@@ -1097,3 +1097,153 @@ Update `HANDOFF.md`:
 git add HANDOFF.md docs/superpowers/specs/2026-10-08-mu-hosting-design.md
 git commit -m "docs: server is live; provisioning notes and deviations"
 ```
+
+---
+
+### Railway runbook (trial host, added 2026-10-09)
+
+**Why:** GCP, Azure and AWS signups all failed or were refused (HANDOFF-devops §3 "Host history"). The user chose **Railway's trial**: no card, $5 or 30 days, 0.5 GB RAM and 2 vCPU per service, **0.5 GB volume**. After that, the app moves to a real VM through backup + restore ("Trial end" below). The VM plan above (Tasks 1–5) stays valid for that move.
+
+**Code (build/devops2):** `Dockerfile`, `.dockerignore`, `scripts/railway/start.sh`, `serve --host` + `FORWARDED_ALLOW_IPS`. What start.sh does:
+- as root: `chown`s the volume, then re-runs itself as `app` (setpriv);
+- **parks** with a repeating `PARKED: waiting for restore at /data` line when there's no DB, or `PARKED: migrate failed` when migrate fails;
+- otherwise runs `migrate`, then `serve` on `$PORT` plus a tick every 5 minutes (each capped at 3h);
+- logs the container's memory peak after each tick.
+
+**Rules:**
+- Deploy only from `multi-user`, after build/devops2 is merged and `manager` says GO.
+- Env vars live only in the Railway dashboard (never in git). The user sets every secret; Claude never handles or reads them back.
+- No data in git and nothing public: the data moves over Railway SSH (scp) only.
+
+**Project facts:**
+- project `intelligent-motivation` (`bb9bf0e7-4fba-4ed9-a7ea-583e08980048`);
+- service `job-seeker2.0` (`32fa4ecb-b58b-45e4-af72-22f2846287f1`);
+- environment `production`, region iad.
+- **Done 2026-10-09:** autodeploy disabled. The branch change `main` → `multi-user` is staged (applying it IS the first deploy).
+
+#### R1. Before the first deploy (manager GO)
+
+1. **Volume:** create one mounted at `/data` (MCP `create-volume`). Trial cap 0.5 GB. Expected use:
+   - the DB, ~35 MB today;
+   - migrate's pre-migration backup;
+   - ≤ 11 local archives (7 daily + 4 Sundays);
+   - résumé PDFs.
+
+   That's well under 0.5 GB. Only B2 survives losing the volume, so B2 must work before real data goes in (ruling c).
+2. **Non-secret variables** (Claude via MCP `set-variables`, after GO; `JOBSEEKER_HOME=/data` and the PATH come from the image):
+
+   | Variable | Value |
+   |---|---|
+   | `FORWARDED_ALLOW_IPS` | `*` |
+   | `BASE_URL` | `https://<generated>.up.railway.app` (from step 3; exactly the browser origin, no trailing slash) |
+   | `OWNER_EMAIL` | the owner's Google address (v1 assigns all existing rows to it) |
+   | `COOKIE_SECURE` | `true` |
+   | `GOOGLE_CLIENT_ID` | the OAuth Web client id |
+   | `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET` | the B2 bucket |
+   | `VAPID_SUBJECT` | `mailto:<owner>` |
+   | `CLOUDFLARE_ACCOUNT_ID` | if used |
+
+   `BACKUP_DIR` defaults to `/data/backups` in start.sh.
+3. **Domain:** MCP `generate-domain` gives `https://<svc>.up.railway.app`. The user adds the OAuth redirect URIs `https://<svc>.up.railway.app/auth/callback` and `https://<svc>.up.railway.app/gmail/callback` to the Google Web client. (verify) Google accepts an `up.railway.app` redirect while the consent screen is in Testing. **Stop if it doesn't.**
+4. **Secrets, set by the user in the dashboard** (Variables → New Variable, or Raw Editor), generated on the Mac:
+
+   | Secret | Where it comes from |
+   |---|---|
+   | `SECRET_KEY`, `TOKEN_KEY`, `BACKUP_KEY` | one `uv run jobseeker gen-key` each (new values, never reused from the Mac) |
+   | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` | `uv run jobseeker vapid-keys` (the pair) |
+   | `GOOGLE_CLIENT_SECRET` | the OAuth Web client |
+   | `BACKUP_S3_KEY_ID`, `BACKUP_S3_SECRET` | the write-only B2 key |
+   | `GROQ_API_KEY`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `TAVILY_API_KEY`, `APIFY_API_TOKEN`, `HUNTER_API_KEY` | the providers |
+   | `HEALTHCHECK_PING_URL` | Healthchecks.io |
+
+   Keep `BACKUP_KEY` in the password manager as well: without it, no B2 backup can be decrypted.
+5. **Healthcheck:** leave the service's Healthcheck Path EMPTY for the first deploy. Railway's healthcheck runs only at deploy time: a deployment that doesn't answer 200 in time is marked failed and removed, and a running container is never restarted. A parked container answers nothing, so with a healthcheck the first deploy would be removed before the data can be restored. `/healthz` is set in R2 step 7.
+6. **SSH key:** the user registers a key once with `railway ssh keys add` (or the CLI's first-run prompt).
+7. **First deploy:** apply the staged branch change ("Deploy" on the "Apply 1 change" banner, or MCP `accept-deploy`). Expected:
+   - the image builds (the build fails if `setpriv`/`timeout` are missing);
+   - the logs show `start.sh: PARKED: waiting for restore at /data …` every 5 minutes.
+
+   Record the build time and the image size.
+
+#### R2. Data move from the Mac (spec §10, adapted; one evening)
+
+This is the proposal for ruling (f). It is plain `scp` over Railway SSH (its SFTP subsystem writes into the running container, volume included). The data never touches git, B2 or any public URL. `<target>` is `<svc>.up.railway.app@ssh.railway.com` (or the service instance id `@ssh.railway.com`; `railway ssh config --service job-seeker2.0 --alias js-railway` makes it `js-railway`).
+
+1. **Mac:** `launchctl bootout gui/$(id -u)/com.kshitij.jobseeker` stops the scheduled runs. The web agent stays up.
+2. **Mac:** take a consistent copy, check it, and pack it with the profile:
+   ```
+   mkdir -p /tmp/js-move/data /tmp/js-move/profile
+   sqlite3 data/jobseeker.db ".backup '/tmp/js-move/data/jobseeker.db'"
+   sqlite3 /tmp/js-move/data/jobseeker.db "PRAGMA integrity_check"        # must print ok
+   cp profile/resume.pdf profile/facts.json profile/preferences.yaml /tmp/js-move/profile/
+   tar -C /tmp/js-move -czf /tmp/js-move.tar.gz data profile
+   shasum -a 256 /tmp/js-move.tar.gz
+   ```
+   Record each table's row count (same queries as spec §10 step 2).
+3. **Copy up:** `scp /tmp/js-move.tar.gz <target>:/data/js-move.tar.gz`. (verify) `railway ssh -- sha256sum /data/js-move.tar.gz` matches the Mac's.
+4. **Unpack into place** (the container is parked, so nothing has the DB open):
+   ```
+   railway ssh -- tar -C /data -xzf /data/js-move.tar.gz
+   railway ssh -- ls -la /data/data /data/profile
+   ```
+   The files are root-owned at this point; start.sh's `chown -R` fixes that on the next boot.
+5. **Restart** the service (MCP `restart-service`, or dashboard → Restart). start.sh then:
+   - chowns `/data`;
+   - runs `migrate`, which backs up first, then applies v1→v5: v1 assigns every row to `OWNER_EMAIL`; v2 imports `/data/profile` into `user_prefs`/`user_facts`/`data/users/1/resume.pdf` and writes `config/app.yaml`; v4 back-fills `profile_hash`; v5 turns outreach on for the owner;
+   - starts serve and the tick loop.
+
+   Check the logs for the migrate lines and no `PARKED`.
+6. **Check:** compare row counts with step 2 (every pre-existing table matches; only new tables differ). Pipe the script over stdin: `railway ssh -- …` arguments are re-split by the remote shell, so nested quotes break, and piped input runs without a PTY.
+   ```
+   railway ssh -- /app/.venv/bin/python - <<'PY'
+   import sqlite3
+   c = sqlite3.connect("file:/data/data/jobseeker.db?mode=ro", uri=True)
+   for (t,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
+       print(t, c.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0])
+   PY
+   ```
+   Then the one-off refilter, run as `app`: a dry run, then `--apply` (expected: 5 hidden, 5 restored, 1 app skipped, undoably):
+   ```
+   railway ssh -- setpriv --reuid=app --regid=app --init-groups env HOME=/data JOBSEEKER_HOME=/data /app/.venv/bin/jobseeker refilter
+   ```
+   (verify) The SSH session sees the service's variables: `railway ssh -- printenv OWNER_EMAIL` prints the owner's address. If it doesn't, stop and tell `manager` before running any jobseeker command over SSH; start.sh's own migrate is unaffected. Claude never prints secret values.
+7. **Tidy and guard:**
+   - `railway ssh -- rm -rf /data/profile /data/js-move.tar.gz`, and `rm -rf /tmp/js-move*` on the Mac;
+   - set the Healthcheck Path to `/healthz` (MCP `update-service healthcheckPath=/healthz`). It applies from the next deploy.
+8. **Phone:**
+   - sign in as the owner at `BASE_URL`;
+   - Today, Jobs, one Job detail and Pipeline match the Mac;
+   - the first POST (save a setting) succeeds, not 403 (`BASE_URL` = the origin; X-Forwarded-Proto is trusted);
+   - reconnect Gmail through the web flow;
+   - the next tick in the logs exits cleanly and prints the memory peak;
+   - `jobseeker backup` (as in step 6) uploads to B2.
+
+   Report the first FULL tick's memory peak to manager (ruling e).
+9. **Mac:** `launchctl bootout gui/$(id -u)/com.kshitij.jobseeker.web` and `tailscale serve reset`. Keep `data/jobseeker.db` untouched for 2 weeks as the rollback.
+
+**Rollback during the move:** the Mac DB is untouched until step 9. If anything fails, re-bootstrap the Mac agents with `scripts/install_launchd.sh` and carry on as before. On Railway, deleting `/data/data/jobseeker.db` and restarting parks the service again.
+
+#### R3. Day to day
+
+- **Deploy:** push to `multi-user` (backend-lead2 merges), then "Deploy Latest Commit" (CMD+K) or MCP `redeploy`. Autodeploy stays OFF.
+  - With a volume, Railway stops the old container before starting the new one, so expect a short gap.
+  - A deploy failing `/healthz` is marked failed. (verify) Whether the old deployment is then restored or the service is left down; if left down, redeploy the previous commit.
+  - start.sh migrates on every boot (a no-op when current).
+- **A tick in progress during a redeploy** is stopped by SIGTERM. The run lock is a heartbeat lock, so the next tick takes over once it goes stale.
+- **Logs:** MCP `get-logs` or `railway logs`. Memory: MCP `get-service-metrics`. Credit: the dashboard's "days or $ left".
+
+#### R4. Trial end: exit to a real VM
+
+1. Provision the VM with Tasks 1–5 above (bootstrap passes 1–3).
+2. On Railway:
+   ```
+   railway ssh -- setpriv --reuid=app --regid=app --init-groups env HOME=/data JOBSEEKER_HOME=/data /app/.venv/bin/jobseeker backup
+   ```
+   It writes `/data/backups/jobseeker-<day>.tar.gz` and uploads the encrypted copy to B2. Then copy the archive out: `scp <target>:/data/backups/jobseeker-<day>.tar.gz .`. Stop the Railway service (dashboard → Remove deployment) so nothing writes after the backup.
+3. On the VM:
+   - `js restore jobseeker-<day>.tar.gz --to /tmp/r` checks the manifest, sha and `integrity_check`;
+   - move `jobseeker.db`, `config/app.yaml` and `data/users/` into `/srv/jobseeker`;
+   - copy over the same secrets (`BACKUP_KEY` and `TOKEN_KEY` must stay the same, or the B2 history and the stored Gmail tokens become unreadable);
+   - update `BASE_URL`, `OWNER_EMAIL` and the OAuth redirect URIs to the new domain;
+   - re-run bootstrap.
+4. Point the Google OAuth client at the new domain and remove the Railway URIs. Then delete the Railway project (the user, in the dashboard).
