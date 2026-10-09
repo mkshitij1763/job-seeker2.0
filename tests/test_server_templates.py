@@ -51,6 +51,13 @@ def test_tick_units():
         assert needle in timer
 
 
+def test_tick_yields_memory_and_cpu_to_the_web():  # GCP e2-micro has 1 GB: the tick must never starve the web
+    service = rendered("jobseeker-tick.service")
+    assert "MemoryHigh=600M" in service and "MemoryMax" not in service  # soft: throttled into swap, never OOM-killed
+    assert "Nice=10" in service
+    assert "MemoryHigh" not in rendered("jobseeker-web.service")
+
+
 def test_caddyfile_proxies_to_localhost_with_body_cap():
     caddy = rendered("Caddyfile")
     assert "js-test.duckdns.org {" in caddy and "email owner@example.com" in caddy

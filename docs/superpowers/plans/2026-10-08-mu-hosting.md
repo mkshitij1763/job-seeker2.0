@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Execution method chosen by the user: Native (inline), via superpowers:executing-plans.**
 
-**Goal:** Everything needed to run Job Seeker on one Oracle Always Free ARM VM: a `--proxy-headers` flag on `serve`, systemd/Caddy/DuckDNS templates, an idempotent `bootstrap.sh`, a one-command `deploy.sh` with automatic code rollback, and the manual provisioning and cutover checklist.
+**Goal:** Everything needed to run Job Seeker on one Google Cloud Always Free e2-micro VM (host changed from Oracle by the user on 2026-10-09, after Oracle's signup failed; Oracle remains a later option via `bootstrap.sh` + `jobseeker restore`): a `--proxy-headers` flag on `serve`, systemd/Caddy/DuckDNS templates, an idempotent `bootstrap.sh`, a one-command `deploy.sh` with automatic code rollback, and the manual provisioning and cutover checklist.
 
 **Architecture:** Almost all of this is shell and config under `scripts/server/`, plus `scripts/deploy.sh` on the Mac. The only Python change is the `serve` flag. Scripts are tested with pytest:
 - templates are rendered and inspected;
@@ -573,7 +573,7 @@ exec sudo -u jobseeker -H env JOBSEEKER_HOME="$HOME_DIR" bash -c \
 
 ```bash
 #!/usr/bin/env bash
-# One-time, idempotent server setup for Ubuntu 24.04 (aarch64). Run as root from the Mac:
+# One-time, idempotent server setup for Ubuntu 24.04 (aarch64). [Superseded 2026-10-09: x86_64 or aarch64, plus a swap block; see scripts/server/bootstrap.sh.] Run as root from the Mac:
 #   ssh jobseeker 'sudo BASE_URL=https://<sub>.duckdns.org OWNER_EMAIL=<email> BRANCH=multi-user bash -s' \
 #     < scripts/server/bootstrap.sh
 # Re-run it after adding the deploy key, after filling /etc/duckdns.env and .env, and after the data move.
@@ -1037,11 +1037,11 @@ git commit -m "feat(server): deploy.sh with run-in-progress refusal and healthz 
 - [ ] **Step 1: User checklist (spec §2), done by the user, one item at a time**
 
 Tick each of these and record the outcome:
-1. Oracle signup, home region Mumbai or Hyderabad. (verify) The home region is permanent, and A1 runs only there. Upgrade to PAYG. Create a ₹100/month budget alert. (verify) Idle reclaim doesn't apply to PAYG.
-2. Mac: `ssh-keygen -t ed25519 -f ~/.ssh/jobseeker_oci`, plus a `~/.ssh/config` `Host jobseeker` entry.
-3. VM `VM.Standard.A1.Flex`, 2 OCPU / 12 GB, Ubuntu 24.04 aarch64, with a reserved public IP. (verify) The reserved IP is free.
-4. Security list: ingress TCP 80 and 443 from `0.0.0.0/0`.
-5. DuckDNS subdomain pointing at the reserved IP. (verify) The inactivity-expiry rule.
+1. Google Cloud: billing enabled on the project; a **₹100/month budget** with email alerts at 50% and 100% (Billing → Budgets & alerts). (verify) e2-micro in us-central1/us-west1/us-east1 is still Always Free (cloud.google.com/free).
+2. Mac: `ssh-keygen -t ed25519 -f ~/.ssh/jobseeker_gcp -C ubuntu`; add the public key in Compute Engine → Metadata → SSH keys; a `~/.ssh/config` `Host jobseeker` entry (User `ubuntu`).
+3. VM, exactly as spec §1/§2: region **us-central1** (or us-west1/us-east1), machine **e2-micro**, boot disk **Ubuntu 24.04 LTS x86/64** on a **Standard persistent disk, 30 GB** (NOT the default Balanced, which is billed), external IPv4 **Ephemeral** (do **not** reserve a static IP: it's billed when unattached, DuckDNS follows the address, and `duckdns.timer` re-registers it within 15 minutes of a stop/start).
+4. Firewall: tick **Allow HTTP traffic** and **Allow HTTPS traffic** when creating the VM. Check that `default-allow-http`/`default-allow-https` exist under VPC network → Firewall. Nothing else is opened.
+5. DuckDNS subdomain pointing at the VM's external IP. (verify) The inactivity-expiry rule.
 6. Google OAuth Web client redirect URIs `https://<sub>.duckdns.org/auth/callback` and `/gmail/callback`. (verify) Google accepts `<sub>.duckdns.org` as an authorized domain. **Stop if it doesn't.**
 7. B2 bucket, lifecycle rules, and a `writeFiles`-only key (extras spec §2; its (verify) items).
 
@@ -1052,7 +1052,7 @@ Run each pass from the repo root on the Mac:
 2. Re-run the same command. Expected: uv, the clone and `uv sync --frozen` succeed with no compiled source builds (only the pure-Python `http-ece` sdist). The templates are installed, and `.env` and `/etc/duckdns.env` are created. The user fills in the DuckDNS token and `.env` (`js gen-key` for the keys).
 3. Re-run. Expected: `duckdns.timer` is active, and Caddy has a certificate once DNS resolves. The jobseeker services stay disabled: "missing: data/jobseeker.db, config/app.yaml".
 
-(verify) `iptables -S INPUT` shows the 80/443 ACCEPT rules above the REJECT. Record whether Oracle's image still ships that REJECT rule.
+(verify) `swapon --show` lists the 2 GB `/swapfile`, `free -m` shows it, and `systemctl show jobseeker-tick -p MemoryHigh -p Nice` gives `MemoryHigh=629145600` and `Nice=10`. The iptables step is a harmless no-op on GCP (policy ACCEPT); the VPC rules are the firewall.
 
 - [ ] **Step 3: Data move (spec §10)**
 
@@ -1081,14 +1081,14 @@ Check each one and record the evidence (command output) in the session:
 - a deploy during a run is refused;
 - the restore drill passes;
 - `.env` is 600, owned by `jobseeker`;
-- the Oracle billing page shows ₹0 after a week.
+- the GCP billing report shows ₹0 after a week (Standard 30 GB disk, no static IP, egress under the free 1 GB: estimate ~0.1–0.3 GB of B2 backups plus ~50–150 MB of page traffic per month; the ₹100 budget alert is the backstop).
 
 - [ ] **Step 5: Record and commit**
 
 Update `HANDOFF.md`:
 - the live URL (subdomain only);
 - the region;
-- that PAYG and the budget alert are set;
+- that the ₹100 GCP budget alert is set, and the disk type (Standard);
 - the B2 bucket name (no keys);
 - the `scripts/deploy.sh` and `js` usage;
 - any spec deviations found.

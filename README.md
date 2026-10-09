@@ -2,7 +2,7 @@
 
 A small, invite-only job-search app for a few people. Every morning it fetches new jobs once for everyone (LinkedIn, Naukri, Indeed India, plus the Greenhouse, Lever and Ashby boards of companies it has found). Then it filters and scores them against **each user's own** preferences and resume. For users with outreach turned on, it also finds the right people at the company and drafts an email and a LinkedIn note. **It never sends anything.** Approving a job creates a draft in that user's own Gmail, and they press Send themselves.
 
-It runs on one small server (Oracle Cloud Always Free, Caddy for HTTPS on a DuckDNS subdomain, SQLite on disk, systemd timers) and is used from a browser or as a phone home-screen app (PWA).
+It runs on one small server (a Google Cloud Always Free e2-micro, Caddy for HTTPS on a DuckDNS subdomain, SQLite on disk, systemd timers) and is used from a browser or as a phone home-screen app (PWA).
 
 ## What each person gets
 - **Sign in with Google**, invite-only. Uninvited addresses see "Ask <owner> for an invite."
@@ -20,7 +20,7 @@ Free quotas (Groq, Tavily, Apify, Hunter) are shared: each user gets an even sha
 The full runbook, with every **(verify)** step, is in `docs/superpowers/plans/2026-10-08-mu-hosting.md` Task 5 and `docs/superpowers/specs/2026-10-08-mu-hosting-design.md` §2–§10. In short:
 
 1. **Accounts (by hand, once):**
-   - **Oracle Cloud**: home region Mumbai or Hyderabad, upgraded to Pay As You Go, with a ₹100/month budget alert. Create a `VM.Standard.A1.Flex` VM (2 OCPU / 12 GB, Ubuntu 24.04 aarch64) with a reserved public IP. Add ingress TCP 80 and 443 to the security list.
+   - **Google Cloud**: billing on, with a ₹100/month budget alert. Create an **e2-micro** VM in us-central1 (or us-west1/us-east1): Ubuntu 24.04 LTS x86/64 on a **30 GB Standard** persistent disk (not the default Balanced, which is billed), an ephemeral external IP (no static IP), and **Allow HTTP/HTTPS traffic** ticked. `bootstrap.sh` adds a 2 GB swapfile, because the VM has 1 GB of RAM.
    - **DuckDNS**: a `<sub>.duckdns.org` name pointing at that IP.
    - **Google Cloud**: an OAuth client of type **Web application**, with redirect URIs `https://<sub>.duckdns.org/auth/callback` and `https://<sub>.duckdns.org/gmail/callback`, and the Gmail API enabled. The consent screen stays in **Testing** mode. Add every person who will use outreach as a **test user**.
    - **Backblaze B2**: a bucket with lifecycle rules, and a write-only key for that bucket (nightly encrypted backups).
@@ -60,7 +60,7 @@ The full runbook, with every **(verify)** step, is in `docs/superpowers/plans/20
 - `scripts/deploy.sh` (from the Mac) deploys the newest `multi-user` commit. It refuses during a run, migrates, checks `/healthz`, and rolls back by itself if that fails. `--dry-run`, `--sha`, `--rollback` and `--branch` are available.
 - `js <command>` on the server runs the CLI as the service user with `.env` loaded: `js tick`, `js run --user <email>`, `js refilter [--user <email>] [--apply]`, `js rescore --user <email>`, `js backup`, `js restore <file> [--to DIR]`, `js companies`.
 - `jobseeker-tick.timer` fires every 5 minutes. It does the daily run (`schedule.daily_at` in `config/app.yaml`, 11:15 IST by default) and the nightly backup, and serves Fetch now requests.
-- Server-wide settings (models, thresholds, budgets, search knobs, the role catalog and city chips, `contacts.smtp_verify`) live in `/srv/jobseeker/config/app.yaml`. Restart the web service after changing it. Keep `contacts.smtp_verify: off` on Oracle, because port 25 is blocked.
+- Server-wide settings (models, thresholds, budgets, search knobs, the role catalog and city chips, `contacts.smtp_verify`) live in `/srv/jobseeker/config/app.yaml`. Restart the web service after changing it. Keep `contacts.smtp_verify: off` on GCP, because port 25 is blocked.
 
 ## Run it locally (development)
 1. `uv sync`
@@ -83,6 +83,6 @@ Groq's free quota is per model and per day. When it runs out, scoring moves to G
 Each night the tick writes a `.tar.gz` (the DB, resumes and a manifest with row counts) to `BACKUP_DIR`. With `BACKUP_KEY` and the B2 settings, it also uploads an encrypted copy, `daily/…` and `weekly/…` on Sundays, with retention set by the bucket's lifecycle rules. `js backup` makes one now. To restore, run `js restore <file.tar.gz | file.tar.gz.enc> --to <empty dir>`; it checks every checksum and the DB's integrity, and prints the counts.
 
 ## Cost and limits
-- Free: Oracle Always Free, DuckDNS, Let's Encrypt, free tiers of Groq, Tavily, Apify and Hunter, B2's free 10 GB.
+- Free: Google Cloud's Always Free e2-micro (with a ₹100 budget alert; egress stays well under the free 1 GB/month), DuckDNS, Let's Encrypt, free tiers of Groq, Tavily, Apify and Hunter, B2's free 10 GB.
 - Job-site scraping is free but unofficial; a blocked site is skipped for the day and listed in the run's notes.
 - Gmail access uses the restricted `gmail.compose` scope in Testing mode, so Google shows an "unverified app" warning (Advanced → Continue), and consent can expire after about a week; the app then shows **Reconnect Gmail**.

@@ -5,7 +5,9 @@ Source: `docs/superpowers/research/2026-10-08-hosting-proposal.md`, hosting spik
 
 ## Goal
 
-Run Job Seeker on an always-on public server so the owner and two roommates can use it from phone and web without the Mac being awake and without Tailscale. The server costs nothing beyond what the user approved: Oracle Cloud Always Free on a Pay As You Go account with a ₹100 budget alert, a free DuckDNS subdomain, and Backblaze B2's free tier for off-site backups.
+Run Job Seeker on an always-on public server so the owner and two roommates can use it from phone and web without the Mac being awake and without Tailscale. The server costs nothing beyond what the user approved: a Google Cloud Always Free **e2-micro** VM (us-central1) with a ₹100 budget alert, a free DuckDNS subdomain, and Backblaze B2's free tier for off-site backups. The user's hard ceiling is ₹300–400/month.
+
+> **Host change (user, 2026-10-09):** Oracle Always Free was the original choice, but its signup failed twice on card verification. GCP e2-micro replaces it. Oracle remains a later option: run `bootstrap.sh` on an Oracle VM and `jobseeker restore` the latest backup (the script still handles Oracle's iptables REJECT rule).
 
 **Success:** `https://<sub>.duckdns.org` serves the app over valid HTTPS. The daily run happens at 11:15 IST from the server. A deploy is one command from the Mac. All of the owner's existing data (jobs, applications, drafts and contacts) is on the server and unchanged. Losing the VM costs at most one day of data and about an hour to rebuild.
 
@@ -22,20 +24,23 @@ Run Job Seeker on an always-on public server so the owner and two roommates can 
 
 | Decision | Source |
 |---|---|
-| Oracle Always Free, A1 ARM, home region Mumbai or Hyderabad; PAYG with a ₹100 budget alert | user, 2026-10-08 |
+| GCP Always Free e2-micro (x86_64, 1 GB RAM), us-central1, 30 GB **Standard** persistent disk, ephemeral IP, ₹100 budget alert (replaces Oracle A1) | user, 2026-10-09 |
 | HTTPS via Caddy + a DuckDNS subdomain; the subdomain is chosen at signup and only ever appears as config (`BASE_URL`) | user / coordinator |
 | uv on the host, no Docker; systemd replaces launchd | hosting proposal, accepted |
 | Backblaze B2 for off-site backups | coordinator ruling |
 | `jobseeker migrate [--dry-run]` (auth spec): refuses while another process holds the DB, takes its own pre-migration backup | auth spec |
 | `jobseeker tick` every 5 minutes; the 11:15 IST schedule and the run lock live in the app | per-user pipeline spec |
 | `GET`/`HEAD /healthz` and `HEALTHCHECK_PING_URL` | extras spec |
-| Every locked package has a cp313 manylinux aarch64 wheel (glibc ≤ 2.34; Ubuntu 24.04 has 2.39); `tls-client` isn't used, `curl-cffi` is | `uv.lock` check, 2026-10-08 |
+| Every locked package has a cp313 manylinux wheel for both aarch64 and x86_64 (glibc ≤ 2.34; Ubuntu 24.04 has 2.39); `http-ece` is the only sdist; `tls-client` isn't used, `curl-cffi` is | `uv.lock` checks, 2026-10-08 (aarch64) and 2026-10-09 (x86_64) |
 
 ## Design
 
 ### 1. Server shape
 
-- `VM.Standard.A1.Flex`, **2 OCPU / 12 GB**, 50 GB boot volume, Canonical **Ubuntu 24.04 aarch64**. That's half the free A1 allowance. If capacity is short, start at 1 OCPU / 6 GB and resize later.
+- GCP **e2-micro** (0.25 vCPU, bursts to 2; **1 GB RAM**) in **us-central1** (us-west1 or us-east1 are also free; no other region is), **30 GB Standard persistent disk** (NOT the default Balanced, which is billed), **Ubuntu 24.04 LTS x86_64**, ephemeral external IP (no static IP; DuckDNS follows the address, and the updater timer re-registers it after a stop/start).
+- 1 GB is tight, so `bootstrap.sh` adds a **2 GB `/swapfile`** (`vm.swappiness=10`), and `jobseeker-tick.service` runs with `MemoryHigh=600M` (soft: reclaimed into swap, never OOM-killed) and `Nice=10`, so a run never starves the web service.
+- Latency: about 220–280 ms from India to us-central1. Pages are small and server-rendered, so it's acceptable for 3 users.
+- **Egress** (free: 1 GB/month to most destinations, then billed): nightly encrypted backups of a few MB to B2 are ~0.1–0.3 GB/month; three users' pages and htmx swaps are ~50–150 MB/month; JobSpy/ATS fetches are mostly *ingress* (free). Expected total: well under 0.5 GB. The ₹100 budget alert catches an overrun.
 - Python 3.13 comes from `uv python install 3.13` (Ubuntu ships 3.12).
 - The VM's clock stays UTC. The app converts to `Asia/Kolkata` itself (pipeline spec, `tzdata`).
 - Layout, all owned by the `jobseeker` system user (`/usr/sbin/nologin`, home `/srv/jobseeker`):
@@ -58,20 +63,16 @@ Run Job Seeker on an always-on public server so the owner and two roommates can 
 
 The owner does this once, about 45 minutes. **(verify)** items must be checked against the provider's current docs while doing the step; if a check fails, stop and tell the developer.
 
-1. **Oracle signup:**
-   - choose home region **Mumbai or Hyderabad**;
-   - (verify) the home region can't be changed later, and Always Free A1 runs only in it;
-   - upgrade to **Pay As You Go**;
-   - create a **budget of ₹100/month** with an email alert at 100%;
-   - (verify) idle reclaim of Always Free instances doesn't apply to PAYG accounts.
-2. **SSH key** on the Mac: `ssh-keygen -t ed25519 -f ~/.ssh/jobseeker_oci`, plus an `~/.ssh/config` entry `Host jobseeker` (HostName = the reserved IP, User `ubuntu`, IdentityFile as above).
-3. **VM:**
-   - create it as in §1, pasting the public key;
-   - if "Out of host capacity": retry off-peak (early morning IST), try each fault domain, or use 1 OCPU / 6 GB;
-   - **reserve the public IP** and attach it; (verify) a reserved public IP is free on PAYG within the Always Free limits.
-4. **Security list:** in the VCN's default security list, add ingress TCP **80** and **443** from `0.0.0.0/0`. Port 22 is there by default.
+1. **Google Cloud signup:** use the same Google Cloud account as the OAuth client (or a new project in it); enable billing with a card (the free trial credit is separate and isn't needed); create a **budget of ₹100/month** with email alerts at 50% and 100% (Billing → Budgets & alerts). (verify) e2-micro is still in the Always Free list for us-central1/us-west1/us-east1 at cloud.google.com/free.
+2. **SSH key** on the Mac: `ssh-keygen -t ed25519 -f ~/.ssh/jobseeker_gcp -C ubuntu`. Add the public key under Compute Engine → Metadata → SSH keys (username `ubuntu`, from the key comment), plus an `~/.ssh/config` entry `Host jobseeker` (HostName = the VM's external IP, User `ubuntu`, IdentityFile as above). If the external IP changes after a stop/start, update HostName (or use `<sub>.duckdns.org`).
+3. **VM** (Compute Engine → Create instance), exactly:
+   - region **us-central1** (or us-west1/us-east1), any zone; machine **e2-micro**;
+   - boot disk: **Ubuntu 24.04 LTS (x86/64)**, type **Standard persistent disk** (NOT the default Balanced), size **30 GB**;
+   - networking: external IPv4 **Ephemeral**; do **not** reserve a static IP (it's billed when unattached, and DuckDNS covers the changing address);
+   - firewall: tick **Allow HTTP traffic** and **Allow HTTPS traffic** at creation (they create the VPC rules for 80/443); port 22 is open by default.
+4. **(No separate firewall step.)** Check under VPC network → Firewall that `default-allow-http` and `default-allow-https` exist and target the VM's `http-server`/`https-server` tags. Port 8000 is never opened.
 5. **DuckDNS:**
-   - sign in, create `<sub>`, point it at the reserved IP, copy the token;
+   - sign in, create `<sub>`, point it at the VM's external IP, copy the token;
    - (verify) the current inactivity-expiry rule, so the updater's 15-minute interval satisfies it.
 6. **Google OAuth** (the Web client from the auth spec): add the redirect URIs `https://<sub>.duckdns.org/auth/callback` and `https://<sub>.duckdns.org/gmail/callback`. (verify) Google accepts `<sub>.duckdns.org` as an authorized domain, given that `duckdns.org` is on the public-suffix list. If it doesn't, stop: the domain choice needs revisiting.
 7. **Backblaze B2** (extras spec §2):
@@ -89,13 +90,14 @@ The owner does this once, about 45 minutes. **(verify)** items must be checked a
 - **Phase A, the system:**
   1. apt: `sqlite3 git curl netfilter-persistent unattended-upgrades`; Caddy from its official apt repository (the signed-key steps from Caddy's install docs).
   2. Create the `jobseeker` user and the layout in §1.
-  3. Firewall (§5).
-  4. unattended-upgrades (§7).
-  5. journald: set `SystemMaxUse=500M` in `/etc/systemd/journald.conf.d/jobseeker.conf`.
-  6. If `/srv/jobseeker/.ssh/id_ed25519` is missing, generate it (no passphrase), print the public key with "Add this as a read-only deploy key, then re-run", and exit 0.
+  3. Swap (2026-10-09, for the 1 GB e2-micro): a 2 GB `/swapfile` (fallocate, chmod 600, mkswap, swapon), its `/etc/fstab` line, and `vm.swappiness=10` in `/etc/sysctl.d/90-jobseeker-swap.conf`. Each step is skipped when already done.
+  4. Firewall (§5).
+  5. unattended-upgrades (§7).
+  6. journald: set `SystemMaxUse=500M` in `/etc/systemd/journald.conf.d/jobseeker.conf`.
+  7. If `/srv/jobseeker/.ssh/id_ed25519` is missing, generate it (no passphrase), print the public key with "Add this as a read-only deploy key, then re-run", and exit 0.
 - **Phase B, the app** (runs only once `git ls-remote` with the deploy key succeeds):
   1. As `jobseeker`: install uv into `~/.local/bin` (the official installer); `uv python install 3.13`.
-  2. Clone into `app/`, check out `origin/$BRANCH` detached, then `uv sync --frozen`. A failure here stops the bootstrap before any service is enabled. That's the real-hardware proof of the aarch64 wheel check.
+  2. Clone into `app/`, check out `origin/$BRANCH` detached, then `uv sync --frozen`. A failure here stops the bootstrap before any service is enabled. That's the real-hardware proof of the wheel check.
   3. Create `.env` from `scripts/server/env.example` if it's missing (mode 600, values empty), and say so.
   4. Render the templates in `scripts/server/templates/` (§4, §5) with `envsubst`, using only `${DOMAIN}`, `${OWNER_EMAIL}` and `${HOME_DIR}`. `DOMAIN` is the host part of `BASE_URL`. Install them into `/etc/systemd/system/` and `/etc/caddy/Caddyfile`.
   5. Write `/etc/duckdns.env` (root, 600) with `DUCKDNS_DOMAIN` (the first label of `DOMAIN`) and `DUCKDNS_TOKEN`. The token is read from the terminal with `read -s` if the file is missing; it's never passed as an argument.
@@ -138,7 +140,8 @@ WantedBy=multi-user.target
   - `Type=oneshot`;
   - the same `User`, `WorkingDirectory`, `EnvironmentFile`, `Environment` and hardening as the web service;
   - `ExecStart=… uv run --frozen --no-sync jobseeker tick`;
-  - `TimeoutStartSec=3h`, a ceiling above the longest run so far (78 minutes).
+  - `TimeoutStartSec=3h`, a ceiling above the longest run so far (78 minutes);
+  - `MemoryHigh=600M` and `Nice=10` (2026-10-09, e2-micro): above 600 MB the kernel reclaims the tick's memory into swap instead of letting it squeeze the web service. It's soft (never `MemoryMax`), so a heavy run slows down but is never OOM-killed.
 - **timer:** `OnCalendar=*:0/5`, `Persistent=true`, `AccuracySec=30s`.
 - **overlap:** systemd won't start the oneshot again while it's active, and the app's `locks` row is the real guard.
 
@@ -185,7 +188,7 @@ ${DOMAIN} {
 - `duckdns.service`: oneshot as root with `EnvironmentFile=/etc/duckdns.env` and `ExecStart=/usr/bin/curl -fsS -o /run/duckdns.out "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip="`. Followed by `ExecStartPost=/usr/bin/grep -qx OK /run/duckdns.out`, so a `KO` fails the unit.
 - `duckdns.timer`: `OnBootSec=1min`, `OnUnitActiveSec=15min`.
 
-**Firewall:** Oracle's Ubuntu images ship `/etc/iptables/rules.v4` with an `INPUT` chain that ends in `REJECT --reject-with icmp-host-prohibited`. The security list alone is not enough.
+**Firewall:** on GCP the real firewall is the VPC rules from §2 step 3; the image's iptables policy is ACCEPT, so the step below only adds redundant ACCEPT rules and is harmless. It exists for Oracle (a later option), whose Ubuntu images ship `/etc/iptables/rules.v4` with an `INPUT` chain that ends in `REJECT --reject-with icmp-host-prohibited`. The security list alone is not enough.
 - `bootstrap.sh`:
   - finds the REJECT's position with `iptables -L INPUT --line-numbers`;
   - inserts `-p tcp -m state --state NEW --dport 443 -j ACCEPT` and the same for `80` **above** it, skipping each rule if `iptables -C` says it's already there;
@@ -330,14 +333,14 @@ Infrastructure scripts are tested where it's cheap and safe; the real proof is t
 ## Acceptance criteria
 
 1. Every **(verify)** item in §2 and §5 is ticked, or a deviation is written into this spec before building on it.
-2. `bootstrap.sh` completes on a fresh Ubuntu 24.04 aarch64 A1 VM, and a second run reports no changes.
+2. `bootstrap.sh` completes on a fresh Ubuntu 24.04 x86_64 e2-micro, and a second run reports no changes. `swapon --show` lists the 2 GB `/swapfile`, and it survives a reboot.
 3. `uv sync --frozen` succeeds on the VM with no compiled source builds (the pure-Python `http-ece` sdist from the extras spec is the only sdist); `uv pip list` matches `uv.lock`.
 4. `curl -I https://<sub>.duckdns.org/healthz` returns `200` with a valid Let's Encrypt certificate. `http://` redirects to `https://`. Port 8000 is unreachable from outside (`nc -z <ip> 8000` fails).
-5. `iptables -S INPUT` shows 80/443 ACCEPT above the REJECT, and the rules survive a reboot.
+5. The VPC firewall allows only 22, 80 and 443 to the VM (`gcloud compute firewall-rules list` or the console), and port 8000 is unreachable from outside.
 6. After a reboot, the web service, Caddy, `jobseeker-tick.timer` and `duckdns.timer` are active with no manual step.
 7. The 11:15 IST scheduled run happens on the server the next day; Healthchecks.io receives its ping.
 8. `scripts/deploy.sh` deploys a new commit with `/healthz` green. A deliberately broken commit is rolled back automatically. A deploy during a run is refused.
 9. After the Mac move, row counts match the Mac snapshot, the owner sees the same Today, Jobs, Job detail and Pipeline, and the Mac launchd agents and `tailscale serve` are off.
 10. A restore drill from the latest B2 backup onto a scratch directory on the VM passes `integrity_check` and matches the live row counts (extras spec).
 11. `.env` is mode 600 and owned by `jobseeker`; `git grep` on the deployed branch finds no secret values.
-12. The Oracle budget alert exists at ₹100, and the billing page shows ₹0 after one week.
+12. The GCP budget alert exists at ₹100; after one week the billing report shows ₹0 (the disk is Standard 30 GB, no static IP, egress under 1 GB).

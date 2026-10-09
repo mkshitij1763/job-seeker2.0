@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time, idempotent server setup for Ubuntu 24.04 (aarch64). Run as root from the Mac:
+# One-time, idempotent server setup for Ubuntu 24.04 (x86_64 or aarch64). Run as root from the Mac:
 #   ssh jobseeker 'sudo BASE_URL=https://<sub>.duckdns.org OWNER_EMAIL=<email> BRANCH=multi-user bash -s' \
 #     < scripts/server/bootstrap.sh
 # Re-run it after adding the deploy key, after filling /etc/duckdns.env and .env, and after the data move.
@@ -66,6 +66,27 @@ if ! id jobseeker >/dev/null 2>&1; then
 fi
 install -d -o jobseeker -g jobseeker -m 750 "$HOME_DIR" "$HOME_DIR/data" "$HOME_DIR/data/backups" "$HOME_DIR/config"
 install -d -o jobseeker -g jobseeker -m 700 "$HOME_DIR/.ssh"
+
+# --- swap ---
+# The GCP e2-micro has 1 GB of RAM: 2 GB of swap absorbs the tick's peaks (the tick unit's MemoryHigh pushes it there).
+if ! swapon --show=NAME --noheadings | grep -qx /swapfile; then
+  if [[ ! -f /swapfile ]]; then
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+  fi
+  swapon /swapfile
+  echo "changed: /swapfile (2 GB swap on)"
+  CHANGED=1
+fi
+if ! grep -q '^/swapfile ' /etc/fstab; then
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  CHANGED=1
+fi
+if put_file /etc/sysctl.d/90-jobseeker-swap.conf 644 < <(echo 'vm.swappiness=10'); then
+  sysctl -q -p /etc/sysctl.d/90-jobseeker-swap.conf
+fi
+# --- end swap ---
 
 open_port iptables 80
 open_port iptables 443

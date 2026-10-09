@@ -119,3 +119,45 @@ def test_sshd_dropin_is_removed_and_bootstrap_stops_when_sshd_t_fails(tmp_path):
     assert result.returncode != 0 and "reached-end" not in result.stdout
     assert list(d.iterdir()) == []
     assert "systemctl" not in calls and "removed" in result.stderr
+
+
+def _swap_block(tmp_path, active: bool):
+    """Run bootstrap.sh's swap block with stubs; /swapfile, /etc/fstab and /etc/sysctl.d are redirected to tmp_path.
+    Call it again on the same tmp_path to model a re-run of bootstrap on the same machine."""
+    text = (SERVER / "bootstrap.sh").read_text(encoding="utf-8")
+    block = text.split("# --- swap ---", 1)[1].split("# --- end swap ---", 1)[0]
+    swapfile, fstab, sysctl_d, log = tmp_path / "swapfile", tmp_path / "fstab", tmp_path / "sysctl.d", tmp_path / "calls"
+    fstab.touch()
+    for path, new in (("/swapfile", swapfile), ("/etc/fstab", fstab), ("/etc/sysctl.d", sysctl_d)):
+        block = block.replace(path, str(new))
+    script = f"""set -euo pipefail
+CHANGED=0
+put_file() {{ [[ -f $1 ]] && cmp -s - "$1" && return 1; mkdir -p "$(dirname "$1")"; cat > "$1"; }}
+fallocate() {{ echo "fallocate $*" >> {log}; touch "${{@: -1}}"; }}
+mkswap() {{ echo "mkswap $*" >> {log}; }}
+swapon() {{ if [[ $1 == --show* ]]; then {"echo " + str(swapfile) if active else "true"}; else echo "swapon $*" >> {log}; fi; }}
+sysctl() {{ echo "sysctl $*" >> {log}; }}
+{block}
+echo "CHANGED=$CHANGED"
+"""
+    result = sh(["bash", "-c", script])
+    return result, (log.read_text() if log.exists() else "")
+
+
+def test_swap_is_made_once_and_persisted(tmp_path):
+    result, calls = _swap_block(tmp_path, active=False)
+    assert result.returncode == 0, result.stderr
+    assert "fallocate -l 2G" in calls and "mkswap" in calls and "swapon " in calls and "sysctl" in calls
+    assert oct((tmp_path / "swapfile").stat().st_mode & 0o777) == "0o600"
+    assert (tmp_path / "fstab").read_text().count("swapfile none swap sw 0 0") == 1
+    assert (tmp_path / "sysctl.d" / "90-jobseeker-swap.conf").read_text().strip() == "vm.swappiness=10"
+    assert "CHANGED=1" in result.stdout
+
+
+def test_swap_rerun_changes_nothing(tmp_path):
+    _swap_block(tmp_path, active=False)
+    again, calls = _swap_block(tmp_path, active=True)
+    assert again.returncode == 0, again.stderr
+    assert calls.count("fallocate") == 1 and calls.count("mkswap") == 1 and calls.count("swapon ") == 1
+    assert (tmp_path / "fstab").read_text().count("none swap sw 0 0") == 1
+    assert "CHANGED=0" in again.stdout
