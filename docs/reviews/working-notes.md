@@ -57,3 +57,22 @@ Step 4 Resume (img p1-09..12)
 - Copy "Scores and drafts use only these facts": roommate has no drafts (outreach off).
 - "Save facts" (secondary) above "Finish" (primary): unclear whether Finish saves edits. After Save facts: full reload to top, flash "Saved" out of view of the button pressed.
 - "Enter my skills myself" appears only after a failed read → checklist D item "try Enter my skills myself once" is not reachable on a successful read. BLOCKED unless a read fails.
+- Finish → /onboarding/done "You're set." + "Checking jobs…" + Fetch now (outline) + Go to Jobs (primary) stacked touching (no gap). No "first scores arrive with the next run" line visible at first paint (checklist D "Finish" expects it). Fetch now NOT pressed (quota). img p1-13.
+- Extraction pre-drafted "Your experience in a sentence or two" correctly (spec OK).
+- Owner: invite confirmation URL carries the email in the query string (`/admin?msg=Invited%20horizon…&invited=horizon…`) → PII in URL/history. P3.
+
+## Pass 5 baseline — BEFORE REGION MOVE (Railway US East), 2026-10-10 ~05:10 IST, owner account, Mac on home Wi-Fi in India
+Method: same-origin iframe 390×844 per page (window can't go below 500 px), Navigation Timing; "first" = first load this session (static assets already in browser cache from earlier use, so not a true empty-cache cold load), "repeat" = immediate reload; plus 5× `fetch(cache:'no-store')` of the HTML, median. Server time per manager: 5–13 ms, so ~280 ms TTFB ≈ India↔US round trip.
+
+| Page | TTFB first / repeat | DOMContentLoaded first / repeat | Load first / repeat | HTML (decoded) | HTML fetch median (5×) | Notes |
+|---|---|---|---|---|---|---|
+| /today | 285 / 283 | 308 / 303 | 318 / 315 | 9.1 KB | 291 ms | + `/fetch-now/status` hx-get after load (~275 ms, 2nd round trip) |
+| / (Jobs) | 301 / 306 | 443 / 394 | 506 / 439 | **186.5 KB** | 334 ms | heaviest page; owner inbox renders all rows server-side |
+| /applications/10 | 340 / 282 | 362 / 307 | 372 / 317 | 25.8 KB | 295 ms | |
+| /pipeline | 304 / 333 | 348 / 387 | 504 / 470 | 75.9 KB | 314 ms (one 637 outlier) | |
+| /settings | 277 / 280 | 301 / 316 | 324 / 358 | 19.8 KB | 314 ms | + `/fetch-now/status` hx-get (~280 ms) |
+| /admin | 274 / 282 | 297 / 304 | 306 / 310 | 9.5 KB | 284 ms | **horizontal scroll at 390** |
+Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, load 847 ms (manifest 297 ms + fonts ~300 ms each revalidated).
+- **Fonts (`/static/fonts/*.woff2`) and manifest are not fingerprinted** → revalidated (304, ~300 B) on every page load = an extra US round trip each. CSS/JS are fingerprinted and served from cache (0 ms). Recommendation: fingerprint fonts + long immutable cache; preload Geist.
+- `/fetch-now/status` loaded by hx-get after page load on Today and Settings = a second sequential round trip; inline its initial state in the page.
+- No CLS measured (0) in iframes; layout shift to re-check visually in pass 4.
