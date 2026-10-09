@@ -1,5 +1,5 @@
-<h1>What roles are you looking for?</h1>
-<p class="muted">Pick any that fit. Jobs are matched on these titles.</p>
+{% if not settings_page %}<h1>What roles are you looking for?</h1>
+<p class="muted">Pick any that fit. Jobs are matched on these titles.</p>{% endif %}
 <div class="chip-group">
   {% for r in cfg.roles %}<label class="chip"><input type="checkbox" name="roles" value="{{ r.label }}"{{ " checked" if r.label in up.roles }}> {{ r.label }}</label>{% endfor %}
 </div>

@@ -115,3 +115,10 @@ def test_finish_with_gap_sends_back(newbie, client_as):
     web = client_as(newbie, follow_redirects=False)
     web.post("/onboarding/roles", data={"roles": ["Data Analyst"]})
     assert web.post("/onboarding/finish").headers["location"].startswith("/onboarding/where")
+
+
+def test_default_title_exclusions_fit_the_experience_step(newbie, client_as, app_config):
+    r = client_as(newbie, follow_redirects=False).post("/onboarding/experience", data={
+        "experience_years": "1", "drop_if_min_years_at_least": "2", "experience_summary": "x",
+        "title_deny_text": ", ".join(app_config.default_title_deny)})
+    assert len(app_config.default_title_deny) > 10 and r.status_code == 303

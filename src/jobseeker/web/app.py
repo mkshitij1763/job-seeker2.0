@@ -48,7 +48,7 @@ class _Static(StaticFiles):
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
-    from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, pipeline
+    from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, pipeline, settings as settings_routes
 
     from jobseeker.db.core import connect
     from jobseeker.db.users import ensure_owner
@@ -89,6 +89,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.include_router(contacts.router, dependencies=[Depends(require_onboarded), Depends(owned_app)])
     app.include_router(pipeline.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
     app.include_router(admin.router, dependencies=[Depends(require_onboarded)])
+    app.include_router(settings_routes.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
     app.add_middleware(OriginCheck, base_url=settings.base_url)
 
     @app.exception_handler(NotAuthenticated)

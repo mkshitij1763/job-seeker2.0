@@ -20,6 +20,7 @@ from jobseeker.web.deps import current_user, get_conn
 router = APIRouter(prefix="/onboarding")
 STEPS = ["roles", "where", "experience", "resume"]
 MANUAL_ACHIEVEMENTS = 6
+TITLE_DENY_MAX = 30
 METRIC = re.compile(r"[\d][\d,.]*\s?(?:%|K\+?|M\+?|\+)?")
 
 
@@ -72,8 +73,9 @@ def parse_step(step: str, form, cfg) -> tuple[dict, dict[str, str]]:
         target = _num(form.get("target_base_lpa"), errors, "target_base_lpa", 0, 500, "Enter a number between 0 and 500")
         lists = {k: _list(form, k) for k in ("must_haves", "deal_breakers", "title_deny")}
         for k, v in lists.items():
-            if len(v) > LIST_MAX or any(len(x) > ITEM_MAX for x in v):
-                errors[k] = f"Up to {LIST_MAX} items of {ITEM_MAX} characters"
+            cap = TITLE_DENY_MAX if k == "title_deny" else LIST_MAX  # the default exclusions alone are 18 words
+            if len(v) > cap or any(len(x) > ITEM_MAX for x in v):
+                errors[k] = f"Up to {cap} items of {ITEM_MAX} characters"
         summary = (form.get("experience_summary") or "").strip()
         fields = {"experience_years": years, "drop_if_min_years_at_least": hide, "current_ctc_lpa": ctc,
                   "target_base_lpa": target, "experience_summary": summary, **lists}

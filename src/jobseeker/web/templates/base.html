@@ -20,7 +20,7 @@
 <body hx-boost="true">
 {% set path = request.url.path %}
 {% set items = [("today", "/today", "Today", nav.today if nav else 0), ("jobs", "/", "Jobs", nav.jobs if nav else 0),
-                ("pipeline", "/pipeline", "Pipeline", nav.pipeline if nav else 0)] %}
+                ("pipeline", "/pipeline", "Pipeline", nav.pipeline if nav else 0), ("gear", "/settings", "Settings", 0)] %}
 {% macro nav_links() -%}
   {% for key, href, label, count in items %}
   {% set active = (path == href) or (key == "jobs" and path.startswith("/applications/")) %}
@@ -45,11 +45,10 @@
     {{ nav_links() }}
     <div class="sidebar-foot">{{ run_notes_box() }}
       {% if user and user.is_admin %}<a class="nav-item" href="/admin">{{ icon("people") }}<span>Admin</span></a>{% endif %}
-      {% if user %}<form method="post" action="/logout"><button class="btn-ghost">Sign out</button></form>{% endif %}
     </div>
   </nav>
   <div>
-    <header class="topbar"><a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>{{ run_notes_box() }}{% if user %}<form method="post" action="/logout" class="topbar-signout"><button class="btn-ghost" aria-label="Sign out">Sign out</button></form>{% endif %}</header>
+    <header class="topbar"><a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>{{ run_notes_box() }}</header>
     <main class="main">
       {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
       {% if err %}<div class="flash err">{{ err }}</div>{% endif %}

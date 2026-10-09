@@ -1,4 +1,4 @@
-<h1>Where do you want to work?</h1>
+{% if not settings_page %}<h1>Where do you want to work?</h1>{% endif %}
 <div class="chip-group">
   {% for c in cfg.cities %}<label class="chip"><input type="checkbox" name="cities" value="{{ c }}"{{ " checked" if c in up.cities }}> {{ c }}</label>{% endfor %}
 </div>
