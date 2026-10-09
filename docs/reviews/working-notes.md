@@ -121,3 +121,21 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 - More menu: Mark sent, Applied via portal, Skip, Snooze 3d, Regenerate all, Undo last change, Not interested — "Mark sent" offered before Approve; destructive "Not interested" not separated. Term "Applied via portal" (owner) vs "Mark applied" (roommate). P3.
 - Drafts: "113/150 words", Save, explanation of greeting/signature, "AI prepared this… nothing is sent until you press Send." Good trust copy.
 - Phone (501 px): tabs People/Draft/Job switch client-side, default People for drafted (spec OK). Small targets: back link "← Jobs" 22 px tall, "Search LinkedIn ↗" 20 px. No h-scroll.
+
+## Pass 2: owner — Jobs (501 px phone layout)
+- Cards: title, score pill, "Sabre · Bengaluru · 2d · linkedin" (source lowercase), one ✓ + one ⚠ (truncated with …), next-step link "Find contacts →" (dead end in prod), Skip/Snooze buttons ~44 px. Header "86 jobs · swipe ← skip, → snooze". img p2-04.
+- Bands: Apply 86 · Review 52 · All 185 → 47 jobs only under All, unexplained (below cutoff?). Band names Apply/Review/All are terse; no tooltip/explainer of what decides the band.
+- **Role menu shows CSS-capitalised internal keys: "Ai Pm", "Apm", "Pm", "Founders Office", "Other", "Analytics", "Product Analyst"** — wrong casing and different vocabulary from onboarding's role chips. No counts, no current-selection mark. Source menu = ashby/greenhouse/indeed/lever/linkedin/naukri (vendor names). img p2-05. P2.
+- **Filter menus (`<details>`) don't close on Escape or on tapping outside**; the open menu covers the cards. P2 (a11y + usability).
+- "All roles/All cities/All sources" reset band to apply (see pass 1). P2.
+## Pass 2: owner — Pipeline (501)
+- Stat strip "55 Drafted (30d) · 1 Sent · 0 Replies · 0% Reply rate" overflows right; "Reply rate" clipped. **"Drafted (30d) 55" vs chip "Drafted 34"**: two numbers for one word. P2.
+- Chips: Shortlisted 52 · Drafted 34 · Approved 0 · Sent 1 · Replied 0 · … (horizontal scroll). Opens on Drafted (no follow-up due) — spec OK.
+- Nav badge "1" on Pipeline = Sent count? Reads like a notification. Unexplained. P3.
+- Cards: title, score, "Sabre · 0d since last action", "Find contacts →", "Move…" (details). img p2-06.
+## Pass 2: owner — Settings (501, read-only)
+- 3,138 px tall (~4.7 screens). Cards: Profile · What I'm looking for (Roles, Advanced (custom matching), Where, Experience and pay; **4 separate Save buttons**) · Resume and facts · Daily match alerts · Account (Fetch now, "GMAIL" all-caps label, Drafts go to … · connected today · Reconnect, Download my data, Sign out, Sign out everywhere, Delete my account).
+- Advanced copy: "Your matching was carried over as written. While "Title must contain" is set, the role chips above only change searches, not which titles pass." → two overlapping matching systems explained in jargon; chips look editable but may not change results. "Use the role chips instead" clears custom text with no confirm. P2.
+- Owner role chips ticked: PA, APM, PM, Founder's Office, Growth Analyst.
+- Delete page (GET only): "You're the only admin, so this account can't be deleted." + disabled button → checklist F (owner part) PASS.
+- No visible "Jobs up to 7 days old" setting even though the admin user view lists it. CHECK.
