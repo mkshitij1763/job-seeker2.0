@@ -114,6 +114,7 @@ class ContactsConfig(BaseModel):
     smtp_daily_limit: int = 60
     smtp_pause_seconds: float = 2.0
     sender_email: str = ""  # SMTP MAIL FROM only (nothing is sent); defaults to Preferences.email
+    smtp_verify: Literal["off", "on", "auto"] = "off"  # off on the server: Oracle blocks outbound port 25
 
 
 class Preferences(BaseModel):

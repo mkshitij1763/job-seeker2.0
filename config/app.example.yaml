@@ -19,7 +19,8 @@ search:
   max_searches_per_run: 60        # provisional: set from the hosting spike's first week
   max_searches_fetch_now: 30
   max_custom_queries: 3
-contacts: {tavily_monthly_limit: 950, apify_monthly_usd_limit: 4.5, hunter_monthly_limit: 45, smtp_daily_limit: 60}
+contacts: {tavily_monthly_limit: 950, apify_monthly_usd_limit: 4.5, hunter_monthly_limit: 45, smtp_daily_limit: 60,
+           smtp_verify: "off"}  # off | on | auto (auto probes port 25 once a day)
 default_title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president,
                      account executive, recruiter, designer, design lead, engineer, engineering, developer, architect,
                      product marketing]

@@ -12,6 +12,7 @@ from jobseeker.config import Preferences
 from jobseeker.contacts import names
 from jobseeker.contacts.domains import FREE_MAIL, domain_from_text, mx_host, pick_domain
 from jobseeker.contacts.people import Candidate, from_results, rank, role_words, search_queries
+from jobseeker.contacts.smtp_probe import port25_open
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
     blocked_names, blocked_profile_urls, bounced_emails, cached_search, emailed_count, get_domain, known_catch_all, link_contact,
@@ -24,6 +25,10 @@ from jobseeker.clock import app_now
 from jobseeker.db.usage import Budget, outreach_limits
 from jobseeker.llm import LLM
 from jobseeker.pipeline.normalize import normalize_company
+
+
+SERVER_NOTE = ("Email checks aren't available on this server; emails are best guesses unless Apify or Hunter "
+               "found them.")
 
 
 class FinderError(Exception):
@@ -41,6 +46,7 @@ class Deps:
     sleep: Callable[[float], None] = time.sleep
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     global_drafts_per_day: int = 20
+    port25: Callable[[sqlite3.Connection, datetime], bool] = port25_open
 
 
 def _search(deps: Deps, conn: sqlite3.Connection, company: str, budget: Budget, notes: list[str], query: str,
@@ -145,7 +151,12 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     taken = set(bounced_emails(conn, company))  # one address per person, never a bounced one
     catch_all = known_catch_all(dom, deps.now())
     learned_at = None  # set when this run asked the mail server
-    if domain and mx:
+    mode = prefs.contacts.smtp_verify
+    smtp_ok = mode == "on" or (mode == "auto" and deps.port25(conn, deps.now()))
+    if domain and mx and not smtp_ok:
+        notes.append(SERVER_NOTE)
+        save_domain(conn, norm, domain=domain, mx_host=mx, catch_all=catch_all, pattern=hints[0] if hints else None)
+    elif domain and mx:
         sender = prefs.contacts.sender_email or prefs.email
         try:
             with SmtpVerifier(mx, sender, socket.gethostname(), smtp_factory=deps.smtp_factory, sleep=deps.sleep,
@@ -166,7 +177,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                             if learned:
                                 hints = [learned] + [h for h in hints if h != learned]
         except PortBlocked:
-            notes.append("Couldn't verify on this network (port 25 blocked); try again from office Wi-Fi")
+            notes.append(SERVER_NOTE)
         except BudgetExceeded:
             notes.append("SMTP daily check limit reached")
         except VerifyUnavailable as e:

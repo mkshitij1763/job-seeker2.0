@@ -36,7 +36,7 @@ def find_state(conn: sqlite3.Connection, app_id: int, now: datetime) -> dict:
                        (app_id,)).fetchone()
     status, note = row["find_status"], row["find_error"]
     if status == "running" and row["find_started_at"] and row["find_started_at"] < iso(now - STALE_AFTER):
-        return {"status": "failed", "note": "Finding contacts timed out (the Mac may have slept). Try again."}
+        return {"status": "failed", "note": "Finding contacts timed out. Try again."}
     return {"status": status, "note": note}
 
 

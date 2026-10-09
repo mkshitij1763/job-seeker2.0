@@ -13,6 +13,12 @@ from tests.factories import make_job
 from tests.fakes import FakeLLM
 
 NOW = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _smtp_checks_on(prefs):
+    """These tests cover SMTP verification itself; the server default (off) is covered in test_smtp_switch.py."""
+    prefs.contacts.smtp_verify = "on"
 TEAM = [{"title": "Asha Rao - Product Lead @ Zepto", "url": "https://in.linkedin.com/in/asharao", "content": ""},
         {"title": "Vikram Singh - Senior PM at Zepto", "url": "https://in.linkedin.com/in/vsingh", "content": ""},
         {"title": "Other Person - PM at Swiggy", "url": "https://in.linkedin.com/in/other", "content": ""}]
@@ -114,7 +120,7 @@ def test_port_blocked_gives_likely_and_note(prefs):
         raise OSError("timed out")
     d, _ = deps(smtp_factory=blocked)
     summary = find_contacts(conn, app, prefs, d)
-    assert any("Couldn't verify on this network" in n for n in summary["notes"])
+    assert any("Email checks aren't available on this server" in n for n in summary["notes"])
     assert {p["email_status"] for p in people(conn, app)} == {"unverified"}
 
 
