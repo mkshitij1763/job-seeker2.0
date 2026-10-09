@@ -65,7 +65,7 @@
 | `docs/TESTING-CHECKLIST.md`, the user's hands-on test on the live server | `23863ad` |
 | Merge `origin/build/devops2` `070210a` (Railway steps 1–4: `serve --host`/`FORWARDED_ALLOW_IPS`, Dockerfile, `scripts/railway/start.sh`, runbook; fast-forward) | `070210a` |
 | Merge `origin/build/devops2` `e3cf80f` (Railway build fix: ECR base image, `railway.json` pins DOCKERFILE; `set-secrets.sh`; docs; fast-forward) | `e3cf80f` |
-| Admin user view (read-only), privacy line, invite link + test-user note | (this commit) |
+| Admin user view (read-only), privacy line, invite link + test-user note | `d85950a` |
 
 - **Tests after the devops2 merge + readiness pass (all of plans 2–6):** 877 pytest after the admin user view (868 after the Railway build-fix merge, 859 after the first Railway merge, 838 after the GCP merge; 831 also under TZ=UTC and TZ=America/New_York), 26 node (node baseline is now 26, not 19). `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
