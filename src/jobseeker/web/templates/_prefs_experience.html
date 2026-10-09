@@ -1,4 +1,4 @@
-<h1>Experience and pay</h1>
+{% if not settings_page %}<h1>Experience and pay</h1>{% endif %}
 {% macro err(k) %}{% if errors[k] %}<p class="field-err">{{ errors[k] }}</p>{% endif %}{% endmacro %}
 {% set years = up.experience_years %}
 {% set hide = up.drop_if_min_years_at_least if up.drop_if_min_years_at_least is not none else (((years + 1) * 2)|round(0, 'ceil') / 2 if years is not none else '') %}

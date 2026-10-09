@@ -134,7 +134,7 @@ label { font-size: 14px; }
   .topbar .brand { padding: 0; }
   .topbar .run-notes-panel { position: fixed; left: 16px; right: 16px; width: auto; top: calc(60px + env(safe-area-inset-top)); bottom: auto; }
   .main { padding: 16px 16px calc(92px + env(safe-area-inset-bottom)); }
-  .tabbar { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     background: var(--surface); border-top: 1px solid var(--line); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
   .tabbar .nav-item { position: relative; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; font-size: 11px; padding: 0; }
   .tabbar .nav-item .count { position: absolute; top: 2px; left: calc(50% + 6px); margin: 0; background: var(--accent); color: #fff; }
@@ -417,3 +417,10 @@ input, select, textarea { min-width: 0; }
 .field-err { color: var(--weak-fg); font-size: .9rem; margin: 4px 0 0; }
 .onboarding .sticky-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
 @media (max-width: 640px) { .onboarding .sticky-actions { position: sticky; bottom: 0; background: var(--surface); padding: .75rem 0; } }
+.role-row { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+@media (max-width: 640px) { .role-row { grid-template-columns: 1fr 1fr; } }
+.facts-form textarea { width: 100%; margin-bottom: 6px; }
+.prefs-section { border-top: 1px solid var(--line); padding: 10px 0; }
+.prefs-section > summary { cursor: pointer; font-weight: 600; }
+.settings .preview { border-color: var(--accent); background: var(--accent-wash); margin-bottom: 12px; }
+#account form { margin: 8px 0; }

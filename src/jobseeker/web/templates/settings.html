@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Settings · Job Seeker{% endblock %}
+{% block content %}
+{% set settings_page = true %}
+<header class="page-head"><h1>Settings</h1></header>
+<div class="settings">
+
+<section class="card block" id="profile">
+  <h2 class="section-title">Profile</h2>
+  <p><b>{{ user.name or "—" }}</b><br><span class="muted">{{ user.email }} · from your Google account</span></p>
+  <form method="post" action="/settings/profile" class="grid">
+    <label class="field">LinkedIn <input name="linkedin" type="url" inputmode="url" autocapitalize="off" value="{{ up.linkedin }}" placeholder="https://www.linkedin.com/in/…"></label>
+    <label class="field">GitHub <input name="github" type="url" inputmode="url" autocapitalize="off" value="{{ up.github }}" placeholder="https://github.com/…"></label>
+    <button class="btn">Save profile</button>
+  </form>
+</section>
+
+<section class="card block" id="looking-for">
+  <h2 class="section-title">What I'm looking for</h2>
+  {% if preview %}
+  <div class="card preview">
+    <p>This hides {{ preview.hidden|length }} jobs, brings back {{ preview.restored|length }} and skips {{ preview.skipped_apps|length }} drafted applications.</p>
+    <form method="post" action="/settings/prefs/{{ open_section }}">
+      {% for k, v in preview_form %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <input type="hidden" name="confirm" value="1">
+      <button class="btn btn-primary">Save</button> <a class="btn-ghost" href="/settings">Cancel</a>
+    </form>
+  </div>
+  {% endif %}
+  {% for key, label in [("roles", "Roles"), ("where", "Where"), ("experience", "Experience and pay")] %}
+  <details class="prefs-section"{% if open_section == key %} open{% endif %}>
+    <summary>{{ label }}</summary>
+    <form method="post" action="/settings/prefs/{{ key }}">
+      {% include "_prefs_" ~ key ~ ".html" %}
+      <button class="btn">Save {{ label|lower }}</button>
+    </form>
+  </details>
+  {% endfor %}
+  <p class="muted">Changes to roles, places, the years limit or title exclusions show a preview first.</p>
+</section>
+
+<section class="card block" id="resume">
+  <h2 class="section-title">Resume and facts</h2>
+  {% if facts_info and facts_info.resume_uploaded_at %}<p class="muted">resume.pdf · uploaded {{ facts_info.resume_uploaded_at|age }}</p>{% endif %}
+  <form method="post" action="/settings/resume" enctype="multipart/form-data">
+    <label class="field">Replace resume (PDF, up to 5 MB and 10 pages)
+      <input type="file" name="resume" accept="application/pdf" required>
+    </label>
+    {% if errors.resume %}<p class="field-err">{{ errors.resume }}</p>{% endif %}
+    <button class="btn">Upload</button>
+  </form>
+  {% include "_resume_status.html" %}
+</section>
+
+<section class="card block" id="account">
+  <h2 class="section-title">Account</h2>
+  <p><a class="btn" href="/settings/export" hx-boost="false">Download my data</a></p>
+  <form method="post" action="/logout"><button class="btn">Sign out</button></form>
+  <form method="post" action="/logout/all"><button class="btn-ghost">Sign out everywhere</button></form>
+  <p><a class="btn-ghost bad" href="/settings/delete">Delete my account</a></p>
+</section>
+
+</div>
+{% endblock %}

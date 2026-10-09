@@ -1,0 +1,17 @@
+{# The resume card's live part: polls while reading, then offers review (or manual entry when there are no facts). #}
+{% set st = row.extract_status %}
+<div id="resume-status"{% if st == "running" %} hx-get="{{ base }}/resume/status" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% if st == "running" %}
+    <p class="muted">Reading your resume…</p>
+  {% elif st == "failed" and row.extract_error %}
+    <p class="field-err">{{ row.extract_error }}</p>
+  {% endif %}
+  {% if facts %}
+    <h2>Check what we read</h2>
+    <p class="muted">Fix anything that's wrong. Scores and drafts use only these facts.</p>
+    {% with action=base ~ "/facts", manual=false, button="Save facts" %}{% include "_facts_form.html" %}{% endwith %}
+  {% elif st == "failed" %}
+    <h2>Enter my skills myself</h2>
+    {% with action=base ~ "/facts/manual", manual=true, button="Enter my skills myself" %}{% include "_facts_form.html" %}{% endwith %}
+  {% endif %}
+</div>

@@ -1,0 +1,17 @@
+{% extends "bare.html" %}
+{% block title %}Delete my account · Job Seeker{% endblock %}
+{% block content %}
+<div class="card block">
+  <h1>Delete my account</h1>
+  <p>Type your email to confirm. Shared job listings stay. Backups keep copies for up to 4 weeks.</p>
+  <p class="muted">Your preferences, resume, scores, applications and drafts are removed. To come back you'd need a new invite.</p>
+  {% if error %}<p class="field-err">{{ error }}</p>{% endif %}
+  <form method="post" action="/settings/delete">
+    <label class="field">Your email <input name="email" type="email" autocomplete="off" autocapitalize="off" required placeholder="{{ user.email }}"></label>
+    {% if only_admin %}<p class="muted">You're the only admin, so this account can't be deleted.</p>{% endif %}
+    <button class="btn btn-danger bad"{% if only_admin %} disabled{% endif %}>Delete my account</button>
+    <a class="btn-ghost" href="/settings">Cancel</a>
+  </form>
+  <p><a href="/settings/export" hx-boost="false">Download my data first</a></p>
+</div>
+{% endblock %}

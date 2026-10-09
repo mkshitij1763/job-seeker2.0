@@ -1,0 +1,22 @@
+{% extends "bare.html" %}
+{% block title %}Your resume · Job Seeker{% endblock %}
+{% block content %}
+<div class="card block onboarding">
+  <p class="muted mono">Step {{ step_no }} of {{ steps }}</p>
+  <h1>Your resume</h1>
+  {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+  <form method="post" action="/onboarding/resume" enctype="multipart/form-data">
+    <label class="field">PDF, up to 5 MB and 10 pages
+      <input type="file" name="resume" accept="application/pdf" required>
+    </label>
+    {% if errors.resume %}<p class="field-err">{{ errors.resume }}</p>{% endif %}
+    <button class="btn">Upload</button>
+  </form>
+  {% include "_resume_status.html" %}
+  <div class="sticky-actions">
+    <form method="post" action="/onboarding/finish"><button class="btn btn-primary"{% if not facts %} disabled{% endif %}>Finish</button></form>
+    <a class="btn-ghost" href="/onboarding/experience">Back</a>
+  </div>
+</div>
+{% endblock %}
