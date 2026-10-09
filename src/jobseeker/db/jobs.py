@@ -151,13 +151,21 @@ def job_from_row(row: dict) -> Job:
 
 
 def jobs_needing_score(conn: sqlite3.Connection, user_id: int, rubric_version: str, limit: int,
-                       force: bool = False, with_jd: bool = False) -> list[dict]:
+                       force: bool = False, with_jd: bool = False, profile_hash: str | None = None,
+                       exclude: set[int] = frozenset()) -> list[dict]:
+    """With profile_hash (the pipeline's call), a score is fresh only if its profile_hash matches too, and only
+    jobs this user has evaluated (a user_jobs row) come back. exclude drops ids already handled this run."""
     tail = ("AND TRIM(j.jd_text) != '' " if with_jd else "") + \
         "ORDER BY COALESCE(uj.prescore, -1) DESC, j.first_seen_at DESC, j.id DESC LIMIT :limit"
     fresh = "" if force else """AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = :u AND s.job_id = j.id
-                                    AND s.rubric_version = :rv AND s.jd_hash = j.jd_hash)"""
-    sql = f"SELECT j.*, uj.prescore AS uj_prescore FROM jobs j {_UJ} WHERE uj.filter_reason IS NULL {fresh} {tail}"
-    return [dict(r) for r in conn.execute(sql, {"u": user_id, "rv": rubric_version, "limit": limit}).fetchall()]
+                                    AND s.rubric_version = :rv AND s.jd_hash = j.jd_hash
+                                    AND (:ph IS NULL OR s.profile_hash = :ph))"""
+    skip = f"AND j.id NOT IN ({','.join(str(int(i)) for i in exclude)})" if exclude else ""
+    evaluated = "AND uj.job_id IS NOT NULL" if profile_hash is not None else ""
+    sql = (f"SELECT j.*, uj.prescore AS uj_prescore FROM jobs j {_UJ} WHERE uj.filter_reason IS NULL "
+           f"{evaluated} {fresh} {skip} {tail}")
+    params = {"u": user_id, "rv": rubric_version, "limit": limit, "ph": profile_hash}
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
 def save_score(conn: sqlite3.Connection, user_id: int, job_id: int, result: ScoreResult, model: str,

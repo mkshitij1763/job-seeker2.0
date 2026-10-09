@@ -167,3 +167,19 @@ def test_verdicts_are_per_user(tmp_path):
     assert jobs_needing_score(conn, 1, "v1", 10) == []
     assert [r["id"] for r in jobs_needing_score(conn, 2, "v1", 10)] == [a]
     assert tuple(conn.execute("SELECT filter_reason, prescore FROM jobs WHERE id = ?", (a,)).fetchone()) == (None, None)
+
+
+def test_profile_hash_makes_scores_stale(tmp_path):
+    from jobseeker.db.jobs import jobs_needing_score, save_score, set_prescore
+    from jobseeker.models import ScoreResult
+
+    conn = connect(tmp_path / "db.sqlite")
+    a, _ = upsert_job(conn, make_job(source_job_id="a", fingerprint="fa", jd_text="SQL"))
+    set_prescore(conn, 1, a, 50)
+    h = conn.execute("SELECT jd_hash FROM jobs WHERE id = ?", (a,)).fetchone()[0]
+    save_score(conn, 1, a, ScoreResult(score=80, breakdown={}, matches=[], gaps=[], recommendation="apply",
+                                       role_family="x"), "m", "v1", h, profile_hash="p1")
+    assert jobs_needing_score(conn, 1, "v1", 10, with_jd=True, profile_hash="p1") == []
+    assert [r["id"] for r in jobs_needing_score(conn, 1, "v1", 10, with_jd=True, profile_hash="p2")] == [a]
+    assert jobs_needing_score(conn, 1, "v1", 10, with_jd=True, profile_hash="p2", exclude={a}) == []
+    assert [r["id"] for r in jobs_needing_score(conn, 1, "v1", 10, force=True, exclude=set())] == [a]
