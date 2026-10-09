@@ -139,3 +139,10 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 - Owner role chips ticked: PA, APM, PM, Founder's Office, Growth Analyst.
 - Delete page (GET only): "You're the only admin, so this account can't be deleted." + disabled button → checklist F (owner part) PASS.
 - No visible "Jobs up to 7 days old" setting even though the admin user view lists it. CHECK.
+
+## Checklist A "Preference preview" (done on the ROOMMATE to keep the owner untouched; same code path)
+- Settings → Where → tick Hyderabad → "Save where" (button sits inline after the Remote checkbox; "Save profile" above is full-width: inconsistent). Boosted POST → page swaps, scrolls to top, preview card in "What I'm looking for": "This hides 0 jobs, brings back 25 and skips 0 drafted applications. [Save] [Cancel]". Clear, good. img p3-01.
+  - Copy: "brings back 25" for a newly added city (they were never shown) → "adds 25"; "drafted applications" for a user with no drafts (outreach off).
+  - **The URL becomes `/settings/prefs/where` (hx-boost pushes the POST URL); a refresh/back-forward lands on raw JSON `{"detail":"Method Not Allowed"}` (405).** P2. Same likely for every boosted POST that re-renders (e.g. 422 on Settings).
+  - First DOM check found nothing because swap finished after my check → the swap gives no busy cue for ~1 s. P3.
+- Cancel → back to /settings, Hyderabad unticked, nothing saved. **PASS.** Confirm-Save not exercised (a run was in progress for this user).
