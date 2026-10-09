@@ -214,15 +214,20 @@ def companies() -> None:
 
 @app.command()
 def serve(port: int = 8000,
+          host: str = typer.Option("127.0.0.1", help="Address to bind (0.0.0.0 inside a container)."),
           proxy_headers: bool = typer.Option(False, "--proxy-headers/--no-proxy-headers",
-                                             help="Trust X-Forwarded-* from Caddy on 127.0.0.1 (server only).")) -> None:
-    """Start the dashboard on http://127.0.0.1:<port>."""
+                                             help="Trust X-Forwarded-* from the proxies in FORWARDED_ALLOW_IPS "
+                                                  "(default 127.0.0.1, i.e. Caddy; Railway sets *).")) -> None:
+    """Start the dashboard on http://<host>:<port> (127.0.0.1 unless --host)."""
+    import os
+
     import uvicorn
 
     from jobseeker.web.app import create_app
 
-    extra = {"proxy_headers": True, "forwarded_allow_ips": "127.0.0.1"} if proxy_headers else {}
-    uvicorn.run(create_app(Settings()), host="127.0.0.1", port=port, **extra)
+    extra = ({"proxy_headers": True, "forwarded_allow_ips": os.environ.get("FORWARDED_ALLOW_IPS") or "127.0.0.1"}
+             if proxy_headers else {})
+    uvicorn.run(create_app(Settings()), host=host, port=port, **extra)
 
 
 @app.command("gen-key")

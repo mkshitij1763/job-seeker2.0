@@ -9,8 +9,12 @@ def test_no_send_calls_anywhere():
     assert "gmail.send" not in code and "mail.google.com/mail/feed" not in code
 
 
-def test_server_binds_localhost_only():
-    assert 'host="127.0.0.1"' in (SRC / "cli.py").read_text()
+def test_server_binds_localhost_unless_told_otherwise():
+    # `--host 0.0.0.0` exists only for the Railway container (scripts/railway/start.sh); the default stays localhost.
+    import inspect
+
+    from jobseeker.cli import serve
+    assert inspect.signature(serve).parameters["host"].default.default == "127.0.0.1"
 
 
 def test_no_runtime_reads_of_profile_files():
