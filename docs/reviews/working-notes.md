@@ -229,3 +229,9 @@ Timeline: click 05:20:2x → POST /applications/169/contacts/find 200 → booste
 - "Find contacts again" (paid search) and Remove: no confirmation, no cost hint. P2.
 - Add someone myself: name, role, LinkedIn URL, email, status; nothing required. P3.
 - img p2-09.
+
+## Sign out (roommate)
+- Sign out → lands directly on **Google's account chooser** ("Sign in with Google · Choose an account") — no "You're signed out" page, no way back to the landing page. Feels like the app is asking to sign in again; on a shared device the next person sees the account list. P2: land on the public landing with "You're signed out." (and for Delete: "Your account is deleted.").
+- (My first click didn't register — tooling; the second navigated. So sign-out works, unlike Delete's silent no-op. Not re-tested: Sign out everywhere.)
+- Settings → Daily match alerts for a new user: "Tell me once a day when there are new strong matches" checkbox **pre-ticked** + "Add Job Seeker to your Home Screen first…" → it looks on, but can't be on until installed. P3.
+- Settings → Account shows the Fetch now slot as "Running since 05:07" (a pill), between Account header and Download my data — no label that this is Fetch now. P3.
