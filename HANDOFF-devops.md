@@ -71,7 +71,7 @@
 | `ca94fbb` | docs: handoff row for fix 1 |
 | `cff3825` | trial fix 2: LLMUnavailable during facts extraction says the AI service is down (wording only) |
 | `f618bc7` | docs: handoff row for fix 2 |
-| (fix 3 commit) | trial fix 3: Fetch now skips ATS boards fetched OK in the last 12h (`board_fetches`, v4 amended in place) |
+| `f9d97de` | trial fix 3: Fetch now skips ATS boards fetched OK in the last 12h (`board_fetches`, v4 amended in place) |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **UPDATE from `manager` (2026-10-09, after backend-lead2's e46bcce):** FIRST merge `origin/multi-user` (now at `e46bcce`, 826 pytest; outreach plan 5 complete + review fixes). For fix #2, backend-lead2 ALREADY made facts extraction refund its budget unit on every failure (LLMUnavailable included) in `profile/extract.py`. So fix #2 is now ONLY the user-facing wording for LLMUnavailable; don't touch the budget logic. backend-lead2 is now idle, so its files are free, but keep edits minimal.
