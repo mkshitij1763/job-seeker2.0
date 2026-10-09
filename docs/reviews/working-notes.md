@@ -190,3 +190,19 @@ Theme follows `prefers-color-scheme` only (no in-app switch). Light tokens per s
 - Jobs j/k moves a `.sel` row highlight (works), but focus stays on <body> → screen readers don't follow; Enter/s/z act on a row the AT can't perceive. P2. (s/z not pressed on owner.)
 - Tab focus: `:focus-visible` 2 px accent outline + 2 px offset on buttons/links/summary: GOOD. Inputs only change border colour (weak). No skip link; ~300 controls before content ends on Jobs. P3.
 - Filter `<details>` menus: no Esc / outside-click close (see pass 2).
+
+## Keys added on Railway (manager, deploy 858166ad 05:14 IST): Find contacts now ENABLED on /applications/188 (verified 05:19).
+- Keep as finding: before the keys, Find contacts was `disabled` with a dev tooltip "Add TAVILY_API_KEY to .env" (invisible on touch, dev wording). Recommendation: when a service is missing, show a visible user-facing line ("Contact search is off on this server; ask Kshitij") and hide the Find-contacts chips/next-step on cards.
+
+## Find contacts — the review's ONE run (owner, user OK'd directly 05:19 IST), /applications/169 Groww APM (score 92)
+Timeline: click 05:20:2x → POST /applications/169/contacts/find 200 → boosted reload to top → People card "Finding contacts… (searching, ranking and verifying emails, about half a minute)" polling `/contacts/card` every 3 s → results 05:21:08 (**~48 s**, copy promises "about half a minute").
+- **No feedback where the user tapped**: the step-card button gives no busy state; the page reloads to the top and the progress text lives in the People card, below the fold on desktop (on phone it's the default tab, OK). P2.
+- **P1 stale step card**: after results arrive, the top card still shows "① Find contacts" with an enabled primary "Find contacts" button (only #people-card is swapped). Pressing it starts a fresh paid search (claim_find only blocks *concurrent* runs). A manual reload shows the right state: "✓ Find contacts → ② Approve · Review and approve ↓ · Approve creates Gmail drafts for Anandh Rajan and Satvik Bansal. Nothing is sent until you press Send in Gmail." Same root cause as the onboarding Finish bug: polling swaps a fragment, dependent UI outside it goes stale. img p2-08.
+- Results card: "Found 3 people, 0 verified emails. Email checks aren't available on this server; emails are best guesses unless Apify or Hunter found them." (server/vendor wording; say "We couldn't verify these emails; they're our best guess").
+  - #1 Anandh Rajan · hiring manager · email now · "Product Manager at Groww" · anandh.rajan@groww.in · likely — good pick.
+  - #2 Satvik Bansal · team lead · email now · headline "**Product @ slice** | Groww | IIT Kharagpur" → appears to work at **slice now**; email guessed @groww.in.
+  - #3 Vineet Shukla · peer · follow-up · "**Stealth** | **Ex-PM at Groww** | IITK'21" → left Groww; email guessed @groww.in.
+  - **P1 contact quality: 2 of 3 are not current Groww employees, yet get @groww.in guesses; #2 is in wave 1, so Approve would draft to a likely-dead address.** The ranker should drop "ex-"/"former"/other-company-first headlines, or label "May have left Groww".
+- Labels: role chip (hiring manager/team lead/peer), timing chip ("email now"/"follow-up"), status "likely" (amber mono pill). No legend for "likely" vs "verified"; "email now"/"follow-up" chips are unexplained.
+- Quota line moved: Tavily 32→36, Apify $0.24→$0.27, Hunter 4→5 (one find ≈ 4 Tavily calls + ~$0.03 Apify + 1 Hunter).
+- Approve NOT pressed. Nothing sent.
