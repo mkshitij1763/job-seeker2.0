@@ -62,7 +62,7 @@
 | Merge-readiness pass: README, `.env.example`, `HANDOFF.md` §8, PR description | `477da80` |
 | Readiness fixes: `migrate` writes a missing `config/app.yaml`; `app.yaml` git-ignored | `d1e1fdf` |
 | Merge `origin/build/devops2` `19f68f8` (GCP e2-micro host: swap, tick memory cap, docs Oracle → GCP) | `f43a341` |
-| `docs/TESTING-CHECKLIST.md`, the user's hands-on test on the live server | (this commit) |
+| `docs/TESTING-CHECKLIST.md`, the user's hands-on test on the live server | `23863ad` |
 
 - **Tests after the devops2 merge + readiness pass (all of plans 2–6):** 838 pytest after the GCP merge (831 also under TZ=UTC and TZ=America/New_York), 26 node (node baseline is now 26, not 19). `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
