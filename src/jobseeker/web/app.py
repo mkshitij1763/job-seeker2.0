@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from jobseeker.config import Settings, load_app_config, load_rubric
 from jobseeker.status import allowed_next
 from jobseeker.web.csrf import OriginCheck
-from jobseeker.web.deps import NotAuthenticated, current_user, owned_app
+from jobseeker.web.deps import NotAuthenticated, NotOnboarded, current_user, owned_app, require_onboarded
 from jobseeker.web.filters import age, highlight, personal_note
 from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.view import STEPS, TIER_LABELS, tier
@@ -48,7 +48,7 @@ class _Static(StaticFiles):
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
-    from jobseeker.web import admin, application, auth, contacts, health, inbox, pipeline
+    from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, pipeline
 
     from jobseeker.db.core import connect
     from jobseeker.db.users import ensure_owner
@@ -84,10 +84,11 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.include_router(health.router)  # public, before the guarded routers
     app.include_router(auth.router)
     app.include_router(inbox.router)  # "/" depends on optional_user itself
-    app.include_router(application.router, dependencies=[Depends(owned_app)])
-    app.include_router(contacts.router, dependencies=[Depends(owned_app)])
-    app.include_router(pipeline.router, dependencies=[Depends(current_user)])
-    app.include_router(admin.router)
+    app.include_router(onboarding.router)  # signed in, but deliberately not require_onboarded
+    app.include_router(application.router, dependencies=[Depends(require_onboarded), Depends(owned_app)])
+    app.include_router(contacts.router, dependencies=[Depends(require_onboarded), Depends(owned_app)])
+    app.include_router(pipeline.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
+    app.include_router(admin.router, dependencies=[Depends(require_onboarded)])
     app.add_middleware(OriginCheck, base_url=settings.base_url)
 
     @app.exception_handler(NotAuthenticated)
@@ -98,6 +99,13 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
             path = urlsplit(current).path if current else target
             return Response(status_code=401, headers={"HX-Redirect": f"/login?next={quote(path)}"})
         return RedirectResponse(f"/login?next={quote(target)}", 303)
+
+    @app.exception_handler(NotOnboarded)
+    async def _to_onboarding(request, exc):
+        target = f"/onboarding/{exc.step}"
+        if request.headers.get("HX-Request"):
+            return Response(status_code=401, headers={"HX-Redirect": target})
+        return RedirectResponse(target, 303)
 
     @app.middleware("http")
     async def _refresh_session_cookie(request, call_next):

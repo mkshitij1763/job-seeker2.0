@@ -1,0 +1,10 @@
+<h1>Where do you want to work?</h1>
+<div class="chip-group">
+  {% for c in cfg.cities %}<label class="chip"><input type="checkbox" name="cities" value="{{ c }}"{{ " checked" if c in up.cities }}> {{ c }}</label>{% endfor %}
+</div>
+{% set others = up.cities|reject("in", cfg.cities)|list %}
+<label class="field">Other cities (comma-separated)
+  <input name="cities_text" value="{{ others|join(', ') }}" placeholder="e.g. Kolkata">
+</label>
+<label class="check"><input type="checkbox" name="remote_india_ok"{{ " checked" if up.remote_india_ok }}> Remote within India is fine</label>
+{% if errors.cities %}<p class="field-err">{{ errors.cities }}</p>{% endif %}

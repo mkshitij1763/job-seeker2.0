@@ -70,6 +70,19 @@ def owned_app(app_id: int, user: User = Depends(current_user), conn=Depends(get_
     return app_id
 
 
+class NotOnboarded(Exception):
+    def __init__(self, step: str):
+        self.step = step
+
+
+def require_onboarded(user: User = Depends(current_user), conn=Depends(get_conn)) -> User:
+    from jobseeker.db.profile import get_onboarding
+    step, done = get_onboarding(conn, user.id)
+    if not done:
+        raise NotOnboarded(step or "roles")
+    return user
+
+
 def current_prefs(request: Request, user: User = Depends(current_user), conn=Depends(get_conn)):
     """The signed-in user's effective Preferences, read fresh per request (cached within it by FastAPI)."""
     from jobseeker.db.profile import load_user_context

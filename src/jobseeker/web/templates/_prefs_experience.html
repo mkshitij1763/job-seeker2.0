@@ -1,0 +1,28 @@
+<h1>Experience and pay</h1>
+{% macro err(k) %}{% if errors[k] %}<p class="field-err">{{ errors[k] }}</p>{% endif %}{% endmacro %}
+{% set years = up.experience_years %}
+{% set hide = up.drop_if_min_years_at_least if up.drop_if_min_years_at_least is not none else (((years + 1) * 2)|round(0, 'ceil') / 2 if years is not none else '') %}
+<label class="field">Years of experience
+  <input name="experience_years" type="number" step="0.1" min="0" max="30" inputmode="decimal" value="{{ years if years is not none else '' }}">
+</label>{{ err("experience_years") }}
+<label class="field">Hide jobs asking for at least __ years
+  <input name="drop_if_min_years_at_least" type="number" step="0.5" min="0" max="40" inputmode="decimal" value="{{ hide }}">
+</label>{{ err("drop_if_min_years_at_least") }}
+<label class="field">Current CTC, LPA (optional)
+  <input name="current_ctc_lpa" type="number" step="0.1" min="0" max="500" inputmode="decimal" value="{{ up.current_ctc_lpa if up.current_ctc_lpa is not none else '' }}">
+</label>{{ err("current_ctc_lpa") }}
+<label class="field">Target base, LPA (optional)
+  <input name="target_base_lpa" type="number" step="0.1" min="0" max="500" inputmode="decimal" value="{{ up.target_base_lpa if up.target_base_lpa is not none else '' }}">
+</label>{{ err("target_base_lpa") }}
+<label class="field">Must-haves (comma-separated)
+  <input name="must_haves_text" value="{{ up.must_haves|join(', ') }}" placeholder="e.g. B2C, AI">
+</label>{{ err("must_haves") }}
+<label class="field">Deal-breakers (comma-separated)
+  <input name="deal_breakers_text" value="{{ up.deal_breakers|join(', ') }}" placeholder="e.g. night shifts">
+</label>{{ err("deal_breakers") }}
+<label class="field">Hide titles containing (comma-separated)
+  <input name="title_deny_text" value="{{ (up.title_deny if up.title_deny is not none else cfg.default_title_deny)|join(', ') }}">
+</label>{{ err("title_deny") }}
+<label class="field">Your experience in a sentence or two
+  <textarea name="experience_summary" rows="3" placeholder="e.g. 2 years as a Product Analyst at a fintech">{{ up.experience_summary }}</textarea>
+</label>{{ err("experience_summary") }}

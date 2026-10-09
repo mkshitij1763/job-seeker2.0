@@ -1,7 +1,7 @@
 from fastapi.routing import APIRoute, iter_route_contexts
 
 from jobseeker.web.app import PUBLIC, create_app
-from jobseeker.web.deps import current_user, optional_user, owned_app, require_admin
+from jobseeker.web.deps import current_user, optional_user, owned_app, require_admin, require_onboarded
 
 
 def _api_routes(app):
@@ -27,6 +27,10 @@ def test_every_route_is_guarded(settings):
             assert optional_user in calls
             continue
         assert current_user in calls, f"{r.path} has no current_user"
+        if r.path.startswith("/onboarding"):
+            assert require_onboarded not in calls, f"{r.path} must not require onboarding"
+        elif not r.path.startswith(("/logout", "/settings/delete", "/settings/export")):
+            assert require_onboarded in calls, f"{r.path} has no require_onboarded"
         if r.path.startswith("/admin"):
             assert require_admin in calls, f"{r.path} has no require_admin"
         if "{app_id}" in r.path:
