@@ -110,22 +110,28 @@ def rescore(user: str = typer.Option("", "--user", help="The user's email (defau
 @app.command()
 def refilter(apply: bool = typer.Option(False, "--apply", help="Write the changes (default: only list them)."),
              user: str = typer.Option("", "--user", help="The user's email (default: the owner).")) -> None:
-    """Re-apply preferences.yaml filters to stored jobs (after changing title, city or experience rules)."""
+    """Re-apply the user's preferences to stored jobs, both ways: hide newly filtered ones, bring back loosened ones."""
     from datetime import UTC, datetime
 
-    from jobseeker.pipeline.refilter import refilter as run_refilter
+    from jobseeker.pipeline.evaluate import reevaluate
 
-    _, _, conn, uid, prefs, _ = _ctx(user)
-    changes = run_refilter(conn, uid, prefs, datetime.now(UTC), apply=apply)
-    for c in changes:
-        effect = "-> skipped" if c["skips"] else f"(kept {c['status']})" if c["status"] else ""
+    _, _, conn, uid, prefs, facts = _ctx(user)
+    report = reevaluate(conn, uid, prefs, facts, datetime.now(UTC), apply=apply)
+    skipped = set(report.skipped_apps)
+    apps = {r["job_id"]: r["app_id"] for r in conn.execute(
+        "SELECT job_id, id AS app_id FROM applications WHERE user_id = ?", (uid,))}
+    for c in report.hidden + [n for n in report.new if n["reason"]]:
+        effect = "-> skipped" if apps.get(c["job_id"]) in skipped else ""
         typer.echo(f"  {c['title'][:40]:<41}{c['company'][:24]:<25}{c['reason']:<34}{effect}")
-    skipped = sum(c["skips"] for c in changes)
+    for c in report.restored:
+        typer.echo(f"  {c['title'][:40]:<41}{c['company'][:24]:<25}{'':<34}-> back")
+    hidden = len(report.hidden) + sum(1 for n in report.new if n["reason"])
     if apply:
-        typer.echo(f"Filtered {len(changes)} jobs; skipped {skipped} applications (Undo works on each).")
+        typer.echo(f"Filtered {hidden} jobs, brought back {len(report.restored)}; "
+                   f"skipped {len(skipped)} applications (Undo works on each).")
     else:
-        typer.echo(f"{len(changes)} jobs would be filtered, {skipped} applications skipped. "
-                   "Run again with --apply to do it.")
+        typer.echo(f"{hidden} jobs would be filtered, {len(report.restored)} brought back, {len(skipped)} applications "
+                   "skipped. Run again with --apply to do it.")
 
 
 @app.command()
