@@ -222,3 +222,10 @@ Timeline: click 05:20:2x → POST /applications/169/contacts/find 200 → booste
 - Owner's /applications/10, /applications/169, /applications/188/contacts/card, /admin, /admin/users/1 → **404 for the roommate: no data leak. PASS.** (Sequential integer IDs are safe because every query is user-scoped.)
 - **Every 404 (and 405 seen earlier) is a raw JSON page `{"detail":"Not Found"}`** — no layout, no nav, no "Back to Today". Hit by stale links (e.g. a job removed by Settings, the admin link in a shared screenshot, /settings/prefs/where after refresh). P2.
 - /onboarding/roles after onboarding → redirect (good). /onboarding/done stays reachable and still shows the first-run card (harmless).
+
+## People card interactions (owner, /applications/169, nothing saved)
+- Copy note (real click): button → "Copied ✓". GOOD. But the LinkedIn note (199 chars, "Hi Anandh, I admire Groww's mission…") is in a **hidden** textarea → user copies text they can't read first; and the failure toast ("Couldn't copy. Select the text and copy it manually.") points at text that isn't visible → dead end when the clipboard is blocked (seen with a scripted click; can happen in in-app browsers). P2: show the note (collapsed preview) and make the fallback select a visible field.
+- Edit / remove (per person): name, email, status select [unverified/verified/bounced] + Save; "Remove & use next candidate". **Vocabulary mismatch: pill says "likely", the select says "unverified"** for the same email. User can set "verified" by hand (word implies the system checked). No confirm on Remove. P2/P3.
+- "Find contacts again" (paid search) and Remove: no confirmation, no cost hint. P2.
+- Add someone myself: name, role, LinkedIn URL, email, status; nothing required. P3.
+- img p2-09.
