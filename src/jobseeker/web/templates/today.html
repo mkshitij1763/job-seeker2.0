@@ -10,12 +10,25 @@
   <p class="muted">Here's what needs you today.</p>
 </header>
 <div class="stats">
-  {% for label, n, anchor in [("New today", t.new_since_yesterday, "/"), ("Ready to approve", t.ready|length, "#ready"),
-                              ("Need contacts", t.find_contacts|length, "#find"), ("Send in Gmail", t.send|length, "#send")] %}
+  {% set tiles = [("New today", t.new_since_yesterday, "/"), ("Ready to approve", t.ready|length, "#ready"),
+                  ("Need contacts", t.find_contacts|length, "#find"), ("Send in Gmail", t.send|length, "#send")]
+     if can_outreach else [("New today", t.new_since_yesterday, "/"), ("Shortlisted", t.shortlisted|length, "#shortlisted")] %}
+  {% for label, n, anchor in tiles %}
   <a class="stat card" href="{{ anchor }}"{% if anchor.startswith("#") %} hx-boost="false"{% endif %}><b>{{ n }}</b><span class="stat-label">{{ label }}</span></a>
   {% endfor %}
 </div>
 <div class="today">
+  {% if not can_outreach %}
+  {% if t.shortlisted %}
+  <section class="card" id="shortlisted">
+    <h2 class="section-title">Shortlisted <span class="pill">{{ t.shortlisted|length }}</span></h2>
+    <p class="muted">Apply on the company site, then tap Mark applied on the job.</p>
+    {% for r in t.shortlisted %}<div class="today-row">{{ job(r) }}</div>{% endfor %}
+  </section>
+  {% else %}
+  <section class="card empty"><h2>All caught up</h2><p>Shortlist jobs from Jobs, then apply on the company site.</p></section>
+  {% endif %}
+  {% else %}
   {% if t.send %}
   <section class="card" id="send">
     <h2 class="section-title">{{ icon("gmail") }} Send in Gmail <span class="pill">{{ t.send|length }}</span></h2>
@@ -51,6 +64,7 @@
   {% endif %}
   {% if not (t.send or t.followups or t.ready or t.find_contacts) %}
   <section class="card empty"><h2>All caught up</h2><p>Nothing needs you right now. New jobs arrive after the 11:15 run.</p></section>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

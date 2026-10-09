@@ -115,3 +115,15 @@ def test_roommate_job_page_has_no_outreach_markup_and_can_mark_applied(seeded_tw
 def test_owner_job_page_keeps_outreach(seeded, client_as):
     html = client_as(1).get(f"/applications/{seeded[0]}").text
     assert "/approve" in html and 'data-tab="people"' in html and "Find contacts" in html
+
+
+def test_roommate_today_has_no_outreach_tiles(seeded_two, client_as):
+    html = client_as(2).get("/today").text
+    for bit in ("Send in Gmail", "Ready to approve", "Need contacts", "Find contacts", "Follow-ups due", 'value="sent"'):
+        assert bit not in html, bit
+    assert "Apply on the company site" in html and f"/applications/{seeded_two['roommate_app']}" in html
+
+
+def test_owner_today_keeps_outreach_tiles(seeded, client_as):
+    html = client_as(1).get("/today").text
+    assert "Send in Gmail" in html and "Need contacts" in html and "Apply on the company site" not in html
