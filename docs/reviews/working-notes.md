@@ -206,3 +206,14 @@ Timeline: click 05:20:2x → POST /applications/169/contacts/find 200 → booste
 - Labels: role chip (hiring manager/team lead/peer), timing chip ("email now"/"follow-up"), status "likely" (amber mono pill). No legend for "likely" vs "verified"; "email now"/"follow-up" chips are unexplained.
 - Quota line moved: Tavily 32→36, Apify $0.24→$0.27, Hunter 4→5 (one find ≈ 4 Tavily calls + ~$0.03 Apify + 1 Hunter).
 - Approve NOT pressed. Nothing sent.
+
+## Fetch now — owner (user OK'd directly), 05:22 IST
+- First click landed before the page was interactive → nothing happened, no feedback (P3: the slot is hx-loaded after the page, so the button can be dead for ~300 ms).
+- Second click → flash "Queued: starts after the current run" while the status line says "Queued, starts in a few minutes" (two different messages for one state; the first is correct, the roommate's run holds the lock). Button disappears.
+- Edge: POST /fetch-now again while queued → flash "Already queued", status unchanged, no new row. **PASS.** (Shown in a green "ok" flash although it's a refusal: P3.)
+- Roommate run: "Running since 05:07" still at 05:22 — 15+ min with no progress, no ETA, no "you can close this page".
+
+## **P1 CONFIRMED: validation errors on boosted pages are invisible (HTMX 2 does not swap 4xx)**
+- Roommate Settings → Replace resume → `fake.pdf` (%PDF header, not a real PDF) → Upload → `POST /settings/resume` **422**, but the page does not change at all: no error text, same DOM length, the bad file still selected, no flash. The user sees a dead Upload button.
+- Same mechanism covers every 422/403 re-render on boosted pages: `settings.py:75` (preferences validation), `:98/:113/:121` (resume / facts errors), `:155` delete "The email doesn't match", `:159` "You're the only admin", plus the CSRF 403 "Request blocked". Onboarding is unaffected (bare.html not boosted).
+- Fix: `htmx.config.responseHandling = [{code:"204", swap:false},{code:"[23]..", swap:true},{code:"4..", swap:true, error:false},{code:"...", swap:false, error:true}]` (or `hx-boost="false"` on these forms), and an htmx:responseError toast for 5xx.
