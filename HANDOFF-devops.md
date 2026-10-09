@@ -78,7 +78,7 @@
 | `579047e` | host → GCP e2-micro: bootstrap swap block (2 GB, swappiness 10), tick `MemoryHigh=600M` + `Nice=10`, spec/plan T5 runbook, HANDOFF.md §8, §6 here |
 | `639a929` | merge origin/multi-user `f981ed9` (readiness pass: migrate writes a missing config/app.yaml; 838 pytest / 26 node) |
 | `fd9f7bf` | Railway step 1: `serve --host` (default 127.0.0.1) + `--proxy-headers` trusts `FORWARDED_ALLOW_IPS` (default 127.0.0.1) |
-| (this commit) | Railway step 2: `Dockerfile` + `.dockerignore` (static tests in `tests/test_railway.py`) |
+| `1036824` | Railway step 2: `Dockerfile` + `.dockerignore` (static tests in `tests/test_railway.py`) |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **UPDATE from `manager` (2026-10-09, after backend-lead2's e46bcce):** FIRST merge `origin/multi-user` (now at `e46bcce`, 826 pytest; outreach plan 5 complete + review fixes). For fix #2, backend-lead2 ALREADY made facts extraction refund its budget unit on every failure (LLMUnavailable included) in `profile/extract.py`. So fix #2 is now ONLY the user-facing wording for LLMUnavailable; don't touch the budget logic. backend-lead2 is now idle, so its files are free, but keep edits minimal.
