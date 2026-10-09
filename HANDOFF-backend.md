@@ -44,11 +44,11 @@
   | Task | Commit |
   |---|---|
   | P5-T1 token sealing under TOKEN_KEY | `444ff5c` |
-  | P5-T2 migration v5, User.outreach_enabled | `this commit` |
+  | P5-T2 migration v5, User.outreach_enabled | `d9f0017` |
 
 - **Tests at `P5-T2`:** 722 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** HOLD. Plan 5 T1–T2 are done. **T3+ waits until `manager` confirms devops-lead2 is done with settings/admin/account.py** (extras T12/T14, pipeline T14/T16). Then plan 5 Task 3 (`require_outreach` gate, outreach router, admin toggle). Ledger `.superpowers/sdd/2026-10-08-mu-outreach/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** HOLD. Plan 5 T1–T2 went in early, before the user approved outreach; they stay (isolated, reversible). **Do not start plan 5 T3 or anything further until `manager` relays the user's go.** When it comes: devops-lead2 is out of admin and account.py, but still in `settings.py`/`settings.html` (pipeline T14, the Fetch now card), so coordinate the Settings Gmail card in P5-T8. Ledger `.superpowers/sdd/2026-10-08-mu-outreach/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
