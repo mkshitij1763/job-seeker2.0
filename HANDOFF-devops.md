@@ -34,10 +34,11 @@
 | `89cbaa9` | extras T13, public landing + invite-only page |
 | `8fc47f6` | pipeline T7, `fetch_shared` |
 | `5c67a71` | fast-forward of `build/devops2` to `multi-user` (plan 3 T1–T3: v2, AppConfig, load_user_context, effective_prefs) |
-| (this commit) | extras T7, migration v3 |
+| `261892e` | extras T7, migration v3 |
+| (this commit) | pipeline T3, AppConfig schedule/fetch-now/lock/fairness settings |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT (approved by `manager`, in order):** pipeline T3 (AppConfig additions) → pipeline T4 (migration v4) → pipeline T5 (locks) → extras T8 (nightly_backup; no facts.json, facts live in the DB since `08ec981`) → extras T10 (notify) → pipeline T9 → T10 → T11 → T15. Defer extras T11 until plan 3 T4 (`require_onboarded`) lands. Still waiting on plan 3: extras T12, T14; pipeline T8, T12–T14, T16; hosting T5 (manual). Stay out of files plan 3 T4–T9 edit (web/app.py, web/deps.py, cli.py, pipeline/evaluate.py, pipeline/refilter.py, db/account.py, base.html, onboarding/settings modules) or keep edits tiny and report them. The executing-plans final whole-branch review is still owed at the end.
+- **NEXT (approved by `manager`, in order):** pipeline T4 (migration v4) → pipeline T5 (locks) → extras T8 (nightly_backup; no facts.json, facts live in the DB since `08ec981`) → extras T10 (notify) → pipeline T9 → T10 → T11 → T15 → extras T11 (unblocked: plan 3 T4 landed at `3ab1864`; merge origin/multi-user first; `/push/*` and `/sw.js` stay WITHOUT `require_onboarded`, so add them to the guard test's exemption list). Still waiting on plan 3: extras T12, T14; pipeline T8, T12–T14, T16; hosting T5 (manual). Stay out of files plan 3 T4–T9 edit (web/app.py, web/deps.py, cli.py, pipeline/evaluate.py, pipeline/refilter.py, db/account.py, base.html, onboarding/settings modules) or keep edits tiny and report them. The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
