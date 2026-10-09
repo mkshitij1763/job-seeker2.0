@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from jobseeker.config import ITEM_MAX, LIST_MAX
 from jobseeker.db.core import connect, iso
-from jobseeker.db.profile import (claim_extract, facts_row, get_facts, get_onboarding, get_user_prefs,
+from jobseeker.db.profile import (claim_extract, extract_running, facts_row, get_facts, get_onboarding, get_user_prefs,
                                   load_user_context, save_facts, save_user_prefs, set_onboarding)
 from jobseeker.pipeline.evaluate import reevaluate
 from jobseeker.profile.extract import run_extract
@@ -20,6 +20,7 @@ from jobseeker.web.deps import current_user, get_conn
 router = APIRouter(prefix="/onboarding")
 STEPS = ["roles", "where", "experience", "resume"]
 MANUAL_ACHIEVEMENTS = 6
+STILL_READING = "Still reading your previous upload; try again in a minute"
 TITLE_DENY_MAX = 30
 METRIC = re.compile(r"[\d][\d,.]*\s?(?:%|K\+?|M\+?|\+)?")
 
@@ -109,6 +110,8 @@ async def accept_upload(request: Request, conn, user_id: int, upload: UploadFile
     """Validate, store and (unless the same file was read before) queue fact extraction. Returns a flash message;
     raises ResumeRejected with the user-facing reason."""
     state, now = request.app.state, datetime.now(UTC)
+    if extract_running(conn, user_id, now):  # storing now would let the running read save facts for the wrong file
+        return STILL_READING
     data = await upload.read(MAX_BYTES + 1)  # never hold more than the limit
     validate_pdf(data, upload.content_type or "")
     _, sha = store_resume(state.settings.jobseeker_home, user_id, data)
@@ -135,10 +138,12 @@ def parse_facts_form(form, manual: bool = False) -> tuple[Facts | None, dict[str
     errors: dict[str, str] = {}
     headline = (form.get("headline") or "").strip()
     skills = [x.strip() for x in (form.get("skills_text") or "").split(",") if x.strip()]
-    texts = [t.strip() for t in form.getlist("achievement") if t.strip()]
     orgs = form.getlist("achievement_org")
+    pairs = [((orgs[i] if i < len(orgs) else "").strip(), t.strip())  # pair first, then drop the cleared ones
+             for i, t in enumerate(form.getlist("achievement"))]
+    pairs = [(o, t) for o, t in pairs if t]
     if manual:
-        texts = texts[:MANUAL_ACHIEVEMENTS]
+        pairs = pairs[:MANUAL_ACHIEVEMENTS]
     roles = [Role(title=t.strip(), org=o.strip(), start=s.strip(), end=e.strip())
              for t, o, s, e in zip(form.getlist("role_title"), form.getlist("role_org"), form.getlist("role_start"),
                                    form.getlist("role_end")) if t.strip()]
@@ -148,8 +153,7 @@ def parse_facts_form(form, manual: bool = False) -> tuple[Facts | None, dict[str
         errors["skills"] = "Add at least one skill"
     if errors:
         return None, errors
-    achievements = [Achievement(org=(orgs[i].strip() if i < len(orgs) else ""), text=t,
-                                metrics=[m.strip() for m in METRIC.findall(t)]) for i, t in enumerate(texts)]
+    achievements = [Achievement(org=o, text=t, metrics=[m.strip() for m in METRIC.findall(t)]) for o, t in pairs]
     education = [x.strip() for x in form.getlist("education") if x.strip()]
     return Facts(headline=headline, roles=roles, achievements=achievements, skills=skills, education=education), {}
 
@@ -170,6 +174,11 @@ def save_facts_form(conn, user_id: int, form, manual: bool) -> dict[str, str]:
     return {}
 
 
+def _already_onboarded(conn, user_id: int):
+    """A finished user posting an onboarding form (stale tab, back button): change nothing, send them to Settings."""
+    return RedirectResponse("/settings", 303) if get_onboarding(conn, user_id)[1] else None
+
+
 def _resume_page(request, conn, user, errors=None, status=200, msg=None):
     ctx = {"up": get_user_prefs(conn, user.id), "step_no": 4, "steps": len(STEPS), "errors": errors or {},
            "msg": msg or request.query_params.get("msg"), "err": request.query_params.get("err"),
@@ -187,6 +196,8 @@ def resume_page(request: Request, user=Depends(current_user), conn=Depends(get_c
 @router.post("/resume")
 async def resume_upload(request: Request, background: BackgroundTasks, resume: UploadFile = File(...),
                         user=Depends(current_user), conn=Depends(get_conn)):
+    if done := _already_onboarded(conn, user.id):
+        return done
     try:
         msg = await accept_upload(request, conn, user.id, resume, background)
     except ResumeRejected as e:
@@ -202,6 +213,8 @@ def resume_status(request: Request, user=Depends(current_user), conn=Depends(get
 
 @router.post("/facts")
 async def facts_save(request: Request, user=Depends(current_user), conn=Depends(get_conn)):
+    if done := _already_onboarded(conn, user.id):
+        return done
     errors = save_facts_form(conn, user.id, await request.form(), manual=False)
     if errors:
         return _resume_page(request, conn, user, errors, 422)
@@ -210,6 +223,8 @@ async def facts_save(request: Request, user=Depends(current_user), conn=Depends(
 
 @router.post("/facts/manual")
 async def facts_manual(request: Request, user=Depends(current_user), conn=Depends(get_conn)):
+    if done := _already_onboarded(conn, user.id):
+        return done
     errors = save_facts_form(conn, user.id, await request.form(), manual=True)
     if errors:
         return _resume_page(request, conn, user, errors, 422)
@@ -228,6 +243,8 @@ def first_evaluation(db_path, user_id: int, app_config) -> None:
 
 @router.post("/finish")
 def finish(request: Request, background: BackgroundTasks, user=Depends(current_user), conn=Depends(get_conn)):
+    if done := _already_onboarded(conn, user.id):
+        return done
     missing = get_user_prefs(conn, user.id).complete()
     if missing:
         return RedirectResponse(f"/onboarding/{missing[0]}?err=Please+finish+this+step", 303)
@@ -273,6 +290,8 @@ def show(request: Request, step: str, user=Depends(current_user), conn=Depends(g
 async def save(request: Request, step: str, user=Depends(current_user), conn=Depends(get_conn)):
     if step not in STEPS[:3]:
         raise HTTPException(404)
+    if done := _already_onboarded(conn, user.id):
+        return done
     form = await request.form()
     fields, errors = parse_step(step, form, request.app.state.app_config)
     up = get_user_prefs(conn, user.id).model_copy(update=fields)

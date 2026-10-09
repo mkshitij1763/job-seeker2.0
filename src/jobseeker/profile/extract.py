@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -29,7 +30,11 @@ def run_extract(db_path, home, user_id: int, sha: str, app_config, llm_factory) 
                                "You can re-read your resume again tomorrow; your current facts stay.")
             return
         budget.spend("groq:facts")
-        text = validate_pdf(resume_path(home, user_id).read_bytes(), "application/pdf")
+        data = resume_path(home, user_id).read_bytes()
+        if hashlib.sha256(data).hexdigest() != sha:  # the file changed since this read was queued
+            set_extract_status(conn, user_id, "failed", "Your resume changed while we were reading it. Upload it again.")
+            return
+        text = validate_pdf(data, "application/pdf")
         try:
             facts = extract_facts(llm_factory(), text, app_config.models.facts)
         except (LLMQuotaExceeded, LLMUnavailable):
