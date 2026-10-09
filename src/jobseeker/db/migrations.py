@@ -334,3 +334,44 @@ def migrate_v4(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
 
 
 MIGRATIONS.append(Migration(4, "pipeline", migrate_v4))
+
+
+V5_DDL = """
+ALTER TABLE users ADD COLUMN outreach_enabled INTEGER NOT NULL DEFAULT 0;
+UPDATE users SET outreach_enabled = 1 WHERE id = 1;
+ALTER TABLE contacts ADD COLUMN owner_user_id INTEGER REFERENCES users (id);
+UPDATE contacts SET owner_user_id = 1 WHERE source = 'manual';
+CREATE INDEX idx_contacts_owner ON contacts (owner_user_id);
+CREATE TABLE people_searches (
+  company_norm TEXT NOT NULL,
+  query TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  results TEXT NOT NULL,
+  searched_at TEXT NOT NULL,
+  PRIMARY KEY (company_norm, query, provider)
+);
+CREATE TABLE gmail_tokens (
+  user_id INTEGER PRIMARY KEY REFERENCES users (id),
+  account_email TEXT NOT NULL,
+  token_enc BLOB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'expired')),
+  connected_at TEXT NOT NULL,
+  refreshed_at TEXT
+);
+CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, checked_at TEXT NOT NULL);
+"""
+
+
+def migrate_v5(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
+    """Per-user outreach: the switch, private vs shared contacts, the people-search cache, Gmail tokens."""
+    before = conn.execute("SELECT COUNT(*) FROM application_contacts").fetchone()[0]
+    for stmt in V5_DDL.split(";"):
+        if stmt.strip():
+            conn.execute(stmt)
+    dangling = conn.execute("""SELECT COUNT(*) FROM application_contacts ac LEFT JOIN contacts c ON c.id = ac.contact_id
+                               WHERE c.id IS NULL""").fetchone()[0]
+    if dangling or conn.execute("SELECT COUNT(*) FROM application_contacts").fetchone()[0] != before:
+        raise MigrationError("v5: an application_contacts row lost its contact")
+
+
+MIGRATIONS.append(Migration(5, "per-user outreach", migrate_v5))

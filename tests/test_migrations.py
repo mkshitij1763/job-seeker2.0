@@ -201,3 +201,35 @@ def test_v2_without_profile_leaves_owner_unonboarded(tmp_path):
     c = sqlite3.connect(db)
     assert c.execute("SELECT onboarded_at, onboarding_step FROM user_prefs WHERE user_id = 1").fetchone() == (None, "roles")
     assert (tmp_path / "config" / "app.yaml").exists()
+
+
+def test_v5_splits_contacts_and_enables_owner(tmp_path):
+    import shutil
+    db = live_like_v0(tmp_path / "db.sqlite")
+    prof = tmp_path / "profile"
+    prof.mkdir()
+    shutil.copy("tests/fixtures/preferences.yaml", prof / "preferences.yaml")
+    shutil.copy("tests/fixtures/facts.json", prof / "facts.json")
+    raw = sqlite3.connect(db)
+    raw.execute("INSERT INTO contacts (company, name, source) VALUES ('Acme', 'Finder Person', 'finder')")
+    raw.execute("INSERT INTO contacts (company, name, source) VALUES ('Acme', 'Manual Person', 'manual')")
+    raw.commit()
+    raw.close()
+    m.migrate(db, _ctx(tmp_path), tmp_path / "bk")
+    c = sqlite3.connect(db)
+    assert c.execute("PRAGMA user_version").fetchone()[0] >= 5
+    assert c.execute("SELECT outreach_enabled FROM users WHERE id = 1").fetchone()[0] == 1
+    owners = dict(c.execute("SELECT name, owner_user_id FROM contacts WHERE company = 'Acme'").fetchall())
+    assert owners == {"Finder Person": None, "Manual Person": 1}
+    assert c.execute("PRAGMA foreign_key_check").fetchall() == []
+    for t in ("people_searches", "gmail_tokens", "app_state"):
+        assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name = ?", (t,)).fetchone()[0] == 1
+    assert m.migrate(db, _ctx(tmp_path), tmp_path / "bk")[0].startswith("Already at")
+
+
+def test_v5_keeps_every_application_contact_link(tmp_path):
+    db = live_like_v0(tmp_path / "db.sqlite")
+    m.migrate(db, _ctx(tmp_path), tmp_path / "bk")
+    c = sqlite3.connect(db)
+    assert c.execute("""SELECT COUNT(*) FROM application_contacts ac
+                        LEFT JOIN contacts c ON c.id = ac.contact_id WHERE c.id IS NULL""").fetchone()[0] == 0

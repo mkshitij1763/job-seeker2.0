@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   disabled_at TEXT,
   created_at TEXT NOT NULL,
   last_login_at TEXT,
-  notified_on TEXT
+  notified_on TEXT,
+  outreach_enabled INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS invites (
   email TEXT PRIMARY KEY,
@@ -86,8 +87,10 @@ CREATE TABLE IF NOT EXISTS contacts (
   email_status TEXT NOT NULL DEFAULT 'unverified'
     CHECK (email_status IN ('unverified', 'verified', 'bounced')),
   source TEXT NOT NULL DEFAULT 'manual',
-  notes TEXT NOT NULL DEFAULT ''
+  notes TEXT NOT NULL DEFAULT '',
+  owner_user_id INTEGER REFERENCES users (id)  -- NULL: the shared cache; set: that user's private row
 );
+CREATE INDEX IF NOT EXISTS idx_contacts_owner ON contacts (owner_user_id);
 
 CREATE TABLE IF NOT EXISTS applications (
   id INTEGER PRIMARY KEY,
@@ -266,3 +269,20 @@ CREATE TABLE IF NOT EXISTS run_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_run_requests_status ON run_requests (status, requested_at);
 CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs (kind, trigger, started_at);
+CREATE TABLE IF NOT EXISTS people_searches (
+  company_norm TEXT NOT NULL,
+  query TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  results TEXT NOT NULL,
+  searched_at TEXT NOT NULL,
+  PRIMARY KEY (company_norm, query, provider)
+);
+CREATE TABLE IF NOT EXISTS gmail_tokens (
+  user_id INTEGER PRIMARY KEY REFERENCES users (id),
+  account_email TEXT NOT NULL,
+  token_enc BLOB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'expired')),
+  connected_at TEXT NOT NULL,
+  refreshed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, checked_at TEXT NOT NULL);

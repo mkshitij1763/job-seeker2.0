@@ -81,3 +81,15 @@ def test_owner_first_name_fallback(tmp_path):
     resolve_sign_in(conn, "g-1", "owner@example.com", "Kay Em", T)
     assert owner_first_name(conn) == "Kay"
     assert user_by_id(conn, 1).name == "Kay Em"
+
+
+def test_outreach_flag_roundtrip_and_count(settings):
+    from jobseeker.db.core import connect
+    from jobseeker.db.users import outreach_user_count, set_outreach, user_by_id
+    conn = connect(settings.db_path)
+    assert user_by_id(conn, 1).outreach_enabled is True and outreach_user_count(conn) == 1
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (2, 'b@example.com', 't')")
+    set_outreach(conn, 2, True)
+    assert user_by_id(conn, 2).outreach_enabled and outreach_user_count(conn) == 2
+    conn.execute("UPDATE users SET disabled_at = 't' WHERE id = 2")
+    assert outreach_user_count(conn) == 1  # disabled users hold no share

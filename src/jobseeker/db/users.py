@@ -34,10 +34,12 @@ class User:
     name: str
     is_admin: bool
     google_sub: str | None
+    outreach_enabled: bool = False
 
 
 def _user(row) -> User:
-    return User(row["id"], row["email"], row["name"], bool(row["is_admin"]), row["google_sub"])
+    return User(row["id"], row["email"], row["name"], bool(row["is_admin"]), row["google_sub"],
+                bool(row["outreach_enabled"]))
 
 
 def user_by_id(conn: sqlite3.Connection, user_id: int) -> User | None:
@@ -111,3 +113,14 @@ def set_disabled(conn: sqlite3.Connection, user_id: int, disabled: bool, now: da
     else:
         conn.execute("UPDATE users SET disabled_at = NULL WHERE id = ?", (user_id,))
     conn.commit()
+
+
+def set_outreach(conn: sqlite3.Connection, user_id: int, enabled: bool) -> None:
+    conn.execute("UPDATE users SET outreach_enabled = ? WHERE id = ?", (int(enabled), user_id))
+    if not enabled:  # drafts and history stay (hidden by the gate); the Gmail grant goes
+        conn.execute("DELETE FROM gmail_tokens WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+
+def outreach_user_count(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM users WHERE outreach_enabled = 1 AND disabled_at IS NULL").fetchone()[0]
