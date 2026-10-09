@@ -22,21 +22,23 @@ DB="$JOBSEEKER_HOME/data/jobseeker.db"
 
 log() { echo "start.sh: $*"; }
 
-# Stay up, doing nothing, until Railway stops the container.
+# Stay up, serving nothing, until Railway stops the container; repeat the reason every PARK_LOG_INTERVAL seconds
+# so the state is obvious in the logs at any time. Deliberately no "start empty" switch: if the volume ever fails
+# to mount, a blank app would let the first Google sign-in claim ownership.
 park() {
-    log "$1"
     trap 'kill "$!" 2>/dev/null; exit 0' TERM INT
     while :; do
-        sleep 3600 &
+        log "PARKED: $1"
+        sleep "${PARK_LOG_INTERVAL:-300}" &
         wait "$!"
     done
 }
 
 if [ ! -f "$DB" ]; then
-    park "waiting for data: $DB is missing. Restore it over 'railway ssh' (hosting plan, Railway runbook), then restart the service."
+    park "waiting for restore at $JOBSEEKER_HOME ($DB is missing). Nothing is served. Restore over 'railway ssh' (hosting plan, Railway runbook), then restart the service."
 fi
 if ! jobseeker migrate; then
-    park "migrate failed (see above); nothing is served. Fix it over 'railway ssh', then restart the service."
+    park "migrate failed (see the first lines of this deployment's log). Nothing is served. Fix it over 'railway ssh', then restart the service."
 fi
 
 # The container's peak memory so far (cgroup v2), for sizing; logged after each tick.

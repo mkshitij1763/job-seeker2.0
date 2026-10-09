@@ -178,14 +178,15 @@ def test_start_sh_parses():
 
 
 def test_without_a_database_it_waits_instead_of_crash_looping(railway):
-    start, calls, _, _ = railway
-    p = start(db=False)
-    time.sleep(0.8)
+    start, calls, _, home = railway
+    p = start(db=False, PARK_LOG_INTERVAL="0.2")
+    time.sleep(0.9)
     assert p.poll() is None, "exited: Railway would restart it in a loop"
     assert calls() == []
     code, out = _stop(p)
     assert code == 0
-    assert "waiting for data" in out
+    # Repeated, so a parked container is obvious in Railway's logs at any time, not only at boot.
+    assert out.count(f"start.sh: PARKED: waiting for restore at {home}") >= 3, out
 
 
 def test_migrates_then_serves_on_railways_port_and_ticks(railway):
@@ -242,13 +243,13 @@ def test_if_serve_dies_the_script_exits_nonzero_and_stops_the_loop(railway):
 
 def test_a_failed_migrate_parks_instead_of_serving(railway):
     start, calls, _, _ = railway
-    p = start(MIGRATE_EXIT="1")
-    time.sleep(0.8)
+    p = start(MIGRATE_EXIT="1", PARK_LOG_INTERVAL="0.2")
+    time.sleep(0.9)
     assert p.poll() is None
     assert calls() == ["migrate"]
     code, out = _stop(p)
     assert code == 0
-    assert "migrate failed" in out
+    assert out.count("start.sh: PARKED: migrate failed") >= 3, out
 
 
 def test_root_branch_chowns_the_volume_and_drops_to_app():
