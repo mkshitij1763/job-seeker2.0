@@ -1,6 +1,6 @@
 # HANDOFF — job-seeker2.0 (2026-10-08, `main` @ `9f9c416`)
 
-> **START HERE (new session):** the user's current request is in **§8 MULTI-USER HOSTED APP**. Work in progress: brainstorming, which had **not started asking questions yet**. Read §8, then resume at its "Next action".
+> **START HERE (new session):** §1–§7 describe the single-user app on `main`. The multi-user hosted app is **built on `multi-user`** (§8), waiting for the user's merge decision and the cutover checklist in §8.
 
 ## 1. OBJECTIVE
 Personal, local, free-tier job-search copilot for Kshitij Meshram (he/him, PA @ Inito, ~1.3 yr exp). Every day it finds India PM/PA/APM/Founder's-Office roles; on demand it finds the 3 right people per company with work emails; Gmail drafts (never sent) go out from a phone-friendly dashboard.
@@ -104,90 +104,45 @@ Not done (the user deferred it): the SaaS evaluation, after 2–3 weeks of use b
   - With no `GROQ_API_KEY` at all, Find contacts and Regenerate return a 500 (the Groq client is built eagerly).
   - `nav_counts` runs the inbox query on every page render (fine at this size).
 
-## 8. MULTI-USER HOSTED APP — NEW REQUEST (2026-10-08), brainstorming not yet started
-**What the user asked (paraphrased faithfully):**
-- Share the app with **2 roommates** without them setting up the project.
-- They should feel it is **a real app**: a home screen, **proper authentication / login**, then **onboarding that asks for job preferences**. After that, jobs are **fetched and scored for their own requirements**.
-- Host it **on a public server**, so there is **no dependency on the Mac** (it isn't always awake). Replace the Tailscale VPN way of reaching it from web and phone with something else.
-- "Some more features" are fine, plus "a few more small additional features".
-- Do all of this **in a separate branch**, strictly for feature development. The user said "from the ui branch"; `ui-redesign` is already merged into `main`, so **branch from `main`** (suggested name `multi-user`). **The branch has NOT been created yet.**
-- The user wants **brainstorming first**: tell back what features to add, how the flow looks, what's on each screen, and the hosting solution. Then spec → plan → build (superpowers flow: brainstorming → writing-plans → executing-plans). The user prefers **Native (inline) execution** and autonomous rulings when away. **Never merge to `main` until the user says so.**
+## 8. MULTI-USER: BUILT on `multi-user` (2026-10-09), not yet merged or deployed
+The request (2026-10-08): share the app with 2 roommates as a real hosted app, with sign-in, onboarding and their own matches, and no dependency on the Mac. Decisions the user made: Oracle Always Free on PAYG with a ₹100 alert, DuckDNS + Caddy, Backblaze B2; invite-only Google sign-in, no invite emails; free only; roommates get matching only at launch, and outreach is switchable per user (`users.outreach_enabled`), with the owner keeping it. **Never merge to `main` without the user.** The PR description (changes, migrations, rollback, deferred minors) is `docs/superpowers/multi-user-PR.md`; the setup is in `README.md`.
 
-**Classification:** architectural, and too big for one spec. Decompose and give each sub-project its own spec → plan → build:
-1. **Hosting + feasibility spike (do first, it decides the rest).** Run a fetch from a cloud VM and check, from a datacenter IP:
-   - Do LinkedIn, Naukri and Indeed (JobSpy) still return jobs? Datacenter IPs are often blocked. The ATS APIs (Greenhouse, Lever, Ashby) should be fine.
-   - Is outbound SMTP port 25 open? It is blocked on Oracle, GCP and most clouds, and that kills `smtp_verify`; the fallback is Apify/Hunter or pattern guesses.
-2. **Accounts + auth:**
-   - a `users` table, sign-in with Google, sessions
-   - an invite-only allow-list of emails (the site is public)
-   - every per-user table scoped by `user_id`
-3. **Onboarding + Settings:**
-   - preferences move from `profile/preferences.yaml` into the DB, per user
-   - resume upload, then the existing `load_or_build_facts`, then review/edit of the extracted facts
-4. **Per-user pipeline:**
-   - fetch once, on the union of all users' roles × cities, into the shared `jobs` table
-   - prefilter, score and draft **per user** (`scores` and `applications` get `user_id`)
-   - per-user budgets, because the free Groq/Tavily/Apify/Hunter quotas are shared by 3 people
-5. **Per-user Gmail:**
-   - each user's own OAuth token
-   - the Google app stays in **Testing mode** with the roommates added as test users, so no Google verification or CASA audit is needed (`gmail.compose` is a restricted scope)
-   - consent still expires about weekly, so add a one-tap "Reconnect Gmail"
-6. **Extras (keep small):**
-   - an in-app Settings page
-   - "Fetch now"
-   - daily web-push "N new matches" (iOS 16.4+ PWA)
-   - an admin view for the user (invites, usage per person)
-   - export or delete my data
+**What was built** (each with a spec and plan in `docs/superpowers/`; the build log is `HANDOFF-backend.md` and `HANDOFF-devops.md`):
+1. **Hosting** (`mu-hosting`): `bootstrap.sh` (idempotent Ubuntu 24.04 aarch64 setup), systemd units (`jobseeker-web`, `jobseeker-tick.timer` every 5 min, DuckDNS), Caddy, `ready.sh`, the `js` wrapper, and `scripts/deploy.sh` (refuses during a run, migrates, checks `/healthz`, rolls back on failure). The feasibility spike passed; port 25 is blocked on Oracle.
+2. **Accounts and auth** (`mu-accounts-auth`, migration v1): users, invites, sessions, Google sign-in, `user_id` on every per-user table, route guards, an Origin-based CSRF check, and `/admin`.
+3. **Onboarding and Settings** (`mu-onboarding-settings`, v2): preferences and facts move into the DB per user; 4-step onboarding plus resume reading; Settings with a two-way preview; export and delete account. Server-wide knobs live in `$JOBSEEKER_HOME/config/app.yaml`.
+4. **Per-user pipeline** (`mu-per-user-pipeline`, v4): one shared fetch over the union of everyone's roles and cities, then filter, score and draft per user, with even per-user shares of the free quotas. Runs are driven by `tick`, with an IST clock and a run lock.
+5. **Per-user outreach** (`mu-outreach`, v5): the per-user outreach switch, owner-scoped contacts with copy-on-write edits, a 30-day people-search cache, per-user Gmail via a web OAuth flow with tokens sealed under `TOKEN_KEY`, Reconnect Gmail, and `smtp_verify off|on|auto`.
+6. **Extras** (`mu-extras`, v3): Fetch now, daily web push, nightly backups with an encrypted B2 copy, `jobseeker restore`, the admin usage view, and `gen-key`/`vapid-keys`.
 
-**Hosting options to present (the user has been "free only" so far; ask them):**
-- **Oracle Cloud Always Free ARM VM:** free forever and plenty of power. Signup needs a card, and the Mumbai region often has no capacity. Runs Docker or plain uv, Caddy for HTTPS, SQLite on disk, launchd replaced by systemd timers.
-- **Hetzner CX22, about €4.5/month:** reliable and cheap. Not free.
-- **GCP e2-micro free tier:** US regions only, 1 GB RAM, tight.
-- **Avoid:** Render/Railway free tiers (they sleep and have ephemeral disks, so SQLite would be lost).
-- **Public access without VPN:** HTTPS on a domain. Either a free DuckDNS subdomain plus Caddy, or a Cloudflare Tunnel with a cheap domain. The PWA "Add to Home Screen" keeps the app feel on phones.
-- **Data:** move the DB to the server and run nightly backups to object storage; this replaces `~/JobSeeker-backups`. Secrets live in a server `.env`, never in git.
-- **Honest risk to tell the user:** job-site scraping may get worse from a datacenter IP. Mitigation if the spike shows it's blocked: keep ATS boards plus Indeed, or keep a small optional fetcher on the Mac that pushes jobs up (this brings back some Mac dependency, so it's a last resort).
+Final state: 831 pytest and 26 node tests, also green under `TZ=UTC` and `TZ=America/New_York`. A fresh `.backup` copy of the live DB plus `profile/` migrates v0→v5 with every table's count unchanged (apps 242, scores 244, jobs 5487, contacts 16 split 15 shared / 1 private), an empty FK check, integrity ok, golden fields and facts equal, and a byte-identical scorer prompt.
 
-**Screens to propose:**
-- **Public landing:** what it is, plus "Continue with Google".
-- **Onboarding (5 steps):** roles → cities and remote → experience, salary and exclusions → resume upload and review of the extracted facts → connect Gmail → "You're set; first matches in about N minutes" (this triggers a first run for that user).
-- **The app:** the existing Today, Jobs, Job detail and Pipeline, plus Settings (preferences, resume, Gmail status, sign out, delete data).
-- **Admin (owner only):** invites, users, usage and budgets.
+**Cutover checklist** (hosting plan Task 5 + spec §2/§10; do it with the user, one step at a time, recording outcomes):
+1. **Accounts** (spec §2; check each **(verify)** item against the provider's docs):
+   - Oracle: home region Mumbai or Hyderabad (permanent; A1 only runs there), upgrade to PAYG, a ₹100/month budget alert. Confirm that idle reclaim doesn't apply to PAYG.
+   - SSH key on the Mac: `ssh-keygen -t ed25519 -f ~/.ssh/jobseeker_oci` plus `Host jobseeker` in `~/.ssh/config`.
+   - VM `VM.Standard.A1.Flex`, 2 OCPU / 12 GB, Ubuntu 24.04 aarch64, with a reserved public IP (confirm that it's free). Add ingress TCP 80/443 from `0.0.0.0/0` to the security list.
+   - DuckDNS `<sub>` pointing at the IP (check the inactivity-expiry rule).
+   - B2: a bucket, lifecycle rules, and a write-only key for that bucket.
+   - UptimeRobot (`/healthz`) and Healthchecks.io.
+2. **Google OAuth Web client** (one client for sign-in and Gmail):
+   - Create an OAuth client of type **Web application** and enable the **Gmail API** in the same project.
+   - Authorized redirect URIs: `https://<sub>.duckdns.org/auth/callback` and `https://<sub>.duckdns.org/gmail/callback`. Check that Google accepts `<sub>.duckdns.org` (it's on the public-suffix list). **Stop if it doesn't.**
+   - The consent screen stays in **Testing**. Add **every outreach user's Gmail address as a test user**, the owner's included; otherwise Google answers "access blocked". The consent screen will say the app is unverified (Advanced → Continue).
+   - Put the client ID and secret in the server `.env`.
+3. **Bootstrap**, three passes (`ssh jobseeker 'sudo BASE_URL=https://<sub>.duckdns.org OWNER_EMAIL=<email> BRANCH=multi-user bash -s' < scripts/server/bootstrap.sh`): (a) add the printed deploy key in GitHub (read-only); (b) fill `/etc/duckdns.env` and `/srv/jobseeker/.env` (`js gen-key` for `SECRET_KEY`, `TOKEN_KEY` and `BACKUP_KEY`, each different; `js vapid-keys`; `BASE_URL` exactly the origin); (c) Caddy gets its certificate, and the services stay off with "missing: data/jobseeker.db, config/app.yaml". Check that `iptables -S INPUT` has 80/443 ACCEPT above the REJECT.
+4. **Data move** (spec §10):
+   1. Mac: `launchctl bootout gui/$(id -u)/com.kshitij.jobseeker` (stops scheduled runs).
+   2. Mac: `sqlite3 data/jobseeker.db ".backup '/tmp/js-move.db'"`, `PRAGMA integrity_check` = ok, and record each table's count.
+   3. `scp` the DB to the server, plus `profile/{resume.pdf,facts.json,preferences.yaml}`.
+   4. Server: move the DB to `/srv/jobseeker/data/jobseeker.db` and the profile to `/srv/jobseeker/profile/` (owned by `jobseeker`); `js migrate --dry-run`, then `js migrate` (v1→v5; v2 imports the profile and writes `config/app.yaml`). Compare counts: each existing table matches.
+   5. **`js refilter`, then `js refilter --apply` once** for the owner. Rule changes since the old verdicts hide about 5 jobs and bring back about 5, and skip 1 app (undoably). `evaluate` only re-judges new or changed jobs, so it won't fix these.
+   6. Delete `/srv/jobseeker/profile/` and the `/tmp` copies; re-run `bootstrap.sh` (it enables the web service and timer).
+5. **Owner checks on the phone:** sign in; Today, Jobs, a Job detail and Pipeline match the Mac; the first POST (save a setting) succeeds, not a 403 (proves `BASE_URL`). **Settings → Account → Connect Gmail once** (the Mac's `secrets/token.json` is not migrated). Run `js tick` once by hand; it exits 0.
+6. **smtp_verify:** keep `contacts.smtp_verify: off` in the server's `config/app.yaml` (port 25 is blocked; `auto` probes it daily). If the Mac ever runs this code, set it to `on` there.
+7. **Mac off:** `launchctl bootout gui/$(id -u)/com.kshitij.jobseeker.web` and `tailscale serve reset`. Keep the Mac's `data/jobseeker.db` untouched for 2 weeks as the rollback.
+8. **Acceptance** (hosting spec §Acceptance 1–12): `/healthz` 200 over HTTPS, `http` redirects, `nc -z <ip> 8000` fails; a second bootstrap prints "No changes."; all four units are active after `sudo reboot`; the next 11:15 IST run and its Healthchecks ping happen; a trivial deploy works, a broken one (`--branch spike/broken`) rolls back, and one during a run is refused; the restore drill from a B2 `.enc` passes; `.env` is 600 and owned by `jobseeker`; Oracle billing shows ₹0 after a week.
+9. **Invite the roommates:** `/admin` → Invites → their Google address, then send them the link yourself. Outreach stays off for them unless the owner turns it on (first add them as Google test users).
+10. Record in this file: the live subdomain, region, the B2 bucket name (no keys) and any deviations.
 
-**Next action:**
-1. Create the branch: `git switch -c multi-user && git push -u origin multi-user`.
-2. Re-invoke `superpowers:brainstorming`. Classify it as architectural and decomposed; present the decomposition above and the write-back of what the user wants.
-3. Ask **one question at a time**, starting with: *hosting budget, strictly free (Oracle Always Free) or about ₹400/month (Hetzner)?* Then: invite-only Google sign-in OK? Gmail drafts for roommates too, or just job matching for them?
-4. Propose running the hosting/scraping **spike** before writing specs.
-
-
-**Sub-project 2 built (accounts + auth), on `multi-user`, 2026-10-09:**
-- New env vars in `.env`. The web app refuses to start without the first four:
-  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (a Web OAuth client, redirect `<BASE_URL>/auth/callback`)
-  - `BASE_URL` (the exact browser origin, e.g. `https://<name>.duckdns.org`; the CSRF check 403s any POST from another origin)
-  - `SECRET_KEY` (32+ random chars; signs the short-lived OAuth cookie)
-  - `OWNER_EMAIL` (the owner's Google email; claims user 1 and admin)
-  - `COOKIE_SECURE` (default true; the `__Host-` cookies need HTTPS)
-- `jobseeker migrate` upgrades the DB to v1 (users, invites, sessions, user_jobs, `user_id` on per-user tables). Stop the web service and the run timer first. `--dry-run` previews. Both the web app and the pipeline refuse an un-migrated DB with `SchemaOutOfDate`.
-- The live Mac app stays on `main` until cutover. Never run `migrate` against the live `data/` from `multi-user`.
-- Tests: 472 pytest, 19 node. Acceptance on a `.backup` copy of the live DB: migrate leaves counts unchanged (apps 167, scores 168, jobs 4497, user_jobs 4497), foreign_key_check is empty, and the un-migrated copy refuses to start. Real Google sign-in is checked at deploy.
-
-**Sub-project 3 built (onboarding + Settings), on `multi-user`, 2026-10-09:**
-- Server-wide settings live in `$JOBSEEKER_HOME/config/app.yaml` (models, thresholds, `min_prescore`, budgets, search knobs, contacts limits, the role catalog and the city chips). `jobseeker migrate` (v2) writes it from `config/app.example.yaml` plus the owner's globals, and never overwrites an existing one. The web app refuses to start without it, and a change needs a restart.
-- Before `jobseeker migrate`, put the owner's `preferences.yaml`, `facts.json` and `resume.pdf` in `$JOBSEEKER_HOME/profile/`. v2 imports them into `user_prefs`/`user_facts`/`data/users/1/resume.pdf` and checks that the owner's matching is unchanged (the golden check; on a live copy the scorer prompt is byte-identical). After that, nothing reads `profile/` at runtime; a test enforces it.
-- New users get 4 onboarding steps (roles, where, experience and pay, resume), then Done. Everyone gets a Settings tab: profile links; preference edits with a two-way preview (filter changes show "hides N, brings back M, skips K" before saving); resume replace and facts review; download my data (zip); delete my account; sign out (everywhere).
-- CLI: `jobseeker run|rescore|refilter --user EMAIL` (default: the owner). `refilter` is now the two-way `reevaluate` (it also lists jobs that come back). `jobseeker backup` copies only the DB; facts live in it.
-- Facts extraction: 3 per user per day, 10 globally (`groq:facts`, IST day). Manual entry is offered whenever extraction fails.
-- Live-copy note: a dry `refilter` after the move shows about 5 hidden and 5 restored for the owner. That's pre-existing drift (a job's JD or location changed after its verdict was taken), not the move: the migrated and original preferences give identical reports.
-- Tests: 633 pytest, 19 node. An iPhone-size walkthrough (390×844) of onboarding took 56 s, quitting at step 3 resumed at step 3, and Settings is the 4th tab.
-
-**Sub-project 5 built (per-user outreach), on `multi-user`, 2026-10-09:**
-- New env var `TOKEN_KEY` (`jobseeker gen-key`) in `.env`, **separate from `BACKUP_KEY`**. The web app refuses to start without it. Gmail tokens live in `gmail_tokens`, sealed under it per user; losing or rotating it only means everyone taps Reconnect Gmail.
-- Google Cloud: add `<BASE_URL>/gmail/callback` as a **second redirect URI** on the Web client (next to `/auth/callback`). The app stays in Testing mode, so **every outreach user's Gmail address must be a test user** (OAuth consent screen), or Google answers "access blocked". The consent screen warns that the app isn't verified; Settings tells people to tap Advanced → Continue.
-- Cutover: the Mac's `secrets/token.json` is **not migrated** (`jobseeker auth-gmail` is gone). After cutover the owner taps Settings → Account → **Connect Gmail** once. An expired or revoked grant shows **Reconnect Gmail** on the failing job page and in Settings.
-- `jobseeker migrate` (v5) adds `users.outreach_enabled` (the owner 1, everyone else 0), owner-scoped contacts (found contacts become shared; ones the owner added by hand become the owner's private rows), `gmail_tokens` and `people_searches` (a 30-day people-search cache shared across users).
-- The admin toggle: `/admin` → Users → Outreach on/off. When it's off, every outreach route returns 404, the job page shows "Open job posting ↗" and "Mark applied", and drafting skips that user. Turning it off deletes their Gmail grant; drafts and history stay hidden, and come back when it's turned on again. Turning it on shows the two steps (add a test user, then they tap Connect Gmail).
-- Budgets: Tavily/Apify/Hunter and the draft units are split evenly across onboarded outreach users ("Your … share is used for <Month>"); a cached people search spends nothing. Editing a shared contact copies it to a private row, so one user's edit never changes another user's drafts.
-- On the server, keep **`contacts.smtp_verify: off`** in `config/app.yaml` (Oracle blocks port 25; `auto` probes it daily). The default is `off` everywhere, so **if the Mac stays live on this code, set `contacts.smtp_verify: on`** in its `app.yaml`.
-- Delete my account removes the user's Gmail grant and private contacts; Download my data includes `gmail.json` (the address and when it connected, never the token).
-- Tests: 798 pytest, 26 node. Acceptance on a `.backup` copy of the live DB + owner `profile/`: migrate to v5 is clean (FK check empty, integrity ok, contacts 15 shared / 1 private, no dangling `application_contacts` or `applications.contact_id`). At 390×844 as the owner, the job page shows People/Draft/Approve, Settings shows "Not connected · Connect Gmail" plus the unverified-app note, and Approve with no token shows **Reconnect Gmail** → `/gmail/connect?next=/applications/10` (the status stays `drafted`). As a scripted matching-only roommate, all 14 outreach URLs (including `/gmail/*` and the contacts card) give 404, and the job page shows "Open job posting ↗" + "Mark applied". Real Google consent is checked at deploy.
+**Rollback:** before step 7 of the data move, the Mac is untouched: `scripts/install_launchd.sh` brings it back. After cutover, the Mac DB copy (kept 2 weeks) plus `main` is the fallback; the nightly backups are on the server and in B2.
