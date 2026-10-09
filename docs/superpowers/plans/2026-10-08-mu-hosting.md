@@ -1157,6 +1157,8 @@ git commit -m "docs: server is live; provisioning notes and deviations"
    | `HEALTHCHECK_PING_URL` | Healthchecks.io |
 
    Keep `BACKUP_KEY` in the password manager as well: without it, no B2 backup can be decrypted.
+
+   **Shortcut:** `bash scripts/railway/set-secrets.sh` in your own Terminal, from a checkout that `railway link` points at the project. It generates the keys and the VAPID pair only when the service lacks them, asks for the rest with hidden input (Enter skips one), and sets each with `railway variable set --stdin --skip-deploys`. No value is printed or put on a command line. `RAILWAY_SERVICE`/`RAILWAY_ENVIRONMENT` override `job-seeker2.0`/`production`.
 5. **Healthcheck:** leave the service's Healthcheck Path EMPTY for the first deploy. Railway's healthcheck runs only at deploy time: a deployment that doesn't answer 200 in time is marked failed and removed, and a running container is never restarted. A parked container answers nothing, so with a healthcheck the first deploy would be removed before the data can be restored. `/healthz` is set in R2 step 7.
 6. **SSH key:** the user registers a key once with `railway ssh keys add` (or the CLI's first-run prompt).
 7. **First deploy:** apply the staged branch change ("Deploy" on the "Apply 1 change" banner, or MCP `accept-deploy`). Expected:
