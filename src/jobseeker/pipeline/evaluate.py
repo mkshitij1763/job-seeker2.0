@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from jobseeker.config import Preferences
 from jobseeker.db.applications import blocked_companies, get_status, transition
 from jobseeker.db.core import iso
-from jobseeker.db.jobs import job_from_row
+from jobseeker.db.jobs import expire_unscored, job_from_row, set_verdict
 from jobseeker.pipeline.prefilter import prefilter
 from jobseeker.pipeline.prescore import prescore
 from jobseeker.profile.facts import Facts
@@ -72,3 +73,37 @@ def reevaluate(conn: sqlite3.Connection, user_id: int, prefs: Preferences, facts
             if get_status(conn, app_id) in BEFORE_OUTREACH:
                 transition(conn, app_id, "skipped", {"reason": "settings: preferences changed"}, now)
     return report
+
+
+@dataclass
+class EvalStats:
+    evaluated: int = 0
+    filtered: int = 0
+    below_cutoff: int = 0
+
+
+def evaluate(conn, user_id: int, prefs, facts, now, heartbeat: Callable[[], None] = lambda: None) -> EvalStats:
+    """Verdicts for live jobs this user has never judged, or whose description changed. Never touches applications."""
+    expire_unscored(conn, user_id, now, prefs.max_age_days)
+    blocked = blocked_companies(conn, user_id)
+    rows = conn.execute(
+        """SELECT j.*, uj.job_id AS uj_job FROM jobs j
+           LEFT JOIN user_jobs uj ON uj.job_id = j.id AND uj.user_id = ?
+           WHERE COALESCE(j.posted_at, j.first_seen_at) >= ? AND (uj.job_id IS NULL OR uj.jd_hash != j.jd_hash)
+           ORDER BY j.id""", (user_id, iso(now - timedelta(days=prefs.max_age_days)))).fetchall()
+    stats = EvalStats()
+    for i, row in enumerate(rows, 1):
+        new = row["uj_job"] is None
+        # verdict's `scored` flag means "skip the pre-score cutoff": True for a changed description (spec §4.4)
+        reason, points = verdict(job_from_row(dict(row)), prefs, facts, now, blocked, not new)
+        set_verdict(conn, user_id, row["id"], reason, points, row["jd_hash"], now)
+        stats.evaluated += 1
+        if reason and reason.startswith("low pre-score"):
+            stats.below_cutoff += 1
+        elif reason:
+            stats.filtered += 1
+        if i % 500 == 0:
+            conn.commit()
+            heartbeat()
+    conn.commit()
+    return stats

@@ -185,3 +185,23 @@ def latest_score(conn: sqlite3.Connection, user_id: int, job_id: int) -> dict | 
         "SELECT * FROM scores WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1", (user_id, job_id)
     ).fetchone()
     return dict(row) if row else None
+
+
+def set_verdict(conn: sqlite3.Connection, user_id: int, job_id: int, filter_reason: str | None,
+                prescore: int | None, jd_hash_value: str, now: datetime) -> None:
+    """Write one user's verdict on one job (caller commits; evaluate writes thousands at once)."""
+    conn.execute(
+        """INSERT INTO user_jobs (user_id, job_id, filter_reason, prescore, jd_hash, evaluated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, job_id) DO UPDATE SET filter_reason = excluded.filter_reason,
+             prescore = excluded.prescore, jd_hash = excluded.jd_hash, evaluated_at = excluded.evaluated_at""",
+        (user_id, job_id, filter_reason, prescore, jd_hash_value, iso(now)))
+
+
+def linkedin_picks(conn: sqlite3.Connection, user_id: int, cap: int) -> list[int]:
+    rows = conn.execute(
+        """SELECT j.id FROM jobs j JOIN user_jobs uj ON uj.job_id = j.id AND uj.user_id = :u
+           WHERE uj.filter_reason IS NULL AND j.source = 'linkedin' AND TRIM(j.jd_text) = '' AND j.jd_attempts < 2
+           AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = :u AND s.job_id = j.id)
+           ORDER BY COALESCE(uj.prescore, -1) DESC, j.id LIMIT :cap""", {"u": user_id, "cap": cap}).fetchall()
+    return [r["id"] for r in rows]
