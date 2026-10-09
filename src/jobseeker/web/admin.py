@@ -6,6 +6,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
+from jobseeker.backup.nightly import recent_backups
 from jobseeker.db.users import LastAdmin, add_invite, list_invites, list_users, remove_invite, set_disabled
 from jobseeker.web.deps import get_conn, render, require_admin
 
@@ -31,7 +32,7 @@ def usage_table(conn, now: datetime) -> dict:
 @router.get("")
 def page(request: Request, conn=Depends(get_conn)):
     return render(request, conn, "admin.html", invites=list_invites(conn), users=list_users(conn),
-                  usage=usage_table(conn, datetime.now(UTC)))
+                  usage=usage_table(conn, datetime.now(UTC)), backups=recent_backups(conn))
 
 
 @router.post("/invites")

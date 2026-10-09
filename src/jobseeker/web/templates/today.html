@@ -8,6 +8,7 @@
 <header class="page-head">
   <h1>Good {{ "morning" if hour < 12 else ("afternoon" if hour < 17 else "evening") }}{% if first %}, {{ first }}{% endif %}.</h1>
   <p class="muted">Here's what needs you today.</p>
+  {% include "_fetch_now_slot.html" %}
 </header>
 <div class="stats">
   {% set tiles = [("New today", t.new_since_yesterday, "/"), ("Ready to approve", t.ready|length, "#ready"),

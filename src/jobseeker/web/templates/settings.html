@@ -53,8 +53,11 @@
   {% include "_resume_status.html" %}
 </section>
 
+{% include "_push_card.html" %}
+
 <section class="card block" id="account">
   <h2 class="section-title">Account</h2>
+  {% include "_fetch_now_slot.html" %}
   <p><a class="btn" href="/settings/export" hx-boost="false">Download my data</a></p>
   <form method="post" action="/logout"><button class="btn">Sign out</button></form>
   <form method="post" action="/logout/all"><button class="btn-ghost">Sign out everywhere</button></form>
@@ -62,4 +65,5 @@
 </section>
 
 </div>
+<script src="{{ asset('push.js') }}" defer></script>
 {% endblock %}

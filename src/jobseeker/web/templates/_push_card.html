@@ -1,0 +1,17 @@
+<section class="card block" id="alerts" data-push-card data-vapid-key="{{ vapid_public_key }}">
+  <h2 class="card-title">Daily match alerts</h2>
+  <form method="post" action="/settings/prefs/alerts" class="row">
+    <label><input type="checkbox" name="notify_new_matches" {% if up.notify_new_matches %}checked{% endif %}
+      onchange="this.form.submit()"> Tell me once a day when there are new strong matches</label>
+  </form>
+  <p data-state="unconfigured" hidden>Alerts aren't set up on this server</p>
+  <p data-state="install" hidden>Add Job Seeker to your Home Screen first: Share → Add to Home Screen, then open it from there.</p>
+  <div data-state="ask" hidden><button type="button" class="btn btn-primary" data-push-on>Turn on alerts</button></div>
+  <div data-state="on" hidden>
+    <p>On for this device</p>
+    <button type="button" class="btn" data-push-test>Send a test</button>
+    <button type="button" class="btn btn-ghost" data-push-off>Turn off</button>
+  </div>
+  <p data-state="blocked" hidden>Notifications are blocked. Turn them on in iOS Settings → Notifications → Job Seeker.</p>
+  <p class="muted" data-push-status aria-live="polite"></p>
+</section>

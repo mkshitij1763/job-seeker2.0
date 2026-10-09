@@ -1,0 +1,8 @@
+<div class="fetch-now" id="fetch-now" hx-get="/fetch-now/status" hx-swap="outerHTML"
+     {% if fetch_now.poll %}hx-trigger="every 10s"{% endif %}>
+  {% if fetch_now.state == "ready" %}
+    <form method="post" action="/fetch-now"><button class="btn" type="submit">Fetch now</button></form>
+  {% else %}
+    <span class="chip">{{ fetch_now.text }}</span>
+  {% endif %}
+</div>
