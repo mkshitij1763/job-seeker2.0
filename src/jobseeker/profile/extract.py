@@ -14,6 +14,7 @@ from jobseeker.profile.resume import resume_path, validate_pdf
 
 IST = ZoneInfo("Asia/Kolkata")
 READ_FAILED = "Couldn't read your resume right now. Enter your skills yourself, or upload it again later."
+AI_DOWN = "The AI service is unavailable right now. Enter your skills by hand, or try again later."
 log = logging.getLogger(__name__)
 
 
@@ -38,8 +39,11 @@ def run_extract(db_path, home, user_id: int, sha: str, app_config, llm_factory) 
         text = validate_pdf(data, "application/pdf")
         try:
             facts = extract_facts(llm_factory(), text, app_config.models.facts)
-        except (LLMQuotaExceeded, LLMUnavailable):
+        except LLMQuotaExceeded:
             set_extract_status(conn, user_id, "failed", "AI limit reached for today.")
+            return
+        except LLMUnavailable:
+            set_extract_status(conn, user_id, "failed", AI_DOWN)
             return
         except LLMError as e:  # a bad key or a malformed reply: log it, never show provider text to the user
             log.warning("fact extraction failed for user %s: %s", user_id, e)

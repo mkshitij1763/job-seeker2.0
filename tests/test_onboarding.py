@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from jobseeker.db.core import connect
@@ -209,3 +211,27 @@ def test_an_extraction_that_reads_nothing_gives_its_unit_back(newbie, settings, 
     sha = hashlib.sha256(resume_path(settings.jobseeker_home, newbie).read_bytes()).hexdigest()
     run_extract(settings.db_path, settings.jobseeker_home, newbie, sha, app_config, lambda: None)
     assert spent() == 0
+
+
+@pytest.mark.parametrize("exc, note", [
+    ("LLMUnavailable", "The AI service is unavailable right now. Enter your skills by hand, or try again later."),
+    ("LLMQuotaExceeded", "AI limit reached for today."),
+])
+def test_extraction_failure_says_why(newbie, settings, monkeypatch, app_config, exc, note):
+    import hashlib
+
+    from jobseeker import llm
+    from jobseeker.db.profile import claim_extract, facts_row
+    from jobseeker.profile.extract import run_extract
+    from jobseeker.profile.resume import resume_path, store_resume
+
+    def fail(llm_, text, model):
+        raise getattr(llm, exc)("down")
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", fail)
+    store_resume(settings.jobseeker_home, newbie, pdf_bytes("B " + GOOD))
+    conn = connect(settings.db_path)
+    assert claim_extract(conn, newbie, datetime.now(UTC))
+    sha = hashlib.sha256(resume_path(settings.jobseeker_home, newbie).read_bytes()).hexdigest()
+    run_extract(settings.db_path, settings.jobseeker_home, newbie, sha, app_config, lambda: None)
+    row = facts_row(connect(settings.db_path), newbie)
+    assert (row["extract_status"], row["extract_error"]) == ("failed", note)
