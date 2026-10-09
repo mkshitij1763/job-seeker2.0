@@ -49,6 +49,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
     from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, pipeline, settings as settings_routes
+    from jobseeker.web import push as push_web
 
     from jobseeker.db.core import connect
     from jobseeker.db.users import ensure_owner
@@ -82,6 +83,8 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.mount("/static", _Static(directory=HERE / "static"), name="static")
     app.add_middleware(GZipMiddleware, minimum_size=1000)  # the inbox is ~50 KB of HTML, ~8 KB gzipped
     app.include_router(health.router)  # public, before the guarded routers
+    app.include_router(push_web.public)  # /sw.js
+    app.include_router(push_web.router)  # /push/*: signed in, deliberately not require_onboarded
     app.include_router(auth.router)
     app.include_router(inbox.router)  # "/" depends on optional_user itself
     app.include_router(onboarding.router)  # signed in, but deliberately not require_onboarded

@@ -29,7 +29,7 @@ def test_every_route_is_guarded(settings):
         assert current_user in calls, f"{r.path} has no current_user"
         if r.path.startswith("/onboarding"):
             assert require_onboarded not in calls, f"{r.path} must not require onboarding"
-        elif not r.path.startswith(("/logout", "/settings/delete", "/settings/export")):
+        elif not r.path.startswith(("/logout", "/settings/delete", "/settings/export", "/push/")):
             assert require_onboarded in calls, f"{r.path} has no require_onboarded"
         if r.path.startswith("/admin"):
             assert require_admin in calls, f"{r.path} has no require_admin"
