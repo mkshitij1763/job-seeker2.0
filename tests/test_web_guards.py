@@ -1,7 +1,7 @@
 from fastapi.routing import APIRoute, iter_route_contexts
 
 from jobseeker.web.app import PUBLIC, create_app
-from jobseeker.web.deps import current_user, optional_user, owned_app, require_admin
+from jobseeker.web.deps import current_user, optional_user, owned_app, require_admin, require_onboarded
 
 
 def _api_routes(app):
@@ -27,6 +27,10 @@ def test_every_route_is_guarded(settings):
             assert optional_user in calls
             continue
         assert current_user in calls, f"{r.path} has no current_user"
+        if r.path.startswith("/onboarding"):
+            assert require_onboarded not in calls, f"{r.path} must not require onboarding"
+        elif not r.path.startswith(("/logout", "/settings/delete", "/settings/export")):
+            assert require_onboarded in calls, f"{r.path} has no require_onboarded"
         if r.path.startswith("/admin"):
             assert require_admin in calls, f"{r.path} has no require_admin"
         if "{app_id}" in r.path:
@@ -111,3 +115,15 @@ def test_roommate_job_page_has_no_outreach_markup_and_can_mark_applied(seeded_tw
 def test_owner_job_page_keeps_outreach(seeded, client_as):
     html = client_as(1).get(f"/applications/{seeded[0]}").text
     assert "/approve" in html and 'data-tab="people"' in html and "Find contacts" in html
+
+
+def test_roommate_today_has_no_outreach_tiles(seeded_two, client_as):
+    html = client_as(2).get("/today").text
+    for bit in ("Send in Gmail", "Ready to approve", "Need contacts", "Find contacts", "Follow-ups due", 'value="sent"'):
+        assert bit not in html, bit
+    assert "Apply on the company site" in html and f"/applications/{seeded_two['roommate_app']}" in html
+
+
+def test_owner_today_keeps_outreach_tiles(seeded, client_as):
+    html = client_as(1).get("/today").text
+    assert "Send in Gmail" in html and "Need contacts" in html and "Apply on the company site" not in html

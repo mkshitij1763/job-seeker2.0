@@ -409,3 +409,11 @@ input, select, textarea { min-width: 0; }
 .btn-google { background: #fff; border: 1px solid var(--line-strong); color: #1F1F1F; min-height: 44px; gap: 12px; }
 .btn-google:hover { background: #fff; border-color: var(--text-3); }
 .landing-footer { text-align: center; font-size: 13px; }
+
+/* Onboarding and Settings preference forms */
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.chip:has(input:checked) { background: var(--accent-wash); border-color: var(--accent); color: var(--accent); }
+.field { display: grid; gap: 4px; margin: 12px 0 0; }
+.field-err { color: var(--weak-fg); font-size: .9rem; margin: 4px 0 0; }
+.onboarding .sticky-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
+@media (max-width: 640px) { .onboarding .sticky-actions { position: sticky; bottom: 0; background: var(--surface); padding: .75rem 0; } }

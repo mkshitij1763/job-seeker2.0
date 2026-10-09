@@ -1,0 +1,10 @@
+<h1>What roles are you looking for?</h1>
+<p class="muted">Pick any that fit. Jobs are matched on these titles.</p>
+<div class="chip-group">
+  {% for r in cfg.roles %}<label class="chip"><input type="checkbox" name="roles" value="{{ r.label }}"{{ " checked" if r.label in up.roles }}> {{ r.label }}</label>{% endfor %}
+</div>
+{% if errors.roles %}<p class="field-err">{{ errors.roles }}</p>{% endif %}
+<label class="field">Another role (optional)
+  <input name="custom_role" maxlength="60" value="{{ up.custom_role }}" placeholder="e.g. Chief of Staff">
+</label>
+{% if errors.custom_role %}<p class="field-err">{{ errors.custom_role }}</p>{% endif %}

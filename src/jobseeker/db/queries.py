@@ -130,5 +130,6 @@ def today(conn: sqlite3.Connection, user_id: int, now: datetime) -> dict:
                       and (nudge_due(conn, r["app_id"], now) or third_due(conn, r["app_id"], now))],
         "ready": [r for r in drafted if r["people"]],
         "find_contacts": [r for r in drafted if not r["people"]],
+        "shortlisted": [r for r in rows if r["status"] == "shortlisted"],  # the matching-only path
         "new_since_yesterday": sum(1 for r in rows if r["status"] in _INBOX_STATUSES and r["first_seen_at"] >= since),
     }

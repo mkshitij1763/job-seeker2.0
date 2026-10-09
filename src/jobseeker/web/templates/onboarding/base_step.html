@@ -1,0 +1,12 @@
+{% extends "bare.html" %}
+{% block title %}Set up · Job Seeker{% endblock %}
+{% block content %}
+<div class="card block onboarding">
+  <p class="muted mono">Step {{ step_no }} of {{ steps }}</p>
+  <form method="post" action="/onboarding/{% block step %}{% endblock %}">
+    {% block fields %}{% endblock %}
+    <div class="sticky-actions"><button class="btn btn-primary" type="submit">Continue</button>
+      {% if step_no > 1 %}<a class="btn-ghost" href="/onboarding/{{ ['roles', 'where', 'experience', 'resume'][step_no - 2] }}">Back</a>{% endif %}</div>
+  </form>
+</div>
+{% endblock %}
