@@ -1,0 +1,13 @@
+# Railway builds from a git clone, so git-ignored files are absent there anyway; this guards a local `docker build`.
+.env
+secrets/
+data/
+profile/resume.pdf
+profile/facts.json
+*.pdf
+.venv
+.git
+.superpowers
+.claude
+.pytest_cache
+**/__pycache__
