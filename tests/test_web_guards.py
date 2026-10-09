@@ -68,23 +68,22 @@ def test_owner_still_sees_everything(seeded, client_as):
     assert web.get(f"/applications/{seeded[0]}").status_code == 200
 
 
-# Outreach writes shared rows (contacts, company_domains, bounced emails), so until per-user contacts land
-# (sub-project 5, which swaps this for require_outreach) only the owner may reach these routes.
+# Outreach (contacts, drafts, Gmail) is a per-user switch: users.outreach_enabled, else every route is a 404.
 OUTREACH = {("POST", "/applications/{app_id}/contact"), ("POST", "/applications/{app_id}/drafts/{kind}"),
             ("POST", "/applications/{app_id}/draft"), ("POST", "/applications/{app_id}/approve"),
             ("POST", "/applications/{app_id}/followed-up")}
 
 
 def _outreach(r):
-    return any((m, r.path) in OUTREACH for m in r.methods) or ("/contacts/" in r.path and "POST" in r.methods)
+    return any((m, r.path) in OUTREACH for m in r.methods) or "/contacts/" in r.path or r.path.startswith("/gmail")
 
 
-def test_outreach_routes_are_owner_only(settings):
-    from jobseeker.web.deps import require_owner
+def test_outreach_routes_require_outreach(settings):
+    from jobseeker.web.deps import require_outreach
     gated = [r for r in _api_routes(create_app(settings)) if _outreach(r)]
-    assert len(gated) >= 11
+    assert len(gated) >= 12
     for r in gated:
-        assert require_owner in set(_calls(r.dependant)), f"{r.path} has no require_owner"
+        assert require_outreach in set(_calls(r.dependant)), f"{r.path} has no require_outreach"
 
 
 def test_roommate_gets_404_on_outreach_routes_of_their_own_application(seeded_two, client_as, settings):
@@ -93,7 +92,34 @@ def test_roommate_gets_404_on_outreach_routes_of_their_own_application(seeded_tw
     for r in _api_routes(create_app(settings)):
         if _outreach(r):
             path = r.path.replace("{app_id}", str(a)).replace("{kind}", "email").replace("{rank}", "1")
-            assert web.post(path).status_code == 404, path
+            for method in r.methods - {"HEAD"}:
+                assert web.request(method, path).status_code == 404, (method, path)
+
+
+def test_outreach_on_for_roommate_opens_the_routes(seeded_two, client_as, settings):
+    from jobseeker.db.core import connect
+    from jobseeker.db.users import set_outreach
+    set_outreach(connect(settings.db_path), 2, True)
+    web, a = client_as(2, follow_redirects=False), seeded_two["roommate_app"]
+    assert web.get(f"/applications/{a}/contacts/card").status_code == 200
+    html = web.get(f"/applications/{a}").text
+    assert 'data-tab="people"' in html and "Open job posting" not in html
+
+
+def test_outreach_off_keeps_drafts_and_hides_them(seeded, client_as, settings):
+    from jobseeker.db.applications import save_draft
+    from jobseeker.db.core import connect
+    from jobseeker.db.users import set_outreach
+    conn = connect(settings.db_path)
+    save_draft(conn, seeded[0], "email", "Subj", "Body kept")
+    conn.execute("INSERT INTO users (id, email, is_admin, created_at) VALUES (5, 'admin2@example.com', 1, 't')")
+    set_outreach(conn, 1, False)
+    web = client_as(1, follow_redirects=False)
+    assert web.post(f"/applications/{seeded[0]}/approve").status_code == 404
+    assert web.get(f"/applications/{seeded[0]}").status_code == 200
+    assert conn.execute("SELECT body FROM drafts WHERE application_id = ?", (seeded[0],)).fetchone()[0] == "Body kept"
+    set_outreach(conn, 1, True)
+    assert "Body kept" in client_as(1).get(f"/applications/{seeded[0]}").text
 
 
 OUTREACH_MARKUP = ("/contacts/", "/approve", "/draft", "/contact\"", "/followed-up", "Find contacts", "Gmail",

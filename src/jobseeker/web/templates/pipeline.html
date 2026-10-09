@@ -1,18 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Pipeline · Job Seeker{% endblock %}
 {% block content %}
-{% set active = ["shortlisted", "drafted", "approved", "sent", "replied", "interview", "offer"] %}
+{% set active = ["shortlisted", "drafted", "approved", "sent", "replied", "interview", "offer"] if can_outreach
+   else ["shortlisted", "replied", "interview", "offer"] %}
 {% set empty_text = {"shortlisted": "Nothing shortlisted yet.", "drafted": "No drafts waiting.", "approved": "No Gmail drafts waiting to send.",
                      "sent": "Nothing sent yet.", "replied": "No replies yet.", "interview": "No interviews yet.", "offer": "No offers yet."} %}
 {% set closed = board.applied_via_portal + board.rejected %}
 {% set due = board.sent|selectattr("needs_followup")|list %}
-{% set default = "sent" if due else "drafted" %}
+{% set default = ("sent" if due else "drafted") if can_outreach else "shortlisted" %}
 {% macro card(c) %}
 <article class="kcard{{ ' due' if c.needs_followup }}">
   <div class="kcard-top"><a class="kcard-title" href="/applications/{{ c.app_id }}">{{ c.title }}</a><span class="pill tier-{{ tier(c.score) }}">{{ c.score }}</span></div>
   <p class="muted">{{ c.company }} · <span class="mono">{{ c.days_since }}d</span> since last action</p>
   {% if c.third %}<p class="warnc"><b>⚠ Email #3: {{ c.third.name.split()[0] }}</b></p>
   {% elif c.needs_followup %}<p class="warnc"><b>⚠ Follow up</b></p>
+  {% elif not can_outreach %}
   {% elif c.status == "drafted" and c.people %}<span class="next-step ready">Ready to approve →</span>
   {% elif c.status == "drafted" %}<span class="next-step find">Find contacts →</span>
   {% elif c.status == "approved" %}<span class="next-step find">Send in Gmail →</span>{% endif %}
@@ -30,7 +32,9 @@
 {% endmacro %}
 <header class="page-head"><h1>Pipeline</h1><p class="muted">Every application after the inbox, by stage.</p></header>
 <div class="stats pipe-stats">
-  {% for n, label in [(st.drafted, "Drafted (30d)"), (st.sent, "Sent"), (st.replied, "Replies"), ((st.reply_rate * 100)|round|int ~ "%", "Reply rate"), (st.interviews, "Interviews")] %}
+  {% set tiles = [(st.drafted, "Drafted (30d)"), (st.sent, "Sent"), (st.replied, "Replies"), ((st.reply_rate * 100)|round|int ~ "%", "Reply rate"), (st.interviews, "Interviews")]
+     if can_outreach else [(st.replied, "Replies"), (st.interviews, "Interviews")] %}
+  {% for n, label in tiles %}
   <div class="stat card"><b>{{ n }}</b><span class="stat-label">{{ label }}</span></div>
   {% endfor %}
 </div>

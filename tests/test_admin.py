@@ -29,3 +29,21 @@ def test_disable_deletes_sessions_and_last_admin_refused(seeded_two, client_as, 
 def test_usage_table_per_user(seeded_two, client_as):
     html = client_as(1).get("/admin").text
     assert "roomie@example.com" in html and "tavily" in html.lower()
+
+
+def test_admin_outreach_toggle(seeded_two, client_as, settings):
+    from jobseeker.db.users import user_by_id
+    owner = client_as(1, follow_redirects=False)
+    r = owner.post("/admin/users/2/outreach", data={"enabled": "1"})
+    assert r.status_code == 303 and "test%20user" in r.headers["location"].replace("+", "%20")
+    assert user_by_id(connect(settings.db_path), 2).outreach_enabled
+    assert "Outreach: on" in client_as(1).get("/admin").text
+    owner.post("/admin/users/2/outreach", data={"enabled": "0"})
+    assert not user_by_id(connect(settings.db_path), 2).outreach_enabled
+    assert client_as(2, follow_redirects=False).post("/admin/users/2/outreach", data={"enabled": "1"}).status_code == 404
+
+
+def test_pipeline_hides_outreach_columns_for_matching_only(seeded_two, client_as):
+    html = client_as(2).get("/pipeline").text
+    assert "No drafts waiting." not in html and "No Gmail drafts waiting to send." not in html
+    assert "Drafted (30d)" not in html

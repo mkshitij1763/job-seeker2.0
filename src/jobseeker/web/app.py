@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from jobseeker.config import Settings, load_app_config, load_rubric
 from jobseeker.status import allowed_next
 from jobseeker.web.csrf import OriginCheck
-from jobseeker.web.deps import NotAuthenticated, NotOnboarded, current_user, owned_app, require_onboarded
+from jobseeker.web.deps import NotAuthenticated, NotOnboarded, current_user, owned_app, require_onboarded, require_outreach
 from jobseeker.web.filters import age, highlight, personal_note
 from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.view import STEPS, TIER_LABELS, tier
@@ -48,7 +48,8 @@ class _Static(StaticFiles):
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
-    from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, pipeline, settings as settings_routes
+    from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, outreach, pipeline
+    from jobseeker.web import settings as settings_routes
     from jobseeker.web import fetch_now
     from jobseeker.web import push as push_web
 
@@ -96,8 +97,10 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.include_router(auth.router)
     app.include_router(inbox.router)  # "/" depends on optional_user itself
     app.include_router(onboarding.router)  # signed in, but deliberately not require_onboarded
+    gate = [Depends(require_onboarded), Depends(owned_app), Depends(require_outreach)]
     app.include_router(application.router, dependencies=[Depends(require_onboarded), Depends(owned_app)])
-    app.include_router(contacts.router, dependencies=[Depends(require_onboarded), Depends(owned_app)])
+    app.include_router(outreach.router, dependencies=gate)
+    app.include_router(contacts.router, dependencies=gate)
     app.include_router(pipeline.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
     app.include_router(admin.router, dependencies=[Depends(require_onboarded)])
     app.include_router(settings_routes.router, dependencies=[Depends(current_user), Depends(require_onboarded)])

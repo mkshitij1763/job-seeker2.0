@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
 from jobseeker.backup.nightly import recent_backups
-from jobseeker.db.users import LastAdmin, add_invite, list_invites, list_users, remove_invite, set_disabled
+from jobseeker.db.users import LastAdmin, add_invite, list_invites, list_users, remove_invite, set_disabled, set_outreach
 from jobseeker.web.deps import get_conn, render, require_admin
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
@@ -62,3 +62,16 @@ def disable(user_id: int, conn=Depends(get_conn)):
 def enable(user_id: int, conn=Depends(get_conn)):
     set_disabled(conn, user_id, False, datetime.now(UTC))
     return _back(msg="User enabled")
+
+
+@router.post("/users/{user_id}/outreach")
+def outreach(user_id: int, enabled: str = Form("0"), conn=Depends(get_conn)):
+    target = conn.execute("SELECT email FROM users WHERE id = ?", (user_id,)).fetchone()
+    if target is None:
+        return _back(err="No such user")
+    on = enabled == "1"
+    set_outreach(conn, user_id, on)
+    if not on:
+        return _back(msg="Outreach off. Their Gmail grant was removed; drafts and history stay hidden")
+    return _back(msg=f"Outreach on. 1. Add {target['email']} as a test user in Google Cloud → OAuth consent screen. "
+                     "2. Ask them to open Settings → Connect Gmail")

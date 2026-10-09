@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException, Request
 from jobseeker.db.core import connect
 from jobseeker.db.runs import header_run
 from jobseeker.db.sessions import user_for_token
-from jobseeker.db.users import OWNER_ID, User
+from jobseeker.db.users import User
 from jobseeker.web.filters import explain_run, explain_stats
 from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.view import nav_counts
@@ -37,7 +37,7 @@ def render(request: Request, conn, name: str, **ctx):
     ctx["run_finished"] = run["finished_at"] if run else None
     ctx["nav"] = nav_counts(conn, user.id)
     ctx["user"] = user
-    ctx["can_outreach"] = user.id == OWNER_ID  # interim; sub-project 5 reads users.outreach_enabled
+    ctx["can_outreach"] = user.outreach_enabled
     return request.app.state.templates.TemplateResponse(request, name, ctx)
 
 
@@ -93,10 +93,9 @@ def current_facts(user: User = Depends(current_user), conn=Depends(get_conn)):
     return get_facts(conn, user.id)
 
 
-def require_owner(user: User = Depends(current_user)) -> User:
-    """Interim outreach gate: contacts and company domains are shared rows, so only the owner may write them until
-    sub-project 5 makes contacts per user (it replaces this with require_outreach)."""
-    if user.id != OWNER_ID:
+def require_outreach(user: User = Depends(require_onboarded)) -> User:
+    """Outreach (contacts, drafts, Gmail) is a per-user switch; off means the routes don't exist (404)."""
+    if not user.outreach_enabled:
         raise HTTPException(404)
     return user
 

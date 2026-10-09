@@ -27,11 +27,13 @@
 <section class="card block">
   <h2 class="section-title">Users</h2>
   <table>
-    <thead><tr><th>Email</th><th>Name</th><th>Last login</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Email</th><th>Name</th><th>Last login</th><th>Status</th><th>Outreach</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td class="mono muted">{{ (u.last_login_at or "")[:10] or "—" }}</td>
         <td>{% if u.disabled_at %}Disabled{% else %}Active{% endif %}{% if u.is_admin %} · admin{% endif %}</td>
+        <td>Outreach: {{ "on" if u.outreach_enabled else "off" }}
+          <form method="post" action="/admin/users/{{ u.id }}/outreach"><input type="hidden" name="enabled" value="{{ 0 if u.outreach_enabled else 1 }}"><button class="btn btn-ghost">Turn outreach {{ "off" if u.outreach_enabled else "on" }}</button></form></td>
         <td>{% if u.disabled_at %}<form method="post" action="/admin/users/{{ u.id }}/enable"><button class="btn btn-ghost">Enable</button></form>
             {% else %}<form method="post" action="/admin/users/{{ u.id }}/disable"><button class="btn btn-ghost">Disable</button></form>{% endif %}</td></tr>
     {% endfor %}

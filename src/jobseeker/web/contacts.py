@@ -13,7 +13,7 @@ from jobseeker.db.contacts_repo import (
 from jobseeker.db.usage import Budget, contacts_limits
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
-from jobseeker.web.deps import current_prefs, current_user, get_conn, require_owner
+from jobseeker.web.deps import current_prefs, current_user, get_conn
 
 router = APIRouter(prefix="/applications")
 
@@ -34,7 +34,7 @@ def card_context(request: Request, conn, app_id: int, prefs) -> dict:
             "has_tavily": bool(state.settings.tavily_api_key)}
 
 
-@router.post("/{app_id}/contacts/find", dependencies=[Depends(require_owner)])
+@router.post("/{app_id}/contacts/find")
 def find(request: Request, app_id: int, background: BackgroundTasks, user=Depends(current_user),
          prefs=Depends(current_prefs), conn=Depends(get_conn)):
     state = request.app.state
@@ -62,7 +62,7 @@ def card(request: Request, app_id: int, prefs=Depends(current_prefs), conn=Depen
         request, "_people.html", {"app": dict(app), "drafts": drafts, **card_context(request, conn, app_id, prefs)})
 
 
-@router.post("/{app_id}/contacts/domain", dependencies=[Depends(require_owner)])
+@router.post("/{app_id}/contacts/domain")
 def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
     from jobseeker.db.contacts_repo import save_domain
 
@@ -75,7 +75,7 @@ def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
     return _back(app_id, msg=f"Email domain set to {value}. Run Find contacts again to rebuild emails")
 
 
-@router.post("/{app_id}/contacts/{rank}/remove", dependencies=[Depends(require_owner)])
+@router.post("/{app_id}/contacts/{rank}/remove")
 def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_conn)):
     nxt = next_candidate(conn, app_id)
     removed = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND rank = ?",
@@ -103,7 +103,7 @@ def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_
     return _back(app_id, msg=f"Replaced with {nxt['name']} (email is a pattern guess)")
 
 
-@router.post("/{app_id}/contacts/{rank}/edit", dependencies=[Depends(require_owner)])
+@router.post("/{app_id}/contacts/{rank}/edit")
 def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
          email_status: str = Form("unverified"), conn=Depends(get_conn)):
     if email_status not in {"unverified", "verified", "bounced"}:
@@ -120,13 +120,13 @@ def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
     return _back(app_id, msg="Saved")
 
 
-@router.post("/{app_id}/contacts/3/email", dependencies=[Depends(require_owner)])
+@router.post("/{app_id}/contacts/3/email")
 def email_third(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
                 conn=Depends(get_conn)):
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
-    from jobseeker.web.application import _raw_for
+    from jobseeker.web.outreach import _raw_for
 
     if not third_due(conn, app_id, datetime.now(UTC)):
         return _back(app_id, err="Email #3 is offered 5 days after Mark sent with no reply")
@@ -152,13 +152,13 @@ FOLLOW_UP = ("Following up on my note from last week about the {title} role. I'd
              "for convenience.")
 
 
-@router.post("/{app_id}/contacts/followup", dependencies=[Depends(require_owner)])
+@router.post("/{app_id}/contacts/followup")
 def follow_up(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
               conn=Depends(get_conn)):
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
-    from jobseeker.web.application import _raw_for
+    from jobseeker.web.outreach import _raw_for
 
     due = nudge_due(conn, app_id, datetime.now(UTC))
     if not due:
