@@ -86,7 +86,7 @@ def test_personal_note():
 
 
 def test_set_company_email_domain(settings, seeded):
-    from jobseeker.db.contacts_repo import get_domain, save_domain
+    from jobseeker.db.contacts_repo import effective_domain, get_domain, save_domain
 
     a = seeded[0]
     conn = connect(settings.db_path)
@@ -95,8 +95,11 @@ def test_set_company_email_domain(settings, seeded):
     assert "wrong.com" in client.get(f"/applications/{a}").text
     r = client.post(f"/applications/{a}/contacts/domain", data={"domain": " https://www.Cred.club/ "})
     assert "msg=" in r.headers["location"]
-    row = get_domain(connect(settings.db_path), "cred")
-    assert (row["domain"], row["pattern"], row["catch_all"], row["mx_host"]) == ("cred.club", None, None, None)
+    conn = connect(settings.db_path)
+    row = get_domain(conn, "cred")  # the shared row keeps what discovery found; the typed domain is this user's own
+    assert (row["domain"], row["pattern"], row["catch_all"], row["mx_host"]) == ("wrong.com", "first", 2, "mx.wrong.com")
+    assert effective_domain(conn, 1, "cred") == ({"name_norm": "cred", "domain": "cred.club"}, False)
+    assert "cred.club" in client.get(f"/applications/{a}").text
 
 
 def test_find_redirect_carries_no_stale_progress_message(settings, seeded):

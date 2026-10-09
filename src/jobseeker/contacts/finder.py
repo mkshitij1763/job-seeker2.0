@@ -15,7 +15,7 @@ from jobseeker.contacts.people import Candidate, from_results, rank, role_words,
 from jobseeker.contacts.smtp_probe import port25_open
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
-    blocked_names, blocked_profile_urls, bounced_emails, cached_search, emailed_count, get_domain, known_catch_all, link_contact,
+    blocked_names, blocked_profile_urls, bounced_emails, cached_search, effective_domain, emailed_count, known_catch_all, link_contact,
     save_candidates, save_domain, set_find_status, store_search, upsert_contact,
 )
 from jobseeker.db.core import connect, iso
@@ -123,7 +123,11 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     person_names = [names.clean_name(c.name) for c, _, _ in top]
 
     # 2. domain and pattern hints
-    dom = get_domain(conn, norm) or {}
+    dom, shared_dom = effective_domain(conn, user_id, norm)
+
+    def remember(**fields) -> None:  # a user's own domain override never feeds the shared row
+        if shared_dom:
+            save_domain(conn, norm, **fields)
     domain = dom.get("domain") or domain_from_text(job["jd_text"], company)
     if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
         query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
@@ -155,7 +159,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     smtp_ok = mode == "on" or (mode == "auto" and deps.port25(conn, deps.now()))
     if domain and mx and not smtp_ok:
         notes.append(SERVER_NOTE)
-        save_domain(conn, norm, domain=domain, mx_host=mx, catch_all=catch_all, pattern=hints[0] if hints else None)
+        remember(domain=domain, mx_host=mx, catch_all=catch_all, pattern=hints[0] if hints else None)
     elif domain and mx:
         sender = prefs.contacts.sender_email or prefs.email
         try:
@@ -185,7 +189,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             if "refused" in str(e):
                 catch_all = 2  # remembered: skip checks for this domain next time
                 learned_at = iso(deps.now())
-        save_domain(conn, norm, domain=domain, mx_host=mx, catch_all=catch_all,
+        remember(domain=domain, mx_host=mx, catch_all=catch_all,
                     pattern=hints[0] if hints else None, **({"catch_all_at": learned_at} if learned_at else {}))
 
     # 4. fallbacks
@@ -214,7 +218,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
             mx = deps.resolver(domain)
             learned = names.pattern_of(found[0], found[1])
             hints = ([learned] if learned else []) + [h for h in hints if h != learned]
-            save_domain(conn, norm, domain=domain, mx_host=mx, pattern=learned)
+            remember(domain=domain, mx_host=mx, pattern=learned)
     missing = [i for i in range(len(top)) if i not in results]
     if domain and mx and missing and deps.hunter is not None and not hints:
         if budget.can("hunter"):
@@ -226,7 +230,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                 found = {"pattern": None, "emails": []}
             if found["pattern"]:
                 hints.insert(0, found["pattern"])
-                save_domain(conn, norm, pattern=found["pattern"])
+                remember(pattern=found["pattern"])
             listed = {(f.lower(), l.lower()): e for f, l, e in found["emails"]}
             for i in missing:
                 nm = person_names[i]
@@ -241,7 +245,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         learned = person_names[i] and names.pattern_of(results[i][0], person_names[i])
         if learned and domain and results[i][0].endswith("@" + domain):
             hints = [learned] + [h for h in hints if h != learned]
-            save_domain(conn, norm, pattern=learned)
+            remember(pattern=learned)
             break
 
     # 5. best guesses, then save

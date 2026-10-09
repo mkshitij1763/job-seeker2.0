@@ -362,11 +362,19 @@ CREATE TABLE gmail_tokens (
   refreshed_at TEXT
 );
 CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, checked_at TEXT NOT NULL);
+CREATE TABLE user_company_domains (
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  name_norm TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  set_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, name_norm)
+);
 """
 
 
 def migrate_v5(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
-    """Per-user outreach: the switch, private vs shared contacts, the people-search cache, Gmail tokens."""
+    """Per-user outreach: the switch, private vs shared contacts, the people-search cache, Gmail tokens and
+    per-user email-domain overrides."""
     before = conn.execute("SELECT COUNT(*) FROM application_contacts").fetchone()[0]
     for stmt in V5_DDL.split(";"):
         if stmt.strip():

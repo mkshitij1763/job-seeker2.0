@@ -7,8 +7,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from jobseeker.contacts import names
 from jobseeker.contacts.finder import run_find
 from jobseeker.db.contacts_repo import (
-    claim_find, edit_contact, emailed_count, find_state, get_domain, link_contact, next_candidate, nudge_due, people, third_due,
-    upsert_contact,
+    claim_find, edit_contact, effective_domain, emailed_count, find_state, link_contact, next_candidate, nudge_due, people,
+    set_user_domain, third_due, upsert_contact,
 )
 from jobseeker.clock import app_now
 from jobseeker.db.usage import Budget, outreach_limits
@@ -27,7 +27,7 @@ def _company(conn, app_id: int) -> str:
 def card_context(request: Request, conn, app_id: int, prefs) -> dict:
     state = request.app.state
     return {"people": people(conn, app_id), "find": find_state(conn, app_id, datetime.now(UTC)),
-            "domain": get_domain(conn, normalize_company(_company(conn, app_id))),
+            "domain": effective_domain(conn, request.state.user.id, normalize_company(_company(conn, app_id)))[0] or None,
             "third_due": third_due(conn, app_id, datetime.now(UTC)),
             "nudge_due": nudge_due(conn, app_id, datetime.now(UTC)),
             "already_emailed": emailed_count(conn, app_id) > 0,
@@ -66,15 +66,12 @@ def card(request: Request, app_id: int, prefs=Depends(current_prefs), conn=Depen
 
 
 @router.post("/{app_id}/contacts/domain")
-def set_domain(app_id: int, domain: str = Form(""), conn=Depends(get_conn)):
-    from jobseeker.db.contacts_repo import save_domain
-
+def set_domain(app_id: int, domain: str = Form(""), user=Depends(current_user), conn=Depends(get_conn)):
     value = domain.strip().lower()
     value = value.split("://", 1)[-1].split("/", 1)[0].removeprefix("www.").lstrip("@")
     if "." not in value:
         return _back(app_id, err="Enter a domain like company.com")
-    save_domain(conn, normalize_company(_company(conn, app_id)), domain=value, pattern=None, catch_all=None,
-                mx_host=None)
+    set_user_domain(conn, user.id, normalize_company(_company(conn, app_id)), value)  # never the shared row
     return _back(app_id, msg=f"Email domain set to {value}. Run Find contacts again to rebuild emails")
 
 
@@ -93,7 +90,7 @@ def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_
         return _back(app_id, msg="Removed. No more candidates; run Find contacts again for more")
     company = conn.execute("SELECT j.company FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = ?",
                            (app_id,)).fetchone()["company"]
-    dom = get_domain(conn, normalize_company(company)) or {}
+    dom = effective_domain(conn, user.id, normalize_company(company))[0]
     nm = names.clean_name(nxt["name"])
     email, source = "", ""
     if dom.get("domain") and nm:

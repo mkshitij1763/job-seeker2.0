@@ -135,10 +135,9 @@ def save_contact(conn: sqlite3.Connection, app_id: int, *, name: str, role: str,
     company = _company_of(conn, app_id)
     user_id = get_application(conn, app_id)["user_id"]
     # "Not interested" is per user and may sit on a shared row or on this user's own row for the same person.
-    if conn.execute("""SELECT 1 FROM contacts c JOIN blocklist b ON b.contact_id = c.id AND b.user_id = ?
-                       WHERE (c.owner_user_id IS NULL OR c.owner_user_id = ?)
-                         AND ((? != '' AND lower(c.email) = lower(?)) OR (? != '' AND c.linkedin_url = ?))""",
-                    (user_id, user_id, email, email, linkedin_url, linkedin_url)).fetchone():
+    from jobseeker.db.contacts_repo import is_blocked
+
+    if is_blocked(conn, user_id, email, linkedin_url):
         raise BlockedContact(f"{name or email} said not interested; not attaching")
     # Someone added by hand is always this user's private row: matched only among their own rows, never shared.
     existing = None

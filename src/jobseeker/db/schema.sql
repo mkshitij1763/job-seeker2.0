@@ -288,3 +288,10 @@ CREATE TABLE IF NOT EXISTS gmail_tokens (
   refreshed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, checked_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS user_company_domains (
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  name_norm TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  set_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, name_norm)
+);
