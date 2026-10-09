@@ -26,17 +26,31 @@ AUTH_TEST = dict(google_client_id="cid.apps.googleusercontent.com", google_clien
                  base_url="https://testserver", secret_key="k" * 32, owner_email="owner@example.com")
 
 
-@pytest.fixture
-def settings(home: Path) -> Settings:
+@pytest.fixture(scope="session")
+def _imported_home(tmp_path_factory) -> Path:
+    """A fresh database with the fixture owner imported (v2), built once per session; `settings` copies it."""
     from datetime import UTC, datetime
 
     from jobseeker.profile.importer import import_profile
+    tpl = tmp_path_factory.mktemp("imported")
+    (tpl / "profile").mkdir()
+    for name in ("preferences.yaml", "facts.json"):
+        shutil.copy(ROOT / "tests" / "fixtures" / name, tpl / "profile" / name)
+    conn = connect(tpl / "data" / "jobseeker.db")
+    import_profile(conn, 1, tpl / "profile", tpl, datetime.now(UTC))
+    conn.commit()
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # everything in the main file, so a plain copy is complete
+    conn.close()
+    return tpl
+
+
+@pytest.fixture
+def settings(home: Path, _imported_home: Path) -> Settings:
     s = Settings(jobseeker_home=home, groq_api_key="test", **AUTH_TEST)
     shutil.copy(ROOT / "tests" / "fixtures" / "facts.json", home / "profile" / "facts.json")
-    conn = connect(s.db_path)
-    import_profile(conn, 1, home / "profile", home, datetime.now(UTC))
-    conn.commit()
-    conn.close()
+    shutil.copytree(_imported_home / "config", home / "config")
+    s.data_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_imported_home / "data" / "jobseeker.db", s.db_path)
     return s
 
 

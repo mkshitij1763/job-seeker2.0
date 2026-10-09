@@ -8,3 +8,18 @@
   <input name="custom_role" maxlength="60" value="{{ up.custom_role }}" placeholder="e.g. Chief of Staff">
 </label>
 {% if errors.custom_role %}<p class="field-err">{{ errors.custom_role }}</p>{% endif %}
+{% if settings_page and (up.title_allow_extra or up.target_roles_text) %}
+<details class="advanced"{% if errors.title_allow_extra or errors.target_roles_text %} open{% endif %}>
+  <summary>Advanced (custom matching)</summary>
+  <p class="muted">Your matching was carried over as written. While "Title must contain" is set, the role chips above only change searches, not which titles pass.</p>
+  <label class="field">Title must contain (comma-separated)
+    <input name="title_allow_extra_text" value="{{ up.title_allow_extra|join(', ') }}">
+  </label>
+  {% if errors.title_allow_extra %}<p class="field-err">{{ errors.title_allow_extra }}</p>{% endif %}
+  <label class="field">Target roles as the AI sees them (one per line)
+    <textarea name="target_roles_text" rows="4">{{ up.target_roles_text|join("\n") }}</textarea>
+  </label>
+  {% if errors.target_roles_text %}<p class="field-err">{{ errors.target_roles_text }}</p>{% endif %}
+  <button class="btn-ghost" name="use_chips" value="1">Use the role chips instead</button>
+</details>
+{% endif %}

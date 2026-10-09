@@ -122,3 +122,17 @@ def test_default_title_exclusions_fit_the_experience_step(newbie, client_as, app
         "experience_years": "1", "drop_if_min_years_at_least": "2", "experience_summary": "x",
         "title_deny_text": ", ".join(app_config.default_title_deny)})
     assert len(app_config.default_title_deny) > 10 and r.status_code == 303
+
+
+def test_provider_errors_never_reach_the_page(newbie, client_as, monkeypatch):
+    from jobseeker.llm import LLMError
+
+    def bad_key(llm, text, model):
+        raise LLMError("AuthenticationError: Error code: 401 - Invalid API Key")
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", bad_key)
+    web = client_as(newbie, follow_redirects=False)
+    _to_resume_step(web)
+    web.post("/onboarding/resume", files={"resume": ("cv.pdf", pdf_bytes(), "application/pdf")})
+    html = web.get("/onboarding/resume/status").text
+    assert "401" not in html and "API Key" not in html and "Enter my skills myself" in html
+    assert "read your resume right now" in html

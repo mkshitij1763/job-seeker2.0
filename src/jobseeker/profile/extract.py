@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from jobseeker.db.core import connect
 from jobseeker.db.profile import save_facts, set_extract_status
 from jobseeker.db.usage import Budget, Limit
-from jobseeker.llm import LLMQuotaExceeded, LLMUnavailable
+from jobseeker.llm import LLMError, LLMQuotaExceeded, LLMUnavailable
 from jobseeker.profile.facts import extract_facts
 from jobseeker.profile.resume import resume_path, validate_pdf
 
 IST = ZoneInfo("Asia/Kolkata")
+READ_FAILED = "Couldn't read your resume right now. Enter your skills yourself, or upload it again later."
+log = logging.getLogger(__name__)
 
 
 def facts_limits(cfg) -> dict[str, Limit]:
@@ -32,8 +35,13 @@ def run_extract(db_path, home, user_id: int, sha: str, app_config, llm_factory) 
         except (LLMQuotaExceeded, LLMUnavailable):
             set_extract_status(conn, user_id, "failed", "AI limit reached for today.")
             return
+        except LLMError as e:  # a bad key or a malformed reply: log it, never show provider text to the user
+            log.warning("fact extraction failed for user %s: %s", user_id, e)
+            set_extract_status(conn, user_id, "failed", READ_FAILED)
+            return
         save_facts(conn, user_id, sha, facts, edited=False, now=datetime.now(IST))
-    except Exception as e:  # the page must always leave the running state
-        set_extract_status(conn, user_id, "failed", f"{type(e).__name__}: {e}")
+    except Exception:  # the page must always leave the running state
+        log.exception("fact extraction crashed for user %s", user_id)
+        set_extract_status(conn, user_id, "failed", READ_FAILED)
     finally:
         conn.close()
