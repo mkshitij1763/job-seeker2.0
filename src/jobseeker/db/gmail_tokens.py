@@ -12,18 +12,25 @@ log = logging.getLogger(__name__)
 
 
 def save_token(conn: sqlite3.Connection, key: bytes, user_id: int, account_email: str, creds_json: str,
-               now: datetime, refreshed: bool = False) -> None:
+               now: datetime) -> None:
     blob = seal(key, creds_json.encode(), user_aad(user_id))
-    if refreshed:
-        conn.execute("UPDATE gmail_tokens SET token_enc = ?, status = 'ok', refreshed_at = ? WHERE user_id = ?",
-                     (blob, iso(now), user_id))
-    else:
-        conn.execute("""INSERT INTO gmail_tokens (user_id, account_email, token_enc, status, connected_at, refreshed_at)
-                        VALUES (?, ?, ?, 'ok', ?, ?) ON CONFLICT (user_id) DO UPDATE SET
-                        account_email = excluded.account_email, token_enc = excluded.token_enc, status = 'ok',
-                        connected_at = excluded.connected_at, refreshed_at = excluded.refreshed_at""",
-                     (user_id, account_email, blob, iso(now), iso(now)))
+    conn.execute("""INSERT INTO gmail_tokens (user_id, account_email, token_enc, status, connected_at, refreshed_at)
+                    VALUES (?, ?, ?, 'ok', ?, ?) ON CONFLICT (user_id) DO UPDATE SET
+                    account_email = excluded.account_email, token_enc = excluded.token_enc, status = 'ok',
+                    connected_at = excluded.connected_at, refreshed_at = excluded.refreshed_at""",
+                 (user_id, account_email, blob, iso(now), iso(now)))
     conn.commit()
+
+
+def save_refreshed(conn: sqlite3.Connection, key: bytes, user_id: int, connected_at: str, creds_json: str,
+                   now: datetime) -> bool:
+    """Write a refreshed token back only onto the grant it came from: not after a reconnect (a new connected_at),
+    an expiry or a removal, which all win. False when the refresh was discarded."""
+    cur = conn.execute("""UPDATE gmail_tokens SET token_enc = ?, refreshed_at = ?
+                          WHERE user_id = ? AND connected_at = ? AND status = 'ok'""",
+                       (seal(key, creds_json.encode(), user_aad(user_id)), iso(now), user_id, connected_at))
+    conn.commit()
+    return cur.rowcount == 1
 
 
 def load_token(conn: sqlite3.Connection, key: bytes, user_id: int) -> str:

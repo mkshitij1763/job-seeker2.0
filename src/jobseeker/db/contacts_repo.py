@@ -110,6 +110,25 @@ def save_domain(conn: sqlite3.Connection, name_norm: str, **fields) -> None:
     conn.commit()
 
 
+def set_user_domain(conn: sqlite3.Connection, user_id: int, name_norm: str, domain: str) -> None:
+    """A domain typed on the card is this user's own override; the shared row stays what discovery found."""
+    conn.execute("""INSERT INTO user_company_domains (user_id, name_norm, domain, set_at) VALUES (?, ?, ?, ?)
+                    ON CONFLICT (user_id, name_norm) DO UPDATE SET domain = excluded.domain, set_at = excluded.set_at""",
+                 (user_id, name_norm, domain, utcnow()))
+    conn.commit()
+
+
+def effective_domain(conn: sqlite3.Connection, user_id: int, name_norm: str) -> tuple[dict, bool]:
+    """(domain row, shared?): the user's override when they set one, else the shared row. An override that differs
+    from the shared domain comes without the shared pattern and catch-all answer, which belong to the other domain."""
+    shared = get_domain(conn, name_norm) or {}
+    own = conn.execute("SELECT domain FROM user_company_domains WHERE user_id = ? AND name_norm = ?",
+                       (user_id, name_norm)).fetchone()
+    if own is None or own["domain"] == shared.get("domain"):
+        return shared, True
+    return {"name_norm": name_norm, "domain": own["domain"]}, False
+
+
 def known_catch_all(dom: dict, now: datetime) -> int | None:
     """The remembered catch-all/refusal answer, or None once it is a month old (servers and our IP change)."""
     if dom.get("catch_all") is None:
@@ -177,28 +196,59 @@ def blocked_names(conn: sqlite3.Connection, user_id: int, company: str) -> set[t
     return out
 
 
+def is_blocked(conn: sqlite3.Connection, user_id: int, email: str, linkedin_url: str) -> bool:
+    """This user said "not interested" to this person: the block may sit on a shared row or on their own copy."""
+    return conn.execute("""SELECT 1 FROM contacts c JOIN blocklist b ON b.contact_id = c.id AND b.user_id = ?
+                           WHERE (c.owner_user_id IS NULL OR c.owner_user_id = ?)
+                             AND ((? != '' AND lower(c.email) = lower(?)) OR (? != '' AND c.linkedin_url = ?))""",
+                        (user_id, user_id, email, email, linkedin_url, linkedin_url)).fetchone() is not None
+
+
+def _linked_by_others(conn: sqlite3.Connection, contact_id: int, user_id: int) -> bool:
+    return conn.execute("""SELECT 1 FROM applications a WHERE a.user_id != ? AND (a.contact_id = ? OR EXISTS
+                             (SELECT 1 FROM application_contacts ac WHERE ac.application_id = a.id AND ac.contact_id = ?))""",
+                        (user_id, contact_id, contact_id)).fetchone() is not None
+
+
+def _domain_of(email: str) -> str:
+    return (email or "").lower().rpartition("@")[2]
+
+
 def upsert_contact(conn: sqlite3.Connection, user_id: int, company: str, name: str, role: str, linkedin_url: str, email: str,
                    email_status: str, domain: str | None = None) -> int | None:
+    if is_blocked(conn, user_id, email if not linkedin_url else "", linkedin_url):
+        return None
     # Only shared cache rows are ever matched: a user's private (added or edited) row is never adopted.
-    row = conn.execute("""SELECT id, email, email_status FROM contacts
+    row = conn.execute("""SELECT id, name, role, email, email_status FROM contacts
                           WHERE linkedin_url = ? AND linkedin_url != '' AND owner_user_id IS NULL""",
                        (linkedin_url,)).fetchone()
     if not row and email:  # only adopt an email-matched row that isn't someone else's profile
-        row = conn.execute("""SELECT id, email, email_status FROM contacts
+        row = conn.execute("""SELECT id, name, role, email, email_status FROM contacts
                               WHERE lower(email) = lower(?) AND linkedin_url = '' AND owner_user_id IS NULL""",
                            (email,)).fetchone()
     if row:
-        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ? AND user_id = ?", (row["id"], user_id)).fetchone():
+        if is_blocked(conn, user_id, row["email"] or "", ""):
             return None
         on_domain = not domain or (row["email"] or "").lower().endswith("@" + domain)
         if row["email_status"] == "verified" and email_status != "verified" and row["email"] and on_domain:
             email, email_status = row["email"], "verified"  # never downgrade a verified address
         elif row["email_status"] == "bounced" and email.lower() == (row["email"] or "").lower():
             email_status = "bounced"
-        conn.execute("UPDATE contacts SET name=?, role=?, linkedin_url=?, email=?, email_status=? WHERE id=?",
-                     (name, role, linkedin_url, email, email_status, row["id"]))
-        conn.commit()
-        return row["id"]
+        if email.lower() == (row["email"] or "").lower() and email_status == row["email_status"]:
+            if not _linked_by_others(conn, row["id"], user_id):
+                conn.execute("UPDATE contacts SET name=?, role=? WHERE id=?", (name, role, row["id"]))
+                conn.commit()
+            return row["id"]
+        # A shared row's address changes only when nobody else relies on it, and a verified address only for
+        # another verified one on the same domain; otherwise this user gets their own copy (plan 2's I1).
+        keeps_verified = (row["email_status"] != "verified" or not row["email"]
+                          or (email_status == "verified" and _domain_of(email) == _domain_of(row["email"])))
+        if keeps_verified and not _linked_by_others(conn, row["id"], user_id):
+            conn.execute("UPDATE contacts SET name=?, role=?, linkedin_url=?, email=?, email_status=? WHERE id=?",
+                         (name, role, linkedin_url, email, email_status, row["id"]))
+            conn.commit()
+            return row["id"]
+        return _own_finder_copy(conn, user_id, company, name, role, linkedin_url, email, email_status)
     cid = conn.execute(
         """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source)
            VALUES (?,?,?,?,?,?, 'finder')""", (company, name, role, linkedin_url, email, email_status)).lastrowid
@@ -206,10 +256,44 @@ def upsert_contact(conn: sqlite3.Connection, user_id: int, company: str, name: s
     return cid
 
 
+def _own_finder_copy(conn: sqlite3.Connection, user_id: int, company: str, name: str, role: str, linkedin_url: str,
+                     email: str, email_status: str) -> int:
+    """This user's private finder row for this person, reused across runs (their hand edits are separate rows)."""
+    mine = conn.execute("""SELECT id FROM contacts WHERE owner_user_id = ? AND source = 'finder'
+                           AND ((? != '' AND linkedin_url = ?) OR (? = '' AND lower(email) = lower(?)))""",
+                        (user_id, linkedin_url, linkedin_url, linkedin_url, email)).fetchone()
+    if mine:
+        conn.execute("UPDATE contacts SET name=?, role=?, email=?, email_status=? WHERE id=?",
+                     (name, role, email, email_status, mine["id"]))
+        cid = mine["id"]
+    else:
+        cid = conn.execute(
+            """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source, owner_user_id)
+               VALUES (?,?,?,?,?,?, 'finder', ?)""",
+            (company, name, role, linkedin_url, email, email_status, user_id)).lastrowid
+    conn.commit()
+    return cid
+
+
 def edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int, name: str, email: str,
                  email_status: str) -> int:
     """A user's edit never changes another user's view: shared rows are copied on write, except a bounce,
-    which is a fact about the address and is recorded on the shared row for everyone."""
+    which is a fact about the address and is recorded on the shared row for everyone. One write transaction from
+    the read on, so a double submit edits the first one's copy instead of making a second."""
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        cid = _edit_contact(conn, user_id, app_id, rank, name, email, email_status)
+    except BaseException:
+        conn.rollback()
+        raise
+    conn.commit()
+    return cid
+
+
+def _edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int, name: str, email: str,
+                  email_status: str) -> int:
     row = conn.execute("""SELECT c.* FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
                           WHERE ac.application_id = ? AND ac.rank = ?""", (app_id, rank)).fetchone()
     if row is None:
@@ -228,10 +312,10 @@ def edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int,
             (row["company"], name, row["role"], row["linkedin_url"], email, email_status, user_id)).lastrowid
         conn.execute("UPDATE application_contacts SET contact_id = ? WHERE application_id = ? AND rank = ?",
                      (cid, app_id, rank))
+        # the main contact follows this rank's link (read above, under the lock); a hand-added main contact stays
         conn.execute("UPDATE applications SET contact_id = ? WHERE id = ? AND contact_id = ?", (cid, app_id, row["id"]))
     conn.execute("UPDATE application_contacts SET email_source = 'manual' WHERE application_id = ? AND rank = ?",
                  (app_id, rank))
-    conn.commit()
     return cid
 
 

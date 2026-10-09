@@ -193,3 +193,16 @@ def test_draft_now_spends_a_draft_unit_and_stops_at_the_share(ctx):
     b.spend("draft", b.limits["draft"].share_cap)
     r = client.post(f"/applications/{review_app}/draft", follow_redirects=False)
     assert "drafting%20share%20is%20used" in r.headers["location"]
+
+
+def test_draft_now_crash_gives_the_unit_back(ctx):
+    import pytest
+    client, settings, (a, review_app), _ = ctx
+    conn = db(settings)
+
+    def broken():
+        raise RuntimeError("bug")
+    client.app.state.llm_factory = broken
+    with pytest.raises(RuntimeError):
+        client.post(f"/applications/{review_app}/draft")
+    assert conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE service = 'draft'").fetchone()[0] == 0

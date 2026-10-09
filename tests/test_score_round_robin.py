@@ -122,3 +122,25 @@ def test_disabled_and_unonboarded_users_do_not_dilute_the_share(tmp_path, prefs,
     scorers = _scorers(prefs, facts, users=(1,))
     score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=150), NOW)
     assert scorers[0].stats.scored == 150 // 2  # users 1 and 2 are eligible
+
+
+def _spent(conn, service):
+    return conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE service = ?", (service,)).fetchone()[0]
+
+
+def test_every_failed_score_gives_its_unit_back(tmp_path, prefs, facts, rubric):
+    import pytest
+
+    from jobseeker.llm import LLMError
+    conn = _setup(tmp_path, users=(1,), jobs_per_user=2)
+    for exc in (LLMQuotaExceeded("gone"), LLMUnavailable("down"), LLMError("bad reply")):
+        def fail(schema, prompt, exc=exc):
+            raise exc
+        score_round_robin(conn, _scorers(prefs, facts, users=(1,)), FakeLLM(handler=fail), rubric, _cfg(), NOW)
+        assert _spent(conn, "score") == 0, type(exc).__name__
+
+    def crash(schema, prompt):
+        raise RuntimeError("bug")
+    with pytest.raises(RuntimeError):
+        score_round_robin(conn, _scorers(prefs, facts, users=(1,)), FakeLLM(handler=crash), rubric, _cfg(), NOW)
+    assert _spent(conn, "score") == 0

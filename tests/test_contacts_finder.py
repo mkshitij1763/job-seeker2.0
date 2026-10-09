@@ -502,3 +502,38 @@ def test_ranking_and_domain_pick_each_spend_a_draft_unit(prefs):
     conn, app = setup_app()
     find_contacts(conn, app, prefs, deps()[0])                             # ranks people, then picks the website
     assert Budget(conn, 1, outreach_limits(conn, prefs.contacts, 20), NOW).used("draft") == 2
+
+
+def test_review_11_an_empty_search_is_not_cached(prefs):
+    from jobseeker.contacts.finder import _search
+    from jobseeker.db.usage import Budget, outreach_limits
+
+    class Empty(FakeTavily):
+        def search(self, query, include_domains=None, max_results=10):
+            self.queries.append(query)
+            return []
+    conn, _ = setup_app()
+    d, _ = deps(tavily=Empty())
+    budget = Budget(conn, 1, outreach_limits(conn, prefs.contacts, 20), NOW)
+    assert _search(d, conn, "Zepto", budget, [], "q") == []
+    assert _search(d, conn, "Zepto", budget, [], "q") == []
+    assert d.tavily.queries == ["q", "q"]                             # asked again: nothing was cached
+    assert conn.execute("SELECT COUNT(*) FROM people_searches").fetchone()[0] == 0
+
+
+def test_a_failed_ranking_or_domain_pick_gives_its_draft_unit_back(prefs):
+    from jobseeker.llm import LLMError
+
+    def fail(schema, prompt):
+        raise LLMError("bad reply")
+    conn, app = setup_app()
+    with pytest.raises(LLMError):
+        find_contacts(conn, app, prefs, deps(llm=FakeLLM(handler=fail))[0])
+    assert conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE service = 'draft'").fetchone()[0] == 0
+    # ranking works, then picking the website fails: only the ranking unit stays spent
+    from jobseeker.contacts.people import Picks
+    conn, app = setup_app()
+    llm = FakeLLM(handler=lambda schema, prompt: PICKS if schema is Picks else fail(schema, prompt))
+    with pytest.raises(LLMError):
+        find_contacts(conn, app, prefs, deps(llm=llm)[0])
+    assert conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE service = 'draft'").fetchone()[0] == 1

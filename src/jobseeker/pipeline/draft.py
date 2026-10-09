@@ -66,20 +66,24 @@ def draft_round_robin(conn, drafters: list[Drafter], llm, cfg, now: datetime,
                 active.remove(d)
                 continue
             for app_id in ids:
-                if not d.budget.can("draft"):
+                if not d.budget.take("draft"):  # spent up front, refunded below when no draft came back
                     active.remove(d)
                     break
                 d.done.add(app_id)
                 try:
                     draft_application(conn, app_id, llm, d.facts, d.prefs, now)
                 except (LLMQuotaExceeded, LLMUnavailable) as e:
+                    d.budget.refund("draft")
                     d.stats.errors.append(f"drafting stopped: {e}")
                     stop = "quota" if isinstance(e, LLMQuotaExceeded) else "unavailable"
                     break
                 except LLMError as e:
+                    d.budget.refund("draft")
                     d.stats.errors.append(f"draft application {app_id}: {e}")
                     continue
-                d.budget.spend("draft")
+                except BaseException:
+                    d.budget.refund("draft")
+                    raise
                 d.room -= 1
                 d.stats.drafted += 1
             heartbeat()

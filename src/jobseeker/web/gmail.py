@@ -8,6 +8,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
+from google.auth.exceptions import GoogleAuthError
 
 from jobseeker.db.gmail_tokens import save_token
 from jobseeker.gmail.client import SCOPES
@@ -55,11 +56,14 @@ def callback(request: Request, code: str = "", state: str = "", error: str = "",
         try:
             tokens = auth.exchange_code(s, code, data["verifier"], redirect_path="/gmail/callback")
             claims = auth.verify_id_token(tokens["id_token"], s.google_client_id)
-        except (httpx.HTTPError, KeyError, ValueError):
+        except (httpx.HTTPError, KeyError, ValueError, GoogleAuthError):
             resp = _fail(request, "Couldn't reach Google, try again.")
         else:
             if claims.get("nonce") != data.get("nonce"):
                 resp = _fail(request, "Gmail connection couldn't be verified. Try again")
+            elif not set(SCOPES) <= set(tokens.get("scope", "").split()):
+                resp = _fail(request, "Gmail wasn't connected: tick the Compose permission "
+                                      "(\"Manage drafts and send emails\") on Google's screen, then try again")
             elif not tokens.get("refresh_token"):
                 resp = _fail(request, "Google didn't grant offline access. Try again")
             else:

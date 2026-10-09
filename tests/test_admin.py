@@ -47,3 +47,12 @@ def test_pipeline_hides_outreach_columns_for_matching_only(seeded_two, client_as
     html = client_as(2).get("/pipeline").text
     assert "No drafts waiting." not in html and "No Gmail drafts waiting to send." not in html
     assert "Drafted (30d)" not in html
+
+
+def test_tombstone_users_are_not_listed_as_people(seeded_two, client_as, settings):
+    from jobseeker.db.account import delete_account
+    conn = connect(settings.db_path)
+    delete_account(conn, settings.jobseeker_home, 2)
+    tomb = conn.execute("SELECT id FROM users WHERE email = 'deleted-2@invalid'").fetchone()[0]
+    html = client_as(1).get("/admin").text
+    assert f"/admin/users/{tomb}/" not in html                 # no enable/disable/outreach buttons for it

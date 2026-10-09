@@ -25,7 +25,8 @@ def test_delete_removes_every_user_row_and_keeps_others(seeded_two, settings):
     delete_account(conn, settings.jobseeker_home, 2)
     assert all(n == 0 for n in _counts(conn, 2).values())
     for t, _ in user_scoped_tables(conn):
-        assert conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == owner_before[t] - roommate_counts[t], t
+        moved = roommate_counts[t] if t == "usage" else 0  # this month's spend moves to a tombstone (review #3)
+        assert conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == owner_before[t] - roommate_counts[t] + moved, t
     assert not (settings.jobseeker_home / "data" / "users" / "2").exists()
     assert conn.execute("SELECT COUNT(*) FROM users WHERE id = 2").fetchone()[0] == 0
 
@@ -121,3 +122,63 @@ def test_export_has_gmail_json_without_the_token(seeded, settings):
     gmail = json.loads(z.read("gmail.json"))
     assert gmail == {"account_email": "o@gmail.com", "connected_at": gmail["connected_at"]}
     assert all(b"rt-SECRET-42" not in z.read(n) and b"token_enc" not in z.read(n) for n in z.namelist() if n != "resume.pdf")
+
+
+def test_review_2_delete_with_a_blocked_private_contact_keeps_fks_clean(seeded_two, settings):
+    """Final review #2: a hand-added contact plus an edited (private) copy, then Not interested, then delete."""
+    from jobseeker.db.applications import mark_not_interested, save_contact
+    from jobseeker.db.contacts_repo import edit_contact, link_contact, upsert_contact
+    conn = connect(settings.db_path)
+    app = seeded_two["roommate_app"]
+    company = conn.execute("SELECT j.company FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = ?",
+                           (app,)).fetchone()[0]
+    link_contact(conn, app, 2, upsert_contact(conn, 2, company, "Shared P", "PM", "https://li/sp", "sp@x.com",
+                                              "verified"), "peer", "r", "smtp")
+    edit_contact(conn, 2, app, 2, "Shared P", "sp2@x.com", "unverified")   # private copy, linked at rank 2
+    save_contact(conn, app, name="Mine", role="", linkedin_url="", email="mine@x.com", email_status="unverified")
+    mark_not_interested(conn, app, block_company=False)
+    assert conn.execute("SELECT COUNT(*) FROM blocklist WHERE user_id = 2 AND contact_id IS NOT NULL").fetchone()[0] >= 2
+    delete_account(conn, settings.jobseeker_home, 2)
+    assert conn.execute("SELECT COUNT(*) FROM contacts WHERE owner_user_id = 2").fetchone()[0] == 0
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_review_3_delete_keeps_this_periods_usage_so_global_caps_dont_reset(seeded_two, settings):
+    from jobseeker.clock import app_now
+    from jobseeker.config import ContactsConfig
+    from jobseeker.db.usage import Budget, outreach_limits
+    from jobseeker.pipeline.eligible import eligible_count
+    conn = connect(settings.db_path)
+    now = app_now()
+    limits = outreach_limits(conn, ContactsConfig(), 30)
+    Budget(conn, 2, limits, now).spend("draft", 4)
+    conn.execute("INSERT INTO usage (user_id, period, service, amount) VALUES (2, '2020-01', 'tavily', 99)")
+    conn.commit()
+    owner = Budget(conn, 1, limits, now)
+    before = {s: owner.used_all(s) for s in ("tavily", "draft")}
+    eligible_before = eligible_count(conn, "draft")
+    delete_account(conn, settings.jobseeker_home, 2)
+    assert {s: owner.used_all(s) for s in ("tavily", "draft")} == before    # nobody gets the spent headroom back
+    assert conn.execute("SELECT COUNT(*) FROM usage WHERE user_id = 2").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM usage WHERE period = '2020-01'").fetchone()[0] == 0  # old periods go
+    tomb = conn.execute("SELECT * FROM users WHERE email = 'deleted-2@invalid'").fetchone()
+    assert tomb is not None and tomb["disabled_at"] and not tomb["is_admin"] and not tomb["outreach_enabled"]
+    assert eligible_count(conn, "draft") == eligible_before
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_review_10_export_has_hand_added_contacts_and_the_blocklist(seeded_two, settings):
+    from jobseeker.db.applications import mark_not_interested, save_contact
+    conn = connect(settings.db_path)
+    app = seeded_two["roommate_app"]
+    save_contact(conn, app, name="Mine", role="VP", linkedin_url="", email="mine@x.com", email_status="unverified")
+    z = zipfile.ZipFile(io.BytesIO(export_zip(conn, settings.jobseeker_home, 2)))
+    mine = next(a for a in json.loads(z.read("applications.json")) if a["id"] == app)
+    assert mine["contact"] == {"name": "Mine", "role": "VP", "linkedin_url": "", "email": "mine@x.com",
+                               "email_status": "unverified"}
+    mark_not_interested(conn, app, block_company=True)
+    z = zipfile.ZipFile(io.BytesIO(export_zip(conn, settings.jobseeker_home, 2)))
+    blocked = json.loads(z.read("blocklist.json"))
+    assert {"company": "cred", "person": None, "reason": "not interested"} in [
+        {k: b[k] for k in ("company", "person", "reason")} for b in blocked]
+    assert any(b["person"] and b["person"]["email"] == "mine@x.com" for b in blocked)

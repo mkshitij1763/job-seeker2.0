@@ -186,3 +186,26 @@ def test_extraction_never_saves_facts_for_a_different_file(newbie, settings, mon
     store_resume(settings.jobseeker_home, newbie, pdf_bytes("B " + GOOD))     # the file on disk is B
     run_extract(settings.db_path, settings.jobseeker_home, newbie, "sha-of-A", app_config, lambda: None)
     assert get_facts(connect(settings.db_path), newbie) is None
+
+
+def test_an_extraction_that_reads_nothing_gives_its_unit_back(newbie, settings, monkeypatch, app_config):
+    from jobseeker.llm import LLMQuotaExceeded
+    from jobseeker.profile.extract import run_extract
+    from jobseeker.profile.resume import store_resume
+    conn = connect(settings.db_path)
+
+    def spent():
+        return conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE service = 'groq:facts'").fetchone()[0]
+    store_resume(settings.jobseeker_home, newbie, pdf_bytes("B " + GOOD))
+    run_extract(settings.db_path, settings.jobseeker_home, newbie, "sha-of-A", app_config, lambda: None)
+    assert spent() == 0                                             # the file changed: nothing was read
+
+    def quota(llm, text, model):
+        raise LLMQuotaExceeded("gone")
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", quota)
+    import hashlib
+
+    from jobseeker.profile.resume import resume_path
+    sha = hashlib.sha256(resume_path(settings.jobseeker_home, newbie).read_bytes()).hexdigest()
+    run_extract(settings.db_path, settings.jobseeker_home, newbie, sha, app_config, lambda: None)
+    assert spent() == 0

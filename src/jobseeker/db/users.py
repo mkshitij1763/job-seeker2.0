@@ -122,5 +122,18 @@ def set_outreach(conn: sqlite3.Connection, user_id: int, enabled: bool) -> None:
     conn.commit()
 
 
+def tombstone_for(conn: sqlite3.Connection, user_id: int, now: datetime) -> int:
+    """A disabled, never-eligible stand-in that keeps a deleted user's spend for this period counted against the
+    shared caps. It can't sign in (no Google sub, an invalid address) and holds nothing else."""
+    email = f"deleted-{user_id}@invalid"
+    conn.execute("""INSERT OR IGNORE INTO users (email, name, is_admin, disabled_at, created_at, outreach_enabled)
+                    VALUES (?, 'Deleted account', 0, ?, ?, 0)""", (email, iso(now), iso(now)))
+    return conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()[0]
+
+
+def is_tombstone(user: dict) -> bool:
+    return user["email"].startswith("deleted-") and user["email"].endswith("@invalid")
+
+
 def outreach_user_count(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM users WHERE outreach_enabled = 1 AND disabled_at IS NULL").fetchone()[0]
