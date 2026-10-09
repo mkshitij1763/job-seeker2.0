@@ -77,6 +77,9 @@ def draft_now(request: Request, app_id: int, user=Depends(current_user), prefs=D
     except LLMError as e:
         budget.refund("draft")
         return _back(app_id, err=f"Drafting failed: {e}")
+    except BaseException:
+        budget.refund("draft")
+        raise
     if status == "approved":
         transition(conn, app_id, "drafted", {"reason": "regenerated after approval"})
         return _back(app_id, msg="Drafts regenerated. Approving again creates a new Gmail draft; "

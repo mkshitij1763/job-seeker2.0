@@ -114,7 +114,11 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         raise FinderError(" ".join(notes) or f"No people found at {company} for this role")
     if not budget.take("draft"):  # ranking is an LLM call: it spends the user's drafting share
         raise FinderError(budget.exhausted_note("draft", "drafting"))
-    ranked = rank(deps.llm, prefs.models.drafting, job["title"], company, job["jd_text"], cands)
+    try:
+        ranked = rank(deps.llm, prefs.models.drafting, job["title"], company, job["jd_text"], cands)
+    except BaseException:
+        budget.refund("draft")  # no ranking came back: the unit isn't spent
+        raise
     if not ranked:
         raise FinderError(f"No relevant people found at {company} for this role")
     save_candidates(conn, app_id, ranked)
@@ -131,9 +135,13 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
         query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
         if budget.take("draft"):  # so is picking the website
-            domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
-                                 job["jd_text"], _search(deps, conn, company, budget, notes, query, max_results=8),
-                                 has_mail=lambda d: deps.resolver(d) is not None)
+            try:
+                domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
+                                     job["jd_text"], _search(deps, conn, company, budget, notes, query, max_results=8),
+                                     has_mail=lambda d: deps.resolver(d) is not None)
+            except BaseException:
+                budget.refund("draft")
+                raise
         else:
             notes.append(budget.exhausted_note("draft", "drafting"))
         if not domain:

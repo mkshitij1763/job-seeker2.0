@@ -23,9 +23,11 @@ def facts_limits(cfg) -> dict[str, Limit]:
 
 def run_extract(db_path, home, user_id: int, sha: str, app_config, llm_factory) -> None:
     conn = connect(db_path)
+    budget, read = None, False  # the unit goes back unless the AI actually read the resume
     try:
         budget = Budget(conn, user_id, facts_limits(app_config), datetime.now(IST))
         if not budget.take("groq:facts"):
+            budget = None
             set_extract_status(conn, user_id, "failed",
                                "You can re-read your resume again tomorrow; your current facts stay.")
             return
@@ -43,9 +45,12 @@ def run_extract(db_path, home, user_id: int, sha: str, app_config, llm_factory) 
             log.warning("fact extraction failed for user %s: %s", user_id, e)
             set_extract_status(conn, user_id, "failed", READ_FAILED)
             return
+        read = True
         save_facts(conn, user_id, sha, facts, edited=False, now=datetime.now(IST))
     except Exception:  # the page must always leave the running state
         log.exception("fact extraction crashed for user %s", user_id)
         set_extract_status(conn, user_id, "failed", READ_FAILED)
     finally:
+        if budget is not None and not read:
+            budget.refund("groq:facts")
         conn.close()

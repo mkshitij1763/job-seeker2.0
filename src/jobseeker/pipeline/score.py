@@ -95,6 +95,9 @@ def score_round_robin(conn, scorers: list[Scorer], llm, rubric, cfg, now: dateti
                     s.budget.refund("score")
                     s.stats.errors.append(f"score job {row['id']}: {e}")
                     continue
+                except BaseException:
+                    s.budget.refund("score")
+                    raise
                 model = getattr(llm, "last_model", None) or cfg.models.scoring
                 save_score(conn, s.user_id, row["id"], result, model, rubric.version, row["jd_hash"],
                            profile_hash=s.profile_hash)

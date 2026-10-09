@@ -81,6 +81,9 @@ def draft_round_robin(conn, drafters: list[Drafter], llm, cfg, now: datetime,
                     d.budget.refund("draft")
                     d.stats.errors.append(f"draft application {app_id}: {e}")
                     continue
+                except BaseException:
+                    d.budget.refund("draft")
+                    raise
                 d.room -= 1
                 d.stats.drafted += 1
             heartbeat()

@@ -111,3 +111,26 @@ def test_two_outreach_users_draft_half_each_best_first(tmp_path, prefs, facts):
                                               ON s.job_id = a.job_id AND s.user_id = a.user_id
                                               WHERE a.user_id = ? AND a.status = 'drafted'""", (u,))]
         assert sorted(got, reverse=True) == [90, 89]                    # the best two of 90..87
+
+
+def test_every_failed_draft_gives_its_unit_back(tmp_path, prefs, facts):
+    import pytest
+
+    from jobseeker.config import AppConfig
+    from jobseeker.llm import LLMError, LLMQuotaExceeded
+    conn = connect(tmp_path / "db")
+    _shortlist(conn, 1, 2)
+
+    def spent():
+        return conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE service = 'draft'").fetchone()[0]
+    for exc in (LLMQuotaExceeded("gone"), LLMError("bad reply")):
+        def fail(schema, prompt, exc=exc):
+            raise exc
+        draft_round_robin(conn, [Drafter(1, prefs, facts, UserStats())], FakeLLM(handler=fail), AppConfig(), NOW)
+        assert spent() == 0, type(exc).__name__
+
+    def crash(schema, prompt):
+        raise RuntimeError("bug")
+    with pytest.raises(RuntimeError):
+        draft_round_robin(conn, [Drafter(1, prefs, facts, UserStats())], FakeLLM(handler=crash), AppConfig(), NOW)
+    assert spent() == 0
