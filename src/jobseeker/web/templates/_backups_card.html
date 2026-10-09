@@ -1,0 +1,17 @@
+<section class="card block" id="backups">
+  <h2 class="section-title">Backups</h2>
+  {% if backups %}
+  <table>
+    <thead><tr><th>Day (IST)</th><th>Size</th><th>Off-site</th></tr></thead>
+    <tbody>
+    {% for b in backups %}
+      <tr class="backup-row">
+        <td class="mono">{{ b.day }}</td>
+        <td class="mono">{{ "%.1f MB" | format(b.size_bytes / 1048576) }}</td>
+        <td>{% if b.uploaded_at %}Uploaded{% else %}<span class="tier-weak">{{ b.upload_error or "Not uploaded" }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No backups yet. The first one is written after the next scheduled run.</p>{% endif %}
+</section>
