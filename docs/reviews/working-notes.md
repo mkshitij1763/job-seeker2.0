@@ -172,3 +172,21 @@ Theme follows `prefers-color-scheme` only (no in-app switch). Light tokens per s
 - Dark primary buttons (Continue, Finish, Go to Jobs, Save, Approve) are white on #6F87FF = 3.19:1. Darken dark-mode accent for fills (e.g. #4F6BFA ≈ 4.6:1) or use dark text. P2.
 - Inputs: fill #1A2232 on card #111827 (dark) and a 1.2–1.7:1 border → fields barely visible as fields (seen on onboarding step 3). P2 (WCAG 1.4.11).
 - Landing light (img p4-01): clean; card edge faint; large empty gap between the invite note and the privacy text (both themes); no product name/logo on the page itself. P3.
+
+## Pass 4: responsive sweep (owner pages in same-origin iframes at 820×1180 and 390×844)
+| Page | 820: h-scroll / height / small targets (<44 px tall) | 390: h-scroll / height / small targets |
+|---|---|---|
+| /today | no / 1,176 / 1 of 20 | no / 1,307 / 2 of 19 |
+| / (Jobs) | no / **8,560** / **235 of 296** | no / **15,225** / 118 of 295 |
+| /applications/10 | no / 4,474 / 8 of 65 | no / 2,140 / 5 of 45 |
+| /pipeline | board scrolls sideways (spec allows) / 7,700 / **299 of 354** | stat tiles overflow right / 5,686 / 71 of 149 |
+| /settings | no / 2,770 / 23 of 65 | no / 3,264 / 24 of 64 |
+| /admin | no / 1,176 / 2 of 17 | **yes (603 px wide)** / 1,302 / 3 of 16 |
+| /admin/users/4 | no / 1,917 / 1 of 7 | no / 2,625 / 2 of 6 |
+- **Jobs renders every row server-side with no paging**: 15,225 px tall on a phone (86 cards in Apply; All has 185) and 186 KB HTML. P2 (perf + scroll fatigue); paginate or "show 20 more".
+- Tablet 820 (img p4-02): icon-only sidebar with no labels/tooltips; count badges overlap icons. Table drops the **Why** column (✓/⚠) → tablet users lose the reasons phone users get. Skip/Snooze are small text links (~22 px tall); meta line raw "pm · linkedin · needs contacts". P2.
+- Pipeline at 820: 299/354 small targets (Move… summaries, card links).
+## Pass 4: keyboard
+- Jobs j/k moves a `.sel` row highlight (works), but focus stays on <body> → screen readers don't follow; Enter/s/z act on a row the AT can't perceive. P2. (s/z not pressed on owner.)
+- Tab focus: `:focus-visible` 2 px accent outline + 2 px offset on buttons/links/summary: GOOD. Inputs only change border colour (weak). No skip link; ~300 controls before content ends on Jobs. P3.
+- Filter `<details>` menus: no Esc / outside-click close (see pass 2).
