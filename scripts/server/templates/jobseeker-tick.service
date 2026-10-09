@@ -11,6 +11,9 @@ EnvironmentFile=${HOME_DIR}/.env
 Environment=JOBSEEKER_HOME=${HOME_DIR}
 ExecStart=${HOME_DIR}/.local/bin/uv run --frozen --no-sync jobseeker tick
 TimeoutStartSec=3h
+# The web must stay responsive on a 1 GB VM: soft memory cap (reclaimed into swap, never killed), lower CPU priority.
+MemoryHigh=600M
+Nice=10
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
