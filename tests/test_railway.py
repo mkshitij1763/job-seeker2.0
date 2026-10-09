@@ -1,5 +1,6 @@
 # tests/test_railway.py
 """The Railway image (Dockerfile, .dockerignore). No docker on the Mac, so these are static checks."""
+import json
 import os
 import re
 import signal
@@ -26,8 +27,17 @@ def _args(kind):
     return [a for k, a in _instructions() if k == kind]
 
 
-def test_base_image_is_python_313_slim():
-    assert _args("FROM")[0].startswith("python:3.13-slim")
+def test_base_image_is_python_313_slim_from_a_mirror_without_docker_hub_limits():
+    # Docker Hub rate-limits anonymous pulls per IP, and Railway's shared builders hit it (429 on 2026-10-10).
+    # AWS's public ECR mirror serves the same official image.
+    assert _args("FROM")[0].startswith("public.ecr.aws/docker/library/python:3.13-slim")
+
+
+def test_railway_json_pins_the_dockerfile_builder():
+    # The service setting once flipped back to Railpack, which can't start this app ("No start command detected").
+    # Config-as-code in the repo overrides the dashboard.
+    cfg = json.loads((ROOT / "railway.json").read_text())
+    assert cfg["build"] == {"builder": "DOCKERFILE", "dockerfilePath": "Dockerfile"}
 
 
 def test_uv_is_pinned_inside_uv_build_range():

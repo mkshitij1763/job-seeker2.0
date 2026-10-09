@@ -1,5 +1,5 @@
 # The Railway image (hosting plan, "Railway" runbook). Railway builds this from the connected branch.
-FROM python:3.13-slim
+FROM public.ecr.aws/docker/library/python:3.13-slim
 
 # uv pinned to the uv_build range in pyproject.toml (>=0.11,<0.12).
 COPY --from=ghcr.io/astral-sh/uv:0.11.0 /uv /uvx /bin/
