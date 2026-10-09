@@ -1,14 +1,14 @@
-# HANDOFF: backend-lead (multi-user build), 2026-10-08
+# HANDOFF: backend-lead (multi-user build), updated 2026-10-09 by manager
 
-> **START HERE (new session).** You are **backend-lead**, a senior dev on job-seeker2.0's multi-user hosted app. You report to the coordinator session **`manager`** (use `SendMessage` to `manager`), not to the user. Send design questions to `manager`; it makes the calls or passes them to the user. Background on the product: `HANDOFF.md` §1–§3 (in the same repo). Treat §8 there as history; this file supersedes it for your work.
+> **START HERE (new or /cleared session).** You are **backend-lead2** (session name), formerly backend-lead, a senior dev on job-seeker2.0's multi-user hosted app. You report to the coordinator session **`manager`** (use `SendMessage` to `manager`), not to the user. Send design questions to `manager`; it makes the calls or passes them to the user. Background on the product: `HANDOFF.md` §1–§3 (in the same repo). Treat §8 there as history; this file supersedes it for your work.
 
 ## 1. Where you work
 - **Worktree:** `/Users/user/Desktop/untitled folder/js-mu-backend`, branch **`multi-user`**. You are the only writer on `multi-user`.
 - **The Bash cwd resets to the MAIN checkout after every call.** That checkout is on `main` and runs the LIVE app (launchd `com.kshitij.jobseeker` + `.web`). Start every command with `cd "/Users/user/Desktop/untitled folder/js-mu-backend" && …`. **Never edit, switch or build in the main checkout, and never touch its `data/`.**
-- **Git:** commit per task, ending messages with the attribution lines your session uses. Don't push (`manager` pushes). Never merge to `main`.
-- **devops-lead** builds independent tasks on `build/devops` (worktree `../js-build`). `manager` merges that branch into `multi-user` after plan 2 lands, and resolves the expected `uv.lock`/`pyproject` conflict and the duplicate `db/backup.snapshot()` (take yours).
+- **Git:** commit per task, ending messages with the attribution lines your session uses, then `git push origin multi-user` (never force, never `main`). Never merge to `main`; only the user can approve that.
+- **devops-lead2** works on `build/devops2` (worktree `../js-devops2`). All its product work is DONE and already merged into `multi-user` (last merge `e32a467` = build/devops2 `74d041e`). When `manager` says so, you merge `origin/build/devops2` into `multi-user` (you own that branch).
 
-## 2. Status (at pause)
+## 2. Status (as of 2026-10-09, multi-user @ `e32a467`)
 - **Plan 2** `docs/superpowers/plans/2026-10-08-mu-accounts-auth.md` (spec `docs/superpowers/specs/2026-10-08-mu-accounts-auth-design.md`):
 
   | Task | Commit |
@@ -46,9 +46,9 @@
   | P5-T1 token sealing under TOKEN_KEY | `444ff5c` |
   | P5-T2 migration v5, User.outreach_enabled | `d9f0017` |
 
-- **Tests at the build/devops2 merge (74d041e, pipeline complete):** 736 pytest, 26 node. `git status` is clean.
+- **Tests at `e32a467` (all of plans 2, 3, 4, 6 + plan 5 T1–T2):** 736 pytest, 26 node (node baseline is now 26, not 19). `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** HOLD. Plan 5 T1–T2 went in early, before the user approved outreach; they stay (isolated, reversible). **Do not start plan 5 T3 or anything further until `manager` relays the user's go.** When it comes: devops-lead2 is out of admin and account.py, but still in `settings.py`/`settings.html` (pipeline T14, the Fetch now card), so coordinate the Settings Gmail card in P5-T8. Ledger `.superpowers/sdd/2026-10-08-mu-outreach/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
+- **NEXT:** **HOLD — waiting for the user's "go outreach"**, relayed by `manager`. Plan 5 T1–T2 went in before the user approved outreach; they stay (isolated, reversible) unless the user says "undo outreach", in which case `manager` will ask you to `git revert` `444ff5c` and `d9f0017` on `multi-user`. On go: start **plan 5 T3** (require_outreach/admin toggle/outreach router), BASE `d9f0017`, then T4–T9. devops-lead2 is DONE with every shared file (settings.py/.html, admin, account.py), so no coordination is needed; keep its `_fetch_now_slot.html` includes, the `fetch_now` router line, the alerts card, and runs-deleted-last in `delete_account`. Ledger `.superpowers/sdd/2026-10-08-mu-outreach/progress.md`. Every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user`. Known minors deferred from the plan 3 review: #4 (unmatched non-allow query aborts v2), #7 (Caddy 413 above 6 MB), #8 (delete returns facts headroom).
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
