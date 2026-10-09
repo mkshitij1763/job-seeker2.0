@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
+from datetime import UTC, datetime
 
 import typer
 
-from jobseeker.config import Settings, load_companies, load_rubric
+from jobseeker.config import Settings
 from jobseeker.db.core import connect
-from jobseeker.llm import build_llm
 
 app = typer.Typer(no_args_is_help=True, help="Personal job search and outreach assistant.")
 
@@ -43,32 +44,82 @@ def init() -> None:
     typer.echo(f"Ready in {settings.jobseeker_home}. Run `jobseeker migrate` to import profile/ and write config/app.yaml.")
 
 
-def _run(fetch: bool, force: bool, user: str = "") -> None:
-    from jobseeker.db.companies import active_companies
-    from jobseeker.pipeline.run import run_daily
-    from jobseeker.sources.http import make_client
-    from jobseeker.sources.registry import build_sources
+def _pipeline(settings, cfg):
+    """The rubric, companies and LLM run_all needs on the real system. Built only when a run actually starts, so a
+    busy tick or a refused `run` never needs GROQ_API_KEY."""
+    from jobseeker.config import load_companies, load_rubric
+    from jobseeker.llm import build_llm
 
-    settings, cfg, conn, uid, prefs, facts = _ctx(user)
-    if facts is None:
-        typer.echo("No resume facts for this user yet", err=True)
-        raise typer.Exit(1)
-    sources = build_sources(load_companies(cfg.companies_path), active_companies(conn), prefs.search)
-    with make_client() as client:
-        stats = run_daily(conn, user_id=uid, sources=sources, client=client, llm=build_llm(settings),
-                          facts=facts, prefs=prefs, rubric=load_rubric(cfg.rubric_path), fetch=fetch,
-                          force_rescore=force)
-    typer.echo(json.dumps(stats.__dict__, indent=2))
+    return load_rubric(cfg.rubric_path), load_companies(cfg.companies_path), build_llm(settings)
+
+
+def _runner(settings, conn, now, holder, force_users=frozenset(), fetch=True):
+    from jobseeker.config import load_app_config
+    from jobseeker.db.locks import heartbeat
+    from jobseeker.pipeline.run import run_all
+    from jobseeker.sources.http import make_client
+
+    cfg = load_app_config(settings.app_config_path)
+
+    def run(trigger, users, plan_cap):
+        rubric, companies, llm = _pipeline(settings, cfg)
+        with make_client() as client:
+            return run_all(conn, users=users, trigger=trigger, fetch=fetch, plan_cap=plan_cap, client=client, llm=llm,
+                           cfg=cfg, rubric=rubric, now=now, companies=companies, force_users=force_users,
+                           heartbeat=lambda: heartbeat(conn, "run", holder, datetime.now(UTC)))
+    return cfg, run
 
 
 @app.command()
-def run(user: str = typer.Option("", "--user", help="The user's email (default: the owner).")) -> None:
-    """Fetch, dedup, filter, score and draft (the daily job), then back up the database."""
-    _run(fetch=True, force=False, user=user)
+def tick() -> None:
+    """Called every 5 minutes by the host: runs the daily schedule, Fetch now requests and the nightly backup."""
+    from jobseeker.db.locks import holder_id
+    from jobseeker.pipeline.tick import tick as do_tick
+
+    settings, now = Settings(), datetime.now(UTC)
+    conn = connect(settings.db_path)
+    holder = holder_id()
+    cfg, run = _runner(settings, conn, now, holder)
+    typer.echo(do_tick(conn, settings=settings, cfg=cfg, now=now, run=run, holder=holder))
+
+
+@app.command()
+def run(user: str = typer.Option("", "--user", help="Only this user's email (default: everyone active)."),
+        no_fetch: bool = typer.Option(False, "--no-fetch", help="Skip the job-site fetch.")) -> None:
+    """Run the pipeline now, by hand (takes the same lock as tick)."""
+    _manual(user, fetch=not no_fetch, force=False)
+
+
+@app.command()
+def rescore(user: str = typer.Option(..., "--user", help="The user's email.")) -> None:
+    """Re-score one user's open jobs now (after editing rubric.yaml)."""
+    _manual(user, fetch=False, force=True)
+
+
+def _manual(email: str, fetch: bool, force: bool) -> None:
+    from jobseeker.clock import app_now
+    from jobseeker.db.locks import acquire, held_since, holder_id, release
+    from jobseeker.pipeline.tick import active_users
+
+    settings, now = Settings(), datetime.now(UTC)
+    conn = connect(settings.db_path)
+    holder = holder_id()
+    users = [u for u in active_users(conn) if not email or u.email == email.lower()]
+    if email and not users:
+        typer.echo(f"No active user {email}", err=True)
+        raise typer.Exit(1)
+    cfg, run_fn = _runner(settings, conn, now, holder, frozenset(u.id for u in users) if force else frozenset(), fetch)
+    if not acquire(conn, "run", holder, now, cfg.lock.takeover_after_minutes):
+        since = app_now(datetime.fromisoformat(held_since(conn, "run"))).strftime("%H:%M")
+        typer.echo(f"A run is in progress since {since}", err=True)
+        raise typer.Exit(1)
     try:
-        backup()
-    except Exception as e:  # a failed backup must not hide the run's own result
-        typer.echo(f"Backup failed: {type(e).__name__}: {e}", err=True)
+        report = run_fn("cli", users, cfg.search.max_searches_per_run)
+    finally:
+        release(conn, "run", holder)
+    typer.echo(json.dumps({"fetch": report.fetch and asdict(report.fetch),
+                           "users": {k: asdict(v) for k, v in report.users.items()}, "aborted": report.aborted},
+                          indent=2))
 
 
 @app.command()
@@ -106,12 +157,6 @@ def migrate(dry_run: bool = typer.Option(False, "--dry-run", help="Migrate a cop
     except (DatabaseBusy, MigrationError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
-
-
-@app.command()
-def rescore(user: str = typer.Option("", "--user", help="The user's email (default: the owner).")) -> None:
-    """Re-score existing jobs (after editing rubric.yaml or preferences)."""
-    _run(fetch=False, force=True, user=user)
 
 
 @app.command()
