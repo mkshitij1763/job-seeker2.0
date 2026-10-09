@@ -3,6 +3,7 @@
 {% block content %}
 <div class="card block onboarding">
   <p class="muted mono">Step {{ step_no }} of {{ steps }}</p>
+  {% if step_no == 1 %}<p class="muted">The admin (the person who invited you) can see your job preferences and application statuses.</p>{% endif %}
   <form method="post" action="/onboarding/{% block step %}{% endblock %}">
     {% block fields %}{% endblock %}
     <div class="sticky-actions"><button class="btn btn-primary" type="submit">Continue</button>

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set a = v.account %}{% set up = v.prefs %}{% set num = v.num %}
+{% block title %}{{ a.email }} · Admin · Job Seeker{% endblock %}
+{% block content %}
+<header class="page-head"><h1>{{ a.name or a.email }}</h1><a class="btn-ghost" href="/admin">← Admin</a></header>
+<p class="muted">Read-only. Their resume, facts, Gmail, contacts and drafts stay private.</p>
+
+<section class="card block">
+  <h2 class="section-title">Account</h2>
+  <dl class="admin-facts">
+    <dt>Email</dt><dd>{{ a.email }}</dd>
+    <dt>Name</dt><dd>{{ a.name or "—" }}</dd>
+    <dt>Joined</dt><dd class="mono">{{ (a.created_at or "")[:10] or "—" }}</dd>
+    <dt>Last login</dt><dd class="mono">{{ (a.last_login_at or "")[:10] or "—" }}</dd>
+  </dl>
+  <p>Onboarded: {{ "yes" if v.onboarded else "no" }} · Outreach: {{ "on" if a.outreach_enabled else "off" }}
+    · {{ "Disabled" if a.disabled_at else "Active" }}{% if a.is_admin %} · admin{% endif %}</p>
+</section>
+
+<section class="card block">
+  <h2 class="section-title">Preferences</h2>
+  <p><b>Roles:</b>
+    {% for r in up.roles %}<span class="chip">{{ r }}</span> {% endfor %}
+    {% if up.custom_role %}<span class="chip">{{ up.custom_role }}</span>{% endif %}
+    {% if not up.roles and not up.custom_role %}<span class="muted">none yet</span>{% endif %}</p>
+  {% if up.target_roles_text %}<p><b>Custom matching:</b> {{ up.target_roles_text|join("; ") }}</p>{% endif %}
+  {% if up.title_allow_extra %}<p><b>Title words matched:</b> {{ up.title_allow_extra|join(", ") }}</p>{% endif %}
+  <p><b>Where:</b> {{ up.cities|join(", ") if up.cities else "no cities" }} · Remote in India: {{ "yes" if up.remote_india_ok else "no" }}</p>
+  <p><b>Experience:</b> {{ num(up.experience_years) + " years" if up.experience_years is not none else "not given" }}
+    {% if up.drop_if_min_years_at_least is not none %} · Drop jobs asking {{ num(up.drop_if_min_years_at_least) }}+ years{% endif %}
+    · Jobs up to {{ up.max_age_days }} days old</p>
+  <p><b>Pay:</b> current {{ num(up.current_ctc_lpa) + " LPA" if up.current_ctc_lpa is not none else "not given" }}
+    · target base {{ num(up.target_base_lpa) + " LPA" if up.target_base_lpa is not none else "not given" }}</p>
+  {% if up.must_haves %}<p><b>Must-haves:</b> {{ up.must_haves|join(", ") }}</p>{% endif %}
+  {% if up.deal_breakers %}<p><b>Deal-breakers:</b> {{ up.deal_breakers|join(", ") }}</p>{% endif %}
+  <p><b>Title exclusions:</b> {{ up.title_deny|join(", ") if up.title_deny is not none else "the default list" }}</p>
+</section>
+
+<section class="card block">
+  <h2 class="section-title">Matching</h2>
+  <p>Shown {{ v.shown }} · Hidden {{ v.hidden }} · Scored {{ v.scored }}</p>
+  <table>
+    <thead><tr><th>Company</th><th>Title</th><th>Score</th></tr></thead>
+    <tbody>
+    {% for j in v.top %}
+      <tr><td>{{ j.company }}</td><td>{{ j.title }}</td><td class="mono">{{ j.score if j.score is not none else "—" }}</td></tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No jobs shown yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">The top 20 shown jobs, best score first.</p>
+</section>
+
+<section class="card block">
+  <h2 class="section-title">Applications</h2>
+  <p>{% for s in v.statuses %}{{ s.status }} {{ s.n }}{{ " · " if not loop.last }}{% else %}None yet.{% endfor %}</p>
+  {% if v.recent %}
+  <table>
+    <thead><tr><th>Company</th><th>Title</th><th>Status</th><th>Updated</th></tr></thead>
+    <tbody>
+    {% for r in v.recent %}
+      <tr><td>{{ r.company }}</td><td>{{ r.title }}</td><td>{{ r.status }}</td><td class="mono muted">{{ (r.updated_at or "")[:10] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">The 20 most recently updated.</p>
+  {% endif %}
+</section>
+
+<section class="card block">
+  <h2 class="section-title">Usage</h2>
+  <p><b>Today:</b> {% for u in v.usage_today %}{{ u.service }} {{ num(u.amount) }}{{ " · " if not loop.last }}{% else %}nothing{% endfor %}</p>
+  <p><b>This month:</b> {% for u in v.usage_month %}{{ u.service }} {{ num(u.amount) }}{{ " · " if not loop.last }}{% else %}nothing{% endfor %}</p>
+</section>
+{% endblock %}

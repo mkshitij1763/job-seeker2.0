@@ -33,6 +33,10 @@ You'll need: your phone, a laptop, and a second Google account for the "roommate
   Expected: three cards, **Invites**, **Users** (you, as admin, with Outreach: on) and **Usage**, plus a **Backups** card.
   If it fails, tell `manager`.
 
+- [ ] **A user's page.** On `/admin` → Users, tap an email.
+  Expected: a read-only page with their account, preferences, matching counts (shown, hidden, scored) with the top 20 jobs, application counts with the 20 most recent, and usage. No resume, facts, Gmail, contacts or drafts.
+  If it fails, tell `manager`.
+
 ## B. Outreach (your own account)
 
 - [ ] **Connect Gmail.** Settings → **Account** → **Connect Gmail**.
@@ -72,7 +76,7 @@ You'll need: your phone, a laptop, and a second Google account for the "roommate
 ## D. Roommate (use your second Google account)
 
 - [ ] **Invite.** As yourself: `/admin` → Invites → enter the second address → **Invite**. Send yourself the site link (invites send no email).
-  Expected: the address is listed under Invites, with nothing under Accepted yet.
+  Expected: the address is listed under Invites, with nothing under Accepted yet, and a box shows the site link with a **Copy** button plus the reminder to add them as a Google test user.
   If it fails, tell `manager`.
 - [ ] **Not invited is refused.** In a private window, sign in with a third account that wasn't invited.
   Expected: "This app is invite-only. Ask <your first name> for an invite." No account is created.

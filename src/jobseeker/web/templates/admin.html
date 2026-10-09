@@ -2,6 +2,12 @@
 {% block title %}Admin · Job Seeker{% endblock %}
 {% block content %}
 <header class="page-head"><h1>Admin</h1></header>
+{% if invited %}
+<section class="card block">
+  <p>Send {{ invited }} this link: <code id="app-link">{{ app_link }}</code> <button type="button" class="btn btn-ghost" data-copy="#app-link">Copy</button></p>
+  <p class="muted">Also add them as a test user in Google Cloud → OAuth consent screen → Test users, or Google will block their sign-in.</p>
+</section>
+{% endif %}
 
 <section class="card block">
   <h2 class="section-title">Invites</h2>
@@ -30,7 +36,7 @@
     <thead><tr><th>Email</th><th>Name</th><th>Last login</th><th>Status</th><th>Outreach</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
-      <tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td class="mono muted">{{ (u.last_login_at or "")[:10] or "—" }}</td>
+      <tr><td><a href="/admin/users/{{ u.id }}">{{ u.email }}</a></td><td>{{ u.name }}</td><td class="mono muted">{{ (u.last_login_at or "")[:10] or "—" }}</td>
         <td>{% if u.disabled_at %}Disabled{% else %}Active{% endif %}{% if u.is_admin %} · admin{% endif %}</td>
         <td>Outreach: {{ "on" if u.outreach_enabled else "off" }}
           <form method="post" action="/admin/users/{{ u.id }}/outreach"><input type="hidden" name="enabled" value="{{ 0 if u.outreach_enabled else 1 }}"><button class="btn btn-ghost">Turn outreach {{ "off" if u.outreach_enabled else "on" }}</button></form></td>
