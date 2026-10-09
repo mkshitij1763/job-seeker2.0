@@ -69,7 +69,7 @@
 | `d99209e` | merge origin/multi-user `e46bcce` (outreach plan 5 + review fixes; 826 pytest / 26 node) |
 | `f6747cc` | trial fix 1: run notes count searches (items); `Plan.total`, `trimmed = total - planned`, `FetchStats.searches_total` |
 | `ca94fbb` | docs: handoff row for fix 1 |
-| (fix 2 commit) | trial fix 2: LLMUnavailable during facts extraction says the AI service is down (wording only) |
+| `cff3825` | trial fix 2: LLMUnavailable during facts extraction says the AI service is down (wording only) |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **UPDATE from `manager` (2026-10-09, after backend-lead2's e46bcce):** FIRST merge `origin/multi-user` (now at `e46bcce`, 826 pytest; outreach plan 5 complete + review fixes). For fix #2, backend-lead2 ALREADY made facts extraction refund its budget unit on every failure (LLMUnavailable included) in `profile/extract.py`. So fix #2 is now ONLY the user-facing wording for LLMUnavailable; don't touch the budget logic. backend-lead2 is now idle, so its files are free, but keep edits minimal.
