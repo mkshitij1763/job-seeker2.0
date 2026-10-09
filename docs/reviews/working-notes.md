@@ -146,3 +146,12 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
   - **The URL becomes `/settings/prefs/where` (hx-boost pushes the POST URL); a refresh/back-forward lands on raw JSON `{"detail":"Method Not Allowed"}` (405).** P2. Same likely for every boosted POST that re-renders (e.g. 422 on Settings).
   - First DOM check found nothing because swap finished after my check → the swap gives no busy cue for ~1 s. P3.
 - Cancel → back to /settings, Hyderabad unticked, nothing saved. **PASS.** Confirm-Save not exercised (a run was in progress for this user).
+
+## Pass 4/5: landing Lighthouse + PWA (public page only)
+- Lighthouse (navigation, mobile and desktop): Accessibility 100, Best Practices 100, Agentic 100, SEO 50 (fails: `is-crawlable` = intended noindex; `meta-description` missing).
+- No `<meta name=description>` and no Open Graph tags → the invite link the owner pastes into WhatsApp/Slack previews as a bare URL/"Job Seeker". P3 (cheap trust win for invitees).
+- `/favicon.ico` → 404 (JSON body); no `<link rel=icon>` → blank browser-tab icon. P3.
+- Manifest (`/static/manifest.webmanifest`): name/short_name "Job Seeker", start_url /today, standalone, **theme_color #2563eb and background_color #fafafa = pre-redesign colours** (tokens now accent #3B5BF5, light #FBFBF9, dark #0B1120) → light splash flash for dark-mode users, wrong status-bar tint on Android. Only 180 and 512 icons; no 192, no `purpose: maskable`. P3.
+- App icon (img p5-icon-512.png): blocky white briefcase on old blue #2563eb; the in-app brand is a "J" lettermark tile in the new accent → two different brand marks. P3.
+- **Fonts served with no Cache-Control and `Content-Type: application/octet-stream`** (should be `font/woff2`, `immutable`, fingerprinted) → confirms the per-page revalidation round trips in the baseline. Manifest also has no Cache-Control. P2 (perf, cheap).
+- /healthz 200 `no-store`. OK.
