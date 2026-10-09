@@ -8,7 +8,7 @@ Live app: https://job-seeker20-production.up.railway.app · Report: `docs/review
 | Phase | State | Notes |
 |---|---|---|
 | §1 Reading | done | README, HANDOFF §1–3 + §8, TESTING-CHECKLIST, specs (UI redesign in full; mu-* onboarding/landing/Fetch-now sections) |
-| Sign-in plan agreed with user | in progress | see below |
+| Sign-in plan agreed with user | done | Owner: user's real Chrome via Claude in Chrome. Roommate: chrome-devtools MCP automation browser (own profile). User signs in to Google in each when asked. |
 | Pass 1 — roommate first-time journey | not started | needs OK to delete + re-invite horizon.1763@gmail.com |
 | Pass 2 — owner power-user journey | not started | look, don't touch |
 | Pass 3 — testing checklist | not started | |
@@ -20,11 +20,11 @@ Findings so far: P0 0 · P1 0 · P2 0 · P3 0.
 ## Quota/OK ledger (max 1 each for the whole review)
 - Find contacts: not used.
 - Fetch now: not used.
-- Roommate delete + re-invite: not yet OK'd.
+- Roommate delete + re-invite: **OK'd by user 2026-10-10** (delete in roommate Settings → owner re-invites on /admin → user signs in → upload /Users/user/Documents/Resume.pdf).
 - Roommate outreach ON: not requested.
 
 ## Early notes (to verify live)
 - Docs say the host is a GCP e2-micro + DuckDNS; the live app is on Railway (trial, 0.5 GB, US). TESTING-CHECKLIST mixes both (`<sub>.duckdns.org` and a Railway backup step). Copy/docs consistency finding candidate.
 
 ## Exact next step
-Agree the sign-in plan with the user (which Chrome profile/window holds the owner session, how the roommate session is kept separate), then start Pass 2 (owner, read-only) while waiting for the roommate re-onboarding OK, or Pass 1 if the OK comes first.
+Pass 1: open the live app in the chrome-devtools browser, ask the user to sign in as horizon.1763@gmail.com, record the 'before' state, delete the account (Settings → type email), then ask the user to re-invite it on /admin in their real Chrome (owner) and sign in again in the devtools browser.
