@@ -45,7 +45,9 @@ def delete_account(conn: sqlite3.Connection, home: Path, user_id: int) -> None:
             conn.execute(f"DELETE FROM {t} WHERE application_id IN (SELECT id FROM applications WHERE user_id = ?)",
                          (user_id,))
         # contacts.owner_user_id rows go after application_contacts (above), before applications/users
-        for t, how in [x for x in tables if x[1] != "application_id" and x[0] != "applications"]:
+        # runs go last: run_requests.run_id can point at the user's own run
+        for t, how in sorted([x for x in tables if x[1] != "application_id" and x[0] != "applications"],
+                             key=lambda x: x[0] == "runs"):
             conn.execute(f"DELETE FROM {t} WHERE {how} = ?", (user_id,))
         conn.execute("DELETE FROM applications WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM invites WHERE email = ?", (row["email"],))
