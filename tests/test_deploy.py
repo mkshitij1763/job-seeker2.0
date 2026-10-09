@@ -36,7 +36,7 @@ def in_order(commands, *needles):
 def test_deploy_dry_run_sequence(tmp_path):
     result, commands = deploy(tmp_path, "--sha", "abc1234")
     assert result.returncode == 0, result.stderr
-    in_order(commands, "systemctl is-active --quiet jobseeker-tick.service", "systemctl stop jobseeker-tick.timer",
+    in_order(commands, "systemctl stop jobseeker-tick.timer", "systemctl is-active --quiet jobseeker-tick.service",
              "git checkout -q --detach abc1234", "uv sync --frozen", "systemctl stop jobseeker-web",
              "js migrate", "deploy.log", "systemctl start jobseeker-web", "/healthz",
              "systemctl start jobseeker-tick.timer")
@@ -46,16 +46,26 @@ def test_deploy_dry_run_sequence(tmp_path):
 def test_deploy_refuses_while_tick_runs(tmp_path):
     result, commands = deploy(tmp_path, "--sha", "abc1234", DRY_TICK_RUNNING=1)
     assert result.returncode == 2 and "A run is in progress" in result.stderr
-    assert not any("systemctl stop" in c or "git checkout" in c for c in commands)
+    in_order(commands, "systemctl stop jobseeker-tick.timer", "systemctl is-active --quiet jobseeker-tick.service",
+             "systemctl start jobseeker-tick.timer")  # timer stopped before the check, then put back
+    assert not any("git checkout" in c or "jobseeker-web" in c for c in commands)
 
 
 def test_failed_health_rolls_code_back(tmp_path):
     result, commands = deploy(tmp_path, "--sha", "abc1234", DRY_FAIL="/healthz")
     assert result.returncode == 1
-    in_order(commands, "git checkout -q --detach abc1234", "/healthz", "git checkout -q --detach old0000",
-             "uv sync --frozen", "systemctl start jobseeker-web", "systemctl start jobseeker-tick.timer",
-             "journalctl -u jobseeker-web")
-    assert "rolled back to old0000" in result.stderr
+    in_order(commands, "git checkout -q --detach abc1234", "systemctl start jobseeker-web", "/healthz",
+             "git checkout -q --detach old0000", "uv sync --frozen", "systemctl restart jobseeker-web",
+             "systemctl start jobseeker-tick.timer", "/healthz", "journalctl -u jobseeker-web")
+    assert "rolled back to old0000, but /healthz still fails" in result.stderr
+
+
+def test_failed_health_rollback_reports_when_old_code_is_healthy(tmp_path):
+    result, commands = deploy(tmp_path, "--sha", "abc1234", DRY_FAIL="/healthz", DRY_ROLLBACK_HEALTHY=1)
+    assert result.returncode == 1
+    in_order(commands, "git checkout -q --detach old0000", "systemctl restart jobseeker-web", "/healthz")
+    assert "rolled back to old0000 and /healthz is OK" in result.stderr
+    assert not any("journalctl" in c for c in commands)
 
 
 def test_failed_health_after_migration_prints_restore_steps(tmp_path):
@@ -63,12 +73,41 @@ def test_failed_health_after_migration_prints_restore_steps(tmp_path):
     assert result.returncode == 1
     assert not any("--detach old0000" in c for c in commands)
     assert "schema changed (user_version 4 -> 5)" in result.stderr and "pre-migrate-v4" in result.stderr
+    steps = result.stderr
+    assert steps.index("systemctl stop jobseeker-web jobseeker-tick.timer") < steps.index("rm -f") \
+        < steps.index("sudo cp")  # stale -wal/-shm go before the copy, with services stopped
+    assert "jobseeker.db-wal" in steps and "jobseeker.db-shm" in steps
 
 
 def test_failed_migrate_with_unchanged_schema_restarts_old_code(tmp_path):
     result, commands = deploy(tmp_path, "--sha", "abc1234", DRY_FAIL="js migrate")
     assert result.returncode == 1
-    in_order(commands, "js migrate", "git checkout -q --detach old0000", "systemctl start jobseeker-web")
+    in_order(commands, "js migrate", "git checkout -q --detach old0000", "systemctl restart jobseeker-web")
+    assert "migrate failed; schema unchanged; rolled back to old0000" in result.stderr
+
+
+def test_failed_migrate_after_schema_change_prints_restore_steps(tmp_path):
+    result, commands = deploy(tmp_path, "--sha", "abc1234", DRY_FAIL="js migrate", DRY_UV_BEFORE=4, DRY_UV_AFTER=5)
+    assert result.returncode == 1
+    assert "rm -f" in result.stderr and "pre-migrate-v4" in result.stderr
+    assert not any("--detach old0000" in c for c in commands)
+
+
+def _assert_rolled_back_before_migrate(result, commands):
+    assert result.returncode == 1
+    assert not any("js migrate" in c or "systemctl stop jobseeker-web" in c for c in commands)
+    in_order(commands, "systemctl stop jobseeker-tick.timer", "git checkout -q --detach old0000",
+             "systemctl restart jobseeker-web", "systemctl start jobseeker-tick.timer")
+    assert "failed before migrating; rolled back to old0000" in result.stderr
+
+
+def test_failed_fetch_before_migrate_restores_old_code_and_timer(tmp_path):
+    _assert_rolled_back_before_migrate(*deploy(tmp_path, "--sha", "abc1234", DRY_FAIL="git fetch"))
+
+
+def test_failed_sync_before_migrate_restores_old_code_and_timer(tmp_path):
+    result, commands = deploy(tmp_path, "--sha", "abc1234", DRY_FAIL="uv sync --frozen", DRY_ROLLBACK_HEALTHY=1)
+    _assert_rolled_back_before_migrate(result, commands)
 
 
 def test_rollback_redeploys_previous_sha(tmp_path):
