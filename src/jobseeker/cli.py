@@ -41,7 +41,8 @@ def init() -> None:
     for d in (settings.data_dir, settings.logs_dir):
         d.mkdir(parents=True, exist_ok=True)
     connect(settings.db_path).close()
-    typer.echo(f"Ready in {settings.jobseeker_home}. Run `jobseeker migrate` to import profile/ and write config/app.yaml.")
+    typer.echo(f"Ready in {settings.jobseeker_home}. Run `jobseeker migrate`: it imports profile/ when present and "
+               "writes config/app.yaml from config/app.example.yaml if it's missing.")
 
 
 def _pipeline(settings, cfg):
@@ -148,6 +149,7 @@ def migrate(dry_run: bool = typer.Option(False, "--dry-run", help="Migrate a cop
 
     from jobseeker.db.migrations import DatabaseBusy, MigrationContext, MigrationError
     from jobseeker.db.migrations import migrate as run_migrate
+    from jobseeker.profile.importer import ensure_app_yaml
 
     settings = Settings()
     ctx = MigrationContext(owner_email=settings.owner_email, now=datetime.now(UTC), home=settings.jobseeker_home)
@@ -157,6 +159,8 @@ def migrate(dry_run: bool = typer.Option(False, "--dry-run", help="Migrate a cop
     except (DatabaseBusy, MigrationError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
+    if not dry_run and ensure_app_yaml(settings.jobseeker_home):
+        typer.echo("Wrote config/app.yaml from config/app.example.yaml")
 
 
 @app.command()

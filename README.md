@@ -1,54 +1,88 @@
 # job-seeker2.0
 
-A personal job-search assistant that runs locally. Every morning it finds new jobs, scores them against your resume, and drafts an email and a LinkedIn message for each strong match. **It never sends anything.** Approving a job creates a Gmail draft, and you press Send yourself.
+A small, invite-only job-search app for a few people. Every morning it fetches new jobs once for everyone (LinkedIn, Naukri, Indeed India, plus the Greenhouse, Lever and Ashby boards of companies it has found). Then it filters and scores them against **each user's own** preferences and resume. For users with outreach turned on, it also finds the right people at the company and drafts an email and a LinkedIn note. **It never sends anything.** Approving a job creates a draft in that user's own Gmail, and they press Send themselves.
 
-## Setup (once)
+It runs on one small server (a Google Cloud Always Free e2-micro, Caddy for HTTPS on a DuckDNS subdomain, SQLite on disk, systemd timers) and is used from a browser or as a phone home-screen app (PWA).
+
+## What each person gets
+- **Sign in with Google**, invite-only. Uninvited addresses see "Ask <owner> for an invite."
+- **Onboarding** in 4 steps: roles, where (cities or remote), experience and pay, resume upload. Then the AI reads the resume into facts, which the user reviews and corrects. Matching uses only these facts.
+- **Today, Jobs, Job detail, Pipeline**: the user's own matches, scores and applications. Nobody sees anyone else's.
+- **Settings**: preferences (with a "hides N, brings back M" preview before saving), resume and facts, Gmail connection, daily push notification, **Download my data** (zip), **Delete my account**, sign out (here or everywhere).
+- **Fetch now**: an on-demand run for that user, rate-limited.
+- **Outreach** (per user, switched by the owner; off for new users): Find contacts, drafts, Approve → Gmail draft, follow-ups. With outreach off, a job page shows **Open job posting ↗** and **Mark applied**.
+- **Admin** (owner only, `/admin`): invites, users (disable, outreach on/off), usage per person and per service.
+
+Free quotas (Groq, Tavily, Apify, Hunter) are shared: each user gets an even share of each service, and the admin page shows who used what.
+
+## Run it on a server (production)
+
+The full runbook, with every **(verify)** step, is in `docs/superpowers/plans/2026-10-08-mu-hosting.md` Task 5 and `docs/superpowers/specs/2026-10-08-mu-hosting-design.md` §2–§10. In short:
+
+1. **Accounts (by hand, once):**
+   - **Google Cloud**: billing on, with a ₹100/month budget alert. Create an **e2-micro** VM in us-central1 (or us-west1/us-east1): Ubuntu 24.04 LTS x86/64 on a **30 GB Standard** persistent disk (not the default Balanced, which is billed), an ephemeral external IP (no static IP), and **Allow HTTP/HTTPS traffic** ticked. `bootstrap.sh` adds a 2 GB swapfile, because the VM has 1 GB of RAM.
+   - **DuckDNS**: a `<sub>.duckdns.org` name pointing at that IP.
+   - **Google Cloud**: an OAuth client of type **Web application**, with redirect URIs `https://<sub>.duckdns.org/auth/callback` and `https://<sub>.duckdns.org/gmail/callback`, and the Gmail API enabled. The consent screen stays in **Testing** mode. Add every person who will use outreach as a **test user**.
+   - **Backblaze B2**: a bucket with lifecycle rules, and a write-only key for that bucket (nightly encrypted backups).
+   - Optional: UptimeRobot on `/healthz` and a Healthchecks.io check for the daily run.
+2. **Bootstrap** from the Mac, from the repo root. The script is idempotent; run it again after each step it asks for:
+   ```
+   ssh jobseeker 'sudo BASE_URL=https://<sub>.duckdns.org OWNER_EMAIL=<you@gmail.com> BRANCH=multi-user bash -s' < scripts/server/bootstrap.sh
+   ```
+   The first run prints a deploy key: add it in GitHub → repo → Settings → Deploy keys (read-only). The second run installs uv, the app and the systemd units, and creates `/srv/jobseeker/.env` (mode 600) and `/etc/duckdns.env`.
+3. **Fill in `.env`** on the server: `sudo -u jobseeker nano /srv/jobseeker/.env`. Every name is listed in `scripts/server/env.example`. Make the keys with `js gen-key` (a different one for each of `SECRET_KEY`, `TOKEN_KEY` and `BACKUP_KEY`) and the push keys with `js vapid-keys`. Never paste secrets into chat or git.
+
+   | Variable | Required | What it is |
+   |---|---|---|
+   | `GROQ_API_KEY` | yes | Scoring, drafting and resume reading (free at console.groq.com) |
+   | `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | no | AI fallbacks when Groq's daily quota runs out |
+   | `TAVILY_API_KEY` | for outreach | Find contacts |
+   | `APIFY_API_TOKEN`, `HUNTER_API_KEY` | no | Better contact search and email lookup |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | yes | The Web OAuth client (sign-in and Gmail) |
+   | `BASE_URL` | yes | Exactly the browser origin, `https://<sub>.duckdns.org`, with no trailing slash. Any other value gets every POST a 403 |
+   | `SECRET_KEY` | yes | `js gen-key`; signs the short-lived OAuth cookie |
+   | `TOKEN_KEY` | yes | `js gen-key`; seals Gmail tokens. Losing it only means everyone taps Reconnect Gmail |
+   | `OWNER_EMAIL` | yes | The owner's Google address; that account becomes user 1 and admin |
+   | `COOKIE_SECURE` | — | `true` (the default); `false` only for local http |
+   | `BACKUP_DIR` | — | `/srv/jobseeker/data/backups` |
+   | `BACKUP_KEY`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_KEY_ID`, `BACKUP_S3_SECRET` | no | Encrypted off-site copy in B2 |
+   | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` | no | Daily "N new matches" push notifications |
+   | `HEALTHCHECK_PING_URL` | no | Pinged after each daily run |
+
+   `JOBSEEKER_HOME` is set by the systemd units, not in `.env`.
+4. **First run.** The web service and timer stay off until `scripts/server/ready.sh` finds the `.env` values above plus `data/jobseeker.db` and `config/app.yaml`.
+   - **Moving from the old single-user Mac app:** follow the data move in hosting spec §10 (copy the DB and `profile/` up, then `js migrate --dry-run`, `js migrate`, then `js refilter` and `js refilter --apply` once). The cutover checklist in `HANDOFF.md` §8 covers it end to end.
+   - **A fresh install:** `js init`, then `js migrate`. On a new database `migrate` changes no schema, but it writes `config/app.yaml` from `config/app.example.yaml` whenever that file is missing (it never overwrites one). Then sign in as the owner and go through onboarding.
+   - Re-run `bootstrap.sh`; it enables `jobseeker-web` and `jobseeker-tick.timer`.
+5. **Invite people.** Open `/admin` → Invites, add their Google address, and send them the site link yourself (invites send no email). For outreach, first add their Gmail address as a test user in Google Cloud, then turn **Outreach on** for them in `/admin` → Users. They tap Settings → Connect Gmail once.
+
+**Day to day on the server:**
+- `scripts/deploy.sh` (from the Mac) deploys the newest `multi-user` commit. It refuses during a run, migrates, checks `/healthz`, and rolls back by itself if that fails. `--dry-run`, `--sha`, `--rollback` and `--branch` are available.
+- `js <command>` on the server runs the CLI as the service user with `.env` loaded: `js tick`, `js run --user <email>`, `js refilter [--user <email>] [--apply]`, `js rescore --user <email>`, `js backup`, `js restore <file> [--to DIR]`, `js companies`.
+- `jobseeker-tick.timer` fires every 5 minutes. It does the daily run (`schedule.daily_at` in `config/app.yaml`, 11:15 IST by default) and the nightly backup, and serves Fetch now requests.
+- Server-wide settings (models, thresholds, budgets, search knobs, the role catalog and city chips, `contacts.smtp_verify`) live in `/srv/jobseeker/config/app.yaml`. Restart the web service after changing it. Keep `contacts.smtp_verify: off` on GCP, because port 25 is blocked.
+
+## Run it locally (development)
 1. `uv sync`
-2. `cp .env.example .env` and fill in `GROQ_API_KEY` (free, from https://console.groq.com/keys; no card needed).
-3. Put your resume at `profile/resume.pdf`.
-4. `uv run jobseeker init`. This extracts `profile/facts.json`. **Read it and fix any mistakes**, because every draft is checked against it.
-5. Gmail:
-   1. In Google Cloud Console, create an OAuth client of type **Desktop app** with the Gmail API enabled.
-   2. Save it as `secrets/credentials.json`.
-   3. Run `uv run jobseeker auth-gmail`. This asks only for permission to create drafts.
-6. `scripts/install_launchd.sh` schedules the daily run (11:15, or on wake) and keeps the dashboard running on 127.0.0.1:8000 while you're logged in.
-7. Phone access (optional): install Tailscale on the Mac and phone with the same account, then run `tailscale serve --bg 8000`. The dashboard is then at `https://<mac>.<tailnet>.ts.net`, reachable only from your own Tailscale devices while the Mac is awake. Undo with `tailscale serve --bg off`.
+2. Pick a home for `data/` and `config/app.yaml`, e.g. `mkdir ~/js-home` (`config/app.yaml` is git-ignored if you use the repo itself).
+3. `cp .env.example .env` and fill it in. For local use: `JOBSEEKER_HOME=~/js-home` (use the full path), `BASE_URL=http://127.0.0.1:8000`, `COOKIE_SECURE=false`, a Web OAuth client with the redirect URIs `http://127.0.0.1:8000/auth/callback` and `/gmail/callback`, and keys from `uv run jobseeker gen-key`.
+4. `uv run jobseeker init`, `uv run jobseeker migrate` (writes `config/app.yaml`), then `uv run jobseeker serve`, then open http://127.0.0.1:8000 and sign in as `OWNER_EMAIL`.
+5. `uv run jobseeker run` runs the pipeline once (add `--user <email>` for one person).
 
-## Daily use
-- `uv run jobseeker serve` → open http://127.0.0.1:8000
-- **Inbox** keyboard shortcuts:
-
-  | Key | Action |
-  |---|---|
-  | `j` / `k` | Move down / up |
-  | `enter` | Open the job |
-  | `s` | Skip |
-  | `z` | Snooze for 3 days |
-
-- **Job page:**
-  1. Read the score and the job description.
-  2. Use **Search LinkedIn** to find the contact, then paste their name and email.
-  3. Edit the drafts if needed.
-  4. Click **Approve → Gmail draft**.
-  5. Send it from Gmail, then click **Mark sent**.
-- **Pipeline:** every application at a glance, with a **follow up** badge after 5 days without a reply.
-- **Find contacts:** on a job page, tap **Find contacts**. In about half a minute the People card lists the 3 most relevant people (via public LinkedIn search), each with a reason and a work email marked verified / likely / not found. **Approve** drafts emails to #1 and #2; 5 days after **Mark sent** with no reply, the pipeline offers **Email #3**. Each person has **Copy note** + **LinkedIn ↗** for a connection request. If the card shows the wrong **Email domain**, correct it once and run Find contacts again. Uses only free tiers (`TAVILY_API_KEY` required; `APIFY_API_TOKEN`, `HUNTER_API_KEY` optional, in `.env`); monthly usage is shown under the card.
-- **On your iPhone:** open the Tailscale address (see Setup step 7) and Add to Home Screen. In the inbox, swipe a card left to **Skip** or right to **Snooze** (Undo appears for 6 seconds). On a job page, **Approve** is pinned to the bottom; everything else is under **More**.
+Tests: `uv run pytest -p no:warnings` and `node --test tests/js/*.test.mjs`. They need no network and no `.env`.
 
 ## Tuning
-- `profile/preferences.yaml`: cities, title allow/deny lists, budgets, models. Filters apply to new jobs; to apply changed rules to jobs already stored, run `uv run jobseeker refilter` (lists the changes) and then `uv run jobseeker refilter --apply`. Unapproved applications it removes are skipped, so Undo still works.
-- `rubric.yaml`: scoring weights. Bump `version`, then run `uv run jobseeker rescore`.
-- `profile/preferences.yaml` → `search:` the roles and cities searched every morning on LinkedIn, Naukri and Indeed India. Companies found there that use Greenhouse, Lever or Ashby are discovered automatically and fetched from their own boards afterwards; see them with `uv run jobseeker companies`.
-- `companies.yaml`: optional favourites that are always fetched. Check a slug with `uv run python scripts/verify_companies.py <slug>`.
+- Per user: everything in Settings.
+- Server-wide: `config/app.yaml` (see above). `rubric.yaml` holds the scoring weights; bump its `version`, then run `js rescore --user <email>`.
+- `companies.yaml`: optional favourite companies whose ATS boards are always fetched. Check a slug with `uv run python scripts/verify_companies.py <slug>`.
 
 ## AI fallbacks
-Groq's free quota is per model and per day. When it runs out, scoring moves to Groq's qwen model, then Gemini (`GEMINI_API_KEY`), then Cloudflare Workers AI (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`). Drafting moves to Gemini 3.5 Flash, then Cloudflare. Providers without keys in `.env` are skipped. Change the chains under `models: fallbacks:` in `profile/preferences.yaml`.
+Groq's free quota is per model and per day. When it runs out, scoring moves to Groq's qwen model, then Gemini (`GEMINI_API_KEY`), then Cloudflare Workers AI (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`). Drafting moves to Gemini Flash, then Cloudflare. Providers without keys are skipped. The chains are under `models: fallbacks:` in `config/app.yaml`. If a run hits every quota it stops cleanly, and the remaining jobs are picked up by the next run.
 
 ## Backups
-After each daily run, a gzipped copy of the database and `facts.json` is saved, keeping the last 7 days. It goes to `BACKUP_DIR` from `.env` if set, otherwise iCloud Drive (`JobSeeker-backups`) when iCloud Drive is on, otherwise `~/JobSeeker-backups`. Run `uv run jobseeker backup` at any time. To restore, stop the dashboard and run `gunzip -c <backup>.db.gz > data/jobseeker.db`.
+Each night the tick writes a `.tar.gz` (the DB, resumes and a manifest with row counts) to `BACKUP_DIR`. With `BACKUP_KEY` and the B2 settings, it also uploads an encrypted copy, `daily/…` and `weekly/…` on Sundays, with retention set by the bucket's lifecycle rules. `js backup` makes one now. To restore, run `js restore <file.tar.gz | file.tar.gz.enc> --to <empty dir>`; it checks every checksum and the DB's integrity, and prints the counts.
 
 ## Cost and limits
-- Free. Groq's free tier allows about 200K tokens/day per model (about 30 scored jobs); the qwen, Gemini and Cloudflare fallbacks cover the rest of the 80 scored and 10 drafted jobs a day (the caps in `budgets`).
-- If a run hits the daily quota it stops cleanly, and the remaining jobs are picked up the next morning.
-- The scheduled run may take 30–60 minutes because it waits out per-minute limits. That's fine, since it runs before you're up.
-- Job-site scraping is free but unofficial: LinkedIn may rate-limit after a few searches. A blocked site is skipped for the day and listed in the run's errors; everything else continues.
+- Free: Google Cloud's Always Free e2-micro (with a ₹100 budget alert; egress stays well under the free 1 GB/month), DuckDNS, Let's Encrypt, free tiers of Groq, Tavily, Apify and Hunter, B2's free 10 GB.
+- Job-site scraping is free but unofficial; a blocked site is skipped for the day and listed in the run's notes.
+- Gmail access uses the restricted `gmail.compose` scope in Testing mode, so Google shows an "unverified app" warning (Advanced → Continue), and consent can expire after about a week; the app then shows **Reconnect Gmail**.
