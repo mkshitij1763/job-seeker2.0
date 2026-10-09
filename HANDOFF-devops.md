@@ -82,7 +82,7 @@
 | `4018926` | Railway step 3: `scripts/railway/start.sh` (park on no DB / failed migrate, serve + 5-min tick loop, TERM handling, root → app drop); Dockerfile checks setpriv/timeout at build |
 | `0c45071` | step 3 follow-up (manager): park repeats `PARKED: …` every `PARK_LOG_INTERVAL` (300 s); no fresh-start switch |
 | `7abc2c1` | Railway step 4: runbook R1–R4 in the hosting plan (first deploy, data move over Railway SSH/scp, day to day, trial-end exit) |
-| (this commit) | `scripts/railway/set-secrets.sh` (user-run; `tests/test_railway_secrets.py`) + runbook R1 step 4 shortcut |
+| `828c81a` | `scripts/railway/set-secrets.sh` (user-run; `tests/test_railway_secrets.py`) + runbook R1 step 4 shortcut |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **UPDATE from `manager` (2026-10-09, after backend-lead2's e46bcce):** FIRST merge `origin/multi-user` (now at `e46bcce`, 826 pytest; outreach plan 5 complete + review fixes). For fix #2, backend-lead2 ALREADY made facts extraction refund its budget unit on every failure (LLMUnavailable included) in `profile/extract.py`. So fix #2 is now ONLY the user-facing wording for LLMUnavailable; don't touch the budget logic. backend-lead2 is now idle, so its files are free, but keep edits minimal.
