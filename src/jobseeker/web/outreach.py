@@ -3,11 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
+from jobseeker.clock import app_now
 from jobseeker.db import queries
 from jobseeker.db.core import utcnow
 from jobseeker.db.applications import (
     BlockedContact, get_status, record_followup, save_contact, save_draft, set_gmail_draft_id, transition,
 )
+from jobseeker.db.usage import Budget, outreach_limits
 from jobseeker.gmail.client import GmailUnavailable, create_draft
 from jobseeker.gmail.mime import build_raw_message
 from jobseeker.llm import LLMError
@@ -48,18 +50,23 @@ def edit_draft(app_id: int, kind: str, subject: str = Form(""), body: str = Form
 
 
 @router.post("/{app_id}/draft")
-def draft_now(request: Request, app_id: int, prefs=Depends(current_prefs), facts=Depends(current_facts),
-              conn=Depends(get_conn)):
+def draft_now(request: Request, app_id: int, user=Depends(current_user), prefs=Depends(current_prefs),
+              facts=Depends(current_facts), conn=Depends(get_conn)):
     state = request.app.state
     status = get_status(conn, app_id)
     if status not in REGENERATABLE:
         return _back(app_id, err=f"Can't regenerate drafts once {status.replace('_', ' ')}; edit them instead")
     if facts is None:
         return _back(app_id, err="No resume facts yet. Add your resume in Settings")
+    budget = Budget(conn, user.id, outreach_limits(conn, prefs.contacts, state.app_config.budgets.global_drafts_per_day),
+                    app_now())
+    if not budget.can("draft"):
+        return _back(app_id, err=budget.exhausted_note("draft", "drafting"))
     try:
         draft_application(conn, app_id, state.llm_factory(), facts, prefs)
     except LLMError as e:
         return _back(app_id, err=f"Drafting failed: {e}")
+    budget.spend("draft")
     if status == "approved":
         transition(conn, app_id, "drafted", {"reason": "regenerated after approval"})
         return _back(app_id, msg="Drafts regenerated. Approving again creates a new Gmail draft; "

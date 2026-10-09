@@ -173,3 +173,23 @@ def test_approve_adds_greeting_and_signature(ctx):
     body = next(p for p in msg.walk() if p.get_content_type() == "text/plain").get_payload(decode=True).decode()
     assert body.startswith("Hi Asha,\n\nEmail body citing 67%.")
     assert "Asha Owner" in body
+
+
+
+def test_draft_now_spends_a_draft_unit_and_stops_at_the_share(ctx):
+    from jobseeker.clock import app_now
+    from jobseeker.db.profile import load_user_context
+    from jobseeker.db.usage import Budget, outreach_limits
+    client, settings, (a, review_app), _ = ctx
+    conn = db(settings)
+    cfg = client.app.state.app_config
+
+    def budget():
+        contacts = load_user_context(conn, 1, cfg)[0].contacts
+        return Budget(conn, 1, outreach_limits(conn, contacts, cfg.budgets.global_drafts_per_day), app_now())
+    client.post(f"/applications/{review_app}/draft")
+    assert budget().used("draft") == 1
+    b = budget()
+    b.spend("draft", b.limits["draft"].share_cap)
+    r = client.post(f"/applications/{review_app}/draft", follow_redirects=False)
+    assert "drafting%20share%20is%20used" in r.headers["location"]

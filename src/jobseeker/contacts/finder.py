@@ -106,6 +106,9 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         cands = [c for c in cands if (nm := names.clean_name(c.name)) is None or (nm.first, nm.last) not in blocked]
     if not cands:
         raise FinderError(" ".join(notes) or f"No people found at {company} for this role")
+    if not budget.can("draft"):  # ranking is an LLM call: it spends the user's drafting share
+        raise FinderError(budget.exhausted_note("draft", "drafting"))
+    budget.spend("draft")
     ranked = rank(deps.llm, prefs.models.drafting, job["title"], company, job["jd_text"], cands)
     if not ranked:
         raise FinderError(f"No relevant people found at {company} for this role")
@@ -118,9 +121,13 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     domain = dom.get("domain") or domain_from_text(job["jd_text"], company)
     if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
         query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
-        domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
-                             job["jd_text"], _search(deps, conn, company, budget, notes, query, max_results=8),
-                             has_mail=lambda d: deps.resolver(d) is not None)
+        if budget.can("draft"):  # so is picking the website
+            budget.spend("draft")
+            domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
+                                 job["jd_text"], _search(deps, conn, company, budget, notes, query, max_results=8),
+                                 has_mail=lambda d: deps.resolver(d) is not None)
+        else:
+            notes.append(budget.exhausted_note("draft", "drafting"))
         if not domain:
             notes.append(f"Couldn't tell which website is {company}'s; set the email domain on the card")
     mx = deps.resolver(domain) if domain else None

@@ -77,3 +77,37 @@ def test_eligible_count_rules(tmp_path):
     conn.execute("UPDATE users SET is_admin = 1 WHERE id = 1")
     assert eligible_count(conn, "score") == 2 and eligible_count(conn, "draft") == 1
     assert share_divisor(conn, "score", 3) == 3 and share_divisor(conn, "draft", 0) == 1
+
+
+def test_draft_share_counts_outreach_users_only(settings):
+    from jobseeker.config import ContactsConfig
+    from jobseeker.db.usage import outreach_limits
+    conn = connect(settings.db_path)
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (2, 'b@example.com', 't')")  # matching-only
+    conn.execute("""INSERT INTO user_prefs (user_id, data, version, onboarding_step, onboarded_at, updated_at)
+                    VALUES (2, '{}', 1, NULL, 't', 't')""")
+    assert outreach_limits(conn, ContactsConfig(), 20)["draft"].share_cap == 20
+
+
+def test_two_outreach_users_draft_half_each_best_first(tmp_path, prefs, facts):
+    from jobseeker.config import AppConfig
+    from jobseeker.db.users import set_outreach
+
+    conn = connect(tmp_path / "db")
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (2, 'r@x', 't')")
+    for u in (1, 2):
+        conn.execute("""INSERT OR REPLACE INTO user_prefs (user_id, data, version, onboarding_step, onboarded_at,
+                        updated_at) VALUES (?, '{}', 1, NULL, 't', 't')""", (u,))
+    set_outreach(conn, 2, True)
+    _shortlist(conn, 1, 4)
+    _shortlist(conn, 2, 4)
+    cfg = AppConfig()
+    cfg.budgets.global_drafts_per_day, cfg.budgets.draft_per_run = 4, 8
+    drafters = [Drafter(u, prefs, facts, UserStats()) for u in (1, 2)]
+    draft_round_robin(conn, drafters, FakeLLM(handler=lambda schema, prompt: DRAFT), cfg, NOW)
+    assert [d.stats.drafted for d in drafters] == [2, 2]
+    for u in (1, 2):
+        got = [r[0] for r in conn.execute("""SELECT s.score FROM applications a JOIN scores s
+                                              ON s.job_id = a.job_id AND s.user_id = a.user_id
+                                              WHERE a.user_id = ? AND a.status = 'drafted'""", (u,))]
+        assert sorted(got, reverse=True) == [90, 89]                    # the best two of 90..87

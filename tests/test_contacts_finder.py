@@ -472,3 +472,27 @@ def test_person_blocked_by_b_is_still_found_for_a(prefs):
     mark_not_interested(conn, app2, block_company=True)                   # B blocks the people and the company
     find_contacts(conn, app1, prefs, d)                                    # A, served from the cache
     assert "Asha Rao" in [p["name"] for p in people(conn, app1)]
+
+
+def _draft_share_used(conn, prefs):
+    from jobseeker.db.usage import Budget, outreach_limits
+    b = Budget(conn, 1, outreach_limits(conn, prefs.contacts, 20), NOW)
+    b.spend("draft", b.limits["draft"].share_cap)
+
+
+def test_ranking_needs_a_draft_unit(prefs):
+    conn, app = setup_app()
+    _draft_share_used(conn, prefs)
+
+    def no_llm(schema, prompt):
+        raise AssertionError("the ranking LLM must not be called")
+    d, _ = deps(llm=FakeLLM(handler=no_llm))
+    with pytest.raises(FinderError, match="Your drafting share is used for today"):
+        find_contacts(conn, app, prefs, d)
+
+
+def test_ranking_and_domain_pick_each_spend_a_draft_unit(prefs):
+    from jobseeker.db.usage import Budget, outreach_limits
+    conn, app = setup_app()
+    find_contacts(conn, app, prefs, deps()[0])                             # ranks people, then picks the website
+    assert Budget(conn, 1, outreach_limits(conn, prefs.contacts, 20), NOW).used("draft") == 2
