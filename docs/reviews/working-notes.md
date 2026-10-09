@@ -155,3 +155,20 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 - App icon (img p5-icon-512.png): blocky white briefcase on old blue #2563eb; the in-app brand is a "J" lettermark tile in the new accent → two different brand marks. P3.
 - **Fonts served with no Cache-Control and `Content-Type: application/octet-stream`** (should be `font/woff2`, `immutable`, fingerprinted) → confirms the per-page revalidation round trips in the baseline. Manifest also has no Cache-Control. P2 (perf, cheap).
 - /healthz 200 `no-store`. OK.
+
+## Pass 4: colour tokens and contrast (ui.css, both themes; computed WCAG ratios)
+Theme follows `prefers-color-scheme` only (no in-app switch). Light tokens per spec; dark derived.
+| Pair | Light | Dark |
+|---|---|---|
+| --text on surface | 17.85 | 14.57 |
+| --text-2 (muted) on surface | 7.58 | 7.93 |
+| **--text-3 (faint) on surface / bg** | **2.56 / 2.47 FAIL** | **3.92 / 4.16 fail for small text** |
+| accent on surface | 5.25 | 5.56 |
+| **white on accent (primary buttons)** | 5.25 | **3.19 FAIL (14 px text)** |
+| tier pills strong/good/weak | 7.3 / 6.8 / 7.6 | 9.7 / 10.1 / 8.4 |
+| **neutral pill (status pills)** | **4.34 (just under)** | 7.12 |
+| **--line / --line-strong vs surface (input & card borders)** | **1.24 / 1.48** | **1.34 / 1.71** (non-text needs 3:1) |
+- --text-3 is used for `.faint`, chip counts (11 px), sidebar count badges, placeholders → fails AA in light. P2.
+- Dark primary buttons (Continue, Finish, Go to Jobs, Save, Approve) are white on #6F87FF = 3.19:1. Darken dark-mode accent for fills (e.g. #4F6BFA ≈ 4.6:1) or use dark text. P2.
+- Inputs: fill #1A2232 on card #111827 (dark) and a 1.2–1.7:1 border → fields barely visible as fields (seen on onboarding step 3). P2 (WCAG 1.4.11).
+- Landing light (img p4-01): clean; card edge faint; large empty gap between the invite note and the privacy text (both themes); no product name/logo on the page itself. P3.
