@@ -21,5 +21,39 @@ Account horizon.1763@gmail.com (Google display name also "Kshitij Meshram", same
 - Settings → "Delete my account" (a link) → /settings/delete: bare page (no nav), card left-aligned not centred at 1470; input and "Delete my account" button touch (no gap); danger button is a quiet outline (`btn btn-danger bad`), barely reads as destructive. Placeholder shows the email to type (good); "Download my data first" link (good). img/p1-02.
 - **BUG (likely P1): after typing the email and pressing Delete, nothing on screen changes.** The account *is* deleted (fetch /settings → opaqueredirect; reload → Google account chooser). Cause: `<body hx-boost="true">` makes the form an XHR; server returns 303 → /login → 302 to accounts.google.com (cross-origin), which XHR can't follow, so HTMX silently does nothing. User is left on a filled-in delete form, likely presses again (→ error) or thinks it failed. Also wrong destination: it should land on a "Your account is deleted" page, not restart Google sign-in. img/p1-03. `settings.py:152-163`.
 - Same chain for **Sign out / Sign out everywhere** (`auth.py:103-120`, 303 → /login) → likely the same silent no-op. VERIFY.
-- **HTMX 2.0.4 default does not swap 4xx/5xx**; no `htmx.config.responseHandling` override anywhere. So every 422 re-render (onboarding step validation, "The email doesn't match", resume upload errors) may show nothing. VERIFY in onboarding.
+- HTMX 2.0.4 does not swap 4xx by default. **Onboarding is NOT affected** (bare.html has no hx-boost; 422 errors render fine). Still to check: boosted pages that return 422/403 (delete "The email doesn't match", Settings forms).
 - Signed-out deep link (/settings) goes straight to Google's account chooser with no landing page: acceptable, but a user who just deleted is bounced into sign-in.
+
+## Pass 1: onboarding (re-invited by owner, signed in ~05:07 IST), desktop 1470 dark
+Step 1 Roles (img p1-04/05)
+- No welcome or orientation (what's coming, ~2 min, why). First line is the admin-visibility notice, before the question: surveillance-first framing.
+- "Step 1 of 4" in small monospace muted text; no progress bar. Card left-aligned at 1470 (not centred); lots of dead space.
+- Chips = native checkbox inside a pill (double affordance). Checked state clear (accent).
+- Empty submit → 422 "Pick at least one role" inline, OK. But the error stays visible after picking chips (no live clear). P3.
+- Catalog: Product Analyst, APM, PM, Founder's Office, Growth/Business/Data Analyst, Program Manager, Strategy & Ops. (Jobs filter later shows different family names: "ai pm", "pm", "apm", "other".)
+- Continue gives no busy state; full POST+redirect ~0.6 s, felt like nothing happened once (my click on a ref did not submit; second click did; treat as tooling, not app).
+Step 2 Where (img p1-06)
+- "Remote within India is fine" is **pre-ticked** and satisfies validation alone: a user who taps Continue gets remote-only (very few jobs). P2.
+- Remote is a bare square checkbox; cities are chips: inconsistent. No helper line under the heading (step 1 has one). City list lacks Kolkata/Ahmedabad (fine, "Other cities" covers it); "Gurgaon" vs "Gurugram".
+- **Back is a plain link: it discards the current step's unsaved choices** (picked Bengaluru+Mumbai, Back, Continue → both gone). P2.
+Step 3 Experience and pay (img p1-07/08)
+- 8 fields in one card, ~1.3 screens; only 2 required. Heavy for a phone.
+- Label "Hide jobs asking for at least __ years" reads like a fill-in-the-blank; no explanation of what it does.
+- **Spec drift: threshold is not pre-filled after entering years** (spec: ceil((years+1)*2)/2 → 2.5 for 1.3). User must invent a number. P2.
+- Validation good: threshold 1 < 1.3 → "Must be more than your years of experience" inline, values kept.
+- **"Hide titles containing" is a single-line text input** pre-filled with 18 terms that overflow off the right edge (spec: removable chips). Can't see/edit what is hidden. P2.
+- Default deny list lacks "senior", "principal", "lead", "staff", "manager II" → explains Principal PM / Senior PM shortlisted for a 1.3-yr profile (before-state). P1 (match quality, both personas).
+- "Must-haves", "Deal-breakers", "Your experience in a sentence or two": no hint how they're used (scoring only).
+- Focus ring: 1px accent border only, no outline/shadow: visible but weak. P3 (WCAG 2.4.13 enhanced).
+- CTC fields: no hint of privacy (admin can see preferences → can the admin see my CTC? Landing says "preferences" are visible to admin). Trust risk. CHECK on admin user view in pass 2.
+Step 4 Resume (img p1-09..12)
+- Native unstyled file input ("Choose file" light grey on dark), separate Upload button (two actions), Finish disabled with no reason. File input has no accessible name (label wraps text + input, but a11y tree shows "(no name)").
+- No line about why the resume is needed or who sees it (landing says only you).
+- Upload → "Resume saved. Reading it now." flash (message carried in ?msg= query string → reappears on refresh/back). File input resets to "No file chosen" and the uploaded file's name is not shown → looks like it was lost. P3.
+- "Reading your resume…" muted text, no spinner, no time hint. Took <10 s. Extraction quality: excellent (headline, 2 roles with dates, ~25 skills, 13 achievements incl. extracurriculars).
+- **BUG P1: when reading finishes, Finish stays disabled.** `_resume_status.html` polls and swaps only #resume-status; Finish is outside it (`onboarding/resume.html:18`, `disabled` rendered server-side when no facts). Only a reload or pressing "Save facts" enables it. New users stall at the last step.
+- Flash "Resume saved. Reading it now." stays after reading is done (stale).
+- Facts review: Roles in a <fieldset> with a bright default border (unstyled, inconsistent); role rows are 4 unlabeled inputs (title/org/start/end) — a11y + clarity. Skills single-line overflowing. Achievements 13 textareas → page ~2,000 px tall; Finish at the very bottom.
+- Copy "Scores and drafts use only these facts": roommate has no drafts (outreach off).
+- "Save facts" (secondary) above "Finish" (primary): unclear whether Finish saves edits. After Save facts: full reload to top, flash "Saved" out of view of the button pressed.
+- "Enter my skills myself" appears only after a failed read → checklist D item "try Enter my skills myself once" is not reachable on a successful read. BLOCKED unless a read fails.
