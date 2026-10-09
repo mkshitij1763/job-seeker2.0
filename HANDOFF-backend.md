@@ -37,11 +37,11 @@
   | P3-T6 resume upload, fact extraction, review, Finish | `c0fe3e5` |
   | P3-T7 Settings page | `b1b3eed` |
   | P3-T8 export and delete account | `770f00f` |
-  | P3-T9 safety test, acceptance, Advanced matching, handoff | `this commit` |
+  | P3-T9 safety test, acceptance, Advanced matching, handoff | `558b0fd` |
 
 - **Tests at `P3-T9`:** 633 pytest (about 21 s), 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 3 is fully built (T1–T9). Next is the final whole-branch review of plan 3 (fresh reviewer, `2f473a9..HEAD`; `manager` decides who runs it and rules on findings before any fix). Then whatever `manager` assigns (plan 4 pipeline per user / plan 5 outreach). Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
+- **NEXT:** plan 3 final-review findings are with `manager` for rulings (3 Important: the onboarding step POST un-onboards a finished user; achievement/org misalignment when one is cleared; `_apps_needing_drafts` not user-scoped). No fixes until ruled. The outreach plan `docs/superpowers/plans/2026-10-08-mu-outreach.md` is written and awaits `manager`'s review. Don't build it until approved; it needs the pipeline plan fully merged first. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
