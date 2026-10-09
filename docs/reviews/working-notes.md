@@ -105,3 +105,19 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 - Shows "Jobs up to 7 days old" — a setting the user never saw or set (not in onboarding or Settings?). CHECK Settings.
 - **Match quality P1:** Shown 170 for roles PA/APM/PM includes Inventory Analyst (Stalwarts), Clinical Business Analyst, QA Analyst Lead, Senior Incident Response Analyst (Jobgether), Operations Analyst (ANZ), Lead Data Analyst (Target), Product Control Sr Analyst (Deutsche Bank), SENIOR, DATA ANALYST (Walmart). Looks like the role filter admits any "Analyst"; seniority words pass (no senior/lead/principal in default deny). The scorer may sink them, but they cost the user's per-day score share and clutter Review.
 - Top-20 table: "Score —" for all (not scored yet); "best score first" with no scores reads oddly.
+
+## Pass 2: owner — Today (1440)
+- Tiles: 62 New today → `/` (Jobs shows 86, unfiltered: number doesn't carry through) · 3 Ready to approve → #ready · 31 Need contacts → #find · 0 Send in Gmail → **#send, a section not rendered at 0 → dead anchor** (P3).
+- Sections: Ready to approve (3: Tracxn Sr APM 92, slice Sr PA 91, Headout PA 84), Find contacts (31; top: **Principal Product Manager · Sabre 95**), "26 more in Jobs →". Rows show only score+title+company (no city/age/next step).
+- No run-notes pill anywhere (spec: phone top bar / bottom of sidebar). Spec's date + "last run finished" line missing.
+- Sidebar: Jobs 86, **Pipeline 1** (owner has ~240 applications; badge meaning unclear). Admin pinned at the bottom (good).
+## Pass 2: Job detail /applications/188 (Principal PM, Sabre)
+- **Match quality P1 (scorer):** 95 "Strong match", **Experience 25/25** for a *Principal* PM with a 1.3-yr profile. Why-you-match bullets are generic ("Data-driven product vision and roadmap"); Watch-out misses the obvious seniority gap. img p2-02.
+- **P0 (config): Find contacts is disabled on prod**: `<button class=primary disabled title="Add TAVILY_API_KEY to .env">`. Step ① of outreach is dead for all 31 "Need contacts" jobs; the only explanation is a developer tooltip (invisible on touch). Reported to manager. Two Find contacts buttons render (step card + People card), both disabled.
+- **Approve → Gmail draft is enabled** while the step bar says ① Find contacts and there are no people; with no people it falls to `_approve_single` (legacy path, `web/outreach.py:108-109`). Not clicked (would touch real Gmail). P2: disable Approve until ① is done, or say who it will draft to.
+- Header: status pill "drafted" and source "linkedin" raw lowercase. P3.
+- JD renders **raw Markdown** ("**Powering the agentic revolution in travel.**"). P2.
+- People card shows a raw quota line: "This month: Your Tavily 32/950 · All 32/950 · Apify $0.24/$4.50 · All $0.24/$4.50 · Hunter 4/45 · All 4/45 · SMTP today 0/60 · All 0/60" — vendor names, $ and SMTP in the user's face. P2 (move to Admin/Settings; show "Contact searches left this month: N").
+- More menu: Mark sent, Applied via portal, Skip, Snooze 3d, Regenerate all, Undo last change, Not interested — "Mark sent" offered before Approve; destructive "Not interested" not separated. Term "Applied via portal" (owner) vs "Mark applied" (roommate). P3.
+- Drafts: "113/150 words", Save, explanation of greeting/signature, "AI prepared this… nothing is sent until you press Send." Good trust copy.
+- Phone (501 px): tabs People/Draft/Job switch client-side, default People for drafted (spec OK). Small targets: back link "← Jobs" 22 px tall, "Search LinkedIn ↗" 20 px. No h-scroll.
