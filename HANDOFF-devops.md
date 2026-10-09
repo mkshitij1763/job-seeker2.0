@@ -32,10 +32,12 @@
 | `2f473a9` | `manager` merged `build/devops` into `multi-user` (550 pytest); `build/devops2` starts here |
 | `010f6a9` | extras T9, `/healthz` (GET/HEAD, read-only) |
 | `89cbaa9` | extras T13, public landing + invite-only page |
-| (this commit) | pipeline T7, `fetch_shared` |
+| `8fc47f6` | pipeline T7, `fetch_shared` |
+| `5c67a71` | fast-forward of `build/devops2` to `multi-user` (plan 3 T1–T3: v2, AppConfig, load_user_context, effective_prefs) |
+| (this commit) | extras T7, migration v3 |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT:** devops2 batch done (extras T9, T13, pipeline T7). **Stand by** until `manager` merges `build/devops2` into `multi-user` after plan 3 lands. Then the WAIT list: extras T7, T8, T10, T11 (incl. sw.js), T12, T14; pipeline T3, T4, T5, T8–T16; hosting T5 (manual, with the user). The executing-plans final whole-branch review is still owed at the end.
+- **NEXT (approved by `manager`, in order):** pipeline T3 (AppConfig additions) → pipeline T4 (migration v4) → pipeline T5 (locks) → extras T8 (nightly_backup; no facts.json, facts live in the DB since `08ec981`) → extras T10 (notify) → pipeline T9 → T10 → T11 → T15. Defer extras T11 until plan 3 T4 (`require_onboarded`) lands. Still waiting on plan 3: extras T12, T14; pipeline T8, T12–T14, T16; hosting T5 (manual). Stay out of files plan 3 T4–T9 edit (web/app.py, web/deps.py, cli.py, pipeline/evaluate.py, pipeline/refilter.py, db/account.py, base.html, onboarding/settings modules) or keep edits tiny and report them. The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
@@ -62,6 +64,7 @@
 - Extras T4: the brief's Interfaces block says `archive.MEMBERS_ALLOWED`; the test and code use `member_allowed(name)`, which is what was built. `db.backup.snapshot(db_path, out) -> Path` added and `backup()` now calls it; take plan 2's version at merge.
 - Extras T9: `test_schema_mismatch_is_503` builds the client BEFORE setting `user_version = 0`, because plan 2's `create_app` refuses an out-of-date DB at startup; the test now models the schema changing under a running app.
 - Extras T13: `landing.html` extends `bare.html` (plan allows it), not `base.html`, so `base.html` is untouched for plan 3; `bare.html` gains one empty `{% block head %}`. The page wrapper is `<div class="landing">`, because `bare.html` already provides `<main>`. CSS uses ui.css's real tokens (`--line-strong`, px spacing): `--space-*`/`--border-strong` don't exist. The test_auth invite line uses the fallback ("Ask the person who shared this link"), because its fixture owner has no name. `test_web_guards` root assertion changed from 303→/login to 200 landing (plan 2's interim behaviour, replaced by this task). Google "G" path data is the standard 18px mark; verify against developers.google.com/identity/branding-guidelines before launch.
+- Extras T7: the v3 function is `migrate_v3` (matching `migrate_v1`/`migrate_v2`), not the plan's `_v3_extras`. `test_endpoint_unique_and_user_required` drops its `INSERT INTO users (id=1…)`, because a fresh DB already seeds the placeholder owner as user 1.
 - **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops` (that branch only, never force).
 
 ## 4. Gotchas

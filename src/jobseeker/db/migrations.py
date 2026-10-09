@@ -283,3 +283,29 @@ def migrate_v2(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
 
 
 MIGRATIONS.append(Migration(2, "preferences, facts and resume", migrate_v2))
+
+
+def migrate_v3(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
+    """Push subscriptions, the per-user daily alert marker and the backup log (extras)."""
+    conn.execute("""CREATE TABLE push_subscriptions (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        last_success_at TEXT,
+        failures INTEGER NOT NULL DEFAULT 0)""")
+    conn.execute("CREATE INDEX idx_push_subscriptions_user ON push_subscriptions (user_id)")
+    conn.execute("ALTER TABLE users ADD COLUMN notified_on TEXT")
+    conn.execute("""CREATE TABLE backups (
+        day TEXT PRIMARY KEY,
+        local_path TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        uploaded_at TEXT,
+        upload_error TEXT,
+        created_at TEXT NOT NULL)""")
+
+
+MIGRATIONS.append(Migration(3, "extras", migrate_v3))
