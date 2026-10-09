@@ -10,6 +10,7 @@ from jobseeker.db.applications import ensure_application, get_status, transition
 from jobseeker.db.jobs import job_from_row, jobs_needing_score, save_score
 from jobseeker.db.usage import Budget, Limit
 from jobseeker.llm import LLMError, LLMQuotaExceeded, LLMUnavailable
+from jobseeker.pipeline.eligible import share_divisor
 from jobseeker.scoring.scorer import score_job
 
 
@@ -43,7 +44,7 @@ class Scorer:
 
 def _prepare(conn, scorers: list[Scorer], cfg, now: datetime) -> None:
     b = cfg.budgets
-    share = b.global_scores_per_day // max(1, len(scorers))
+    share = b.global_scores_per_day // share_divisor(conn, "score", len(scorers))
     for s in scorers:
         s.budget = Budget(conn, s.user_id, {"score": Limit("day", b.global_scores_per_day, share)}, app_now(now))
         left = max(0, share - int(s.budget.used("score")))

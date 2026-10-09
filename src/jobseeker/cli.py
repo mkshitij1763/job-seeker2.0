@@ -99,7 +99,7 @@ def rescore(user: str = typer.Option(..., "--user", help="The user's email.")) -
 def _manual(email: str, fetch: bool, force: bool) -> None:
     from jobseeker.clock import app_now
     from jobseeker.db.locks import acquire, held_since, holder_id, release
-    from jobseeker.pipeline.tick import active_users
+    from jobseeker.pipeline.eligible import active_users
 
     settings, now = Settings(), datetime.now(UTC)
     conn = connect(settings.db_path)

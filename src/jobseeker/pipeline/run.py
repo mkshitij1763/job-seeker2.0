@@ -10,7 +10,8 @@ from jobseeker.db.runs import finish_run, start_run
 from jobseeker.llm import FallbackLLM
 from jobseeker.pipeline.describe import describe_shared
 from jobseeker.pipeline.discovery import GENERIC_WORDS
-from jobseeker.pipeline.draft import Drafter, draft_round_robin, drafts_enabled
+from jobseeker.pipeline.draft import Drafter, draft_round_robin
+from jobseeker.pipeline.eligible import drafts_enabled
 from jobseeker.pipeline.evaluate import evaluate
 from jobseeker.pipeline.fetch import FetchStats, fetch_shared
 from jobseeker.pipeline.normalize import normalize_title

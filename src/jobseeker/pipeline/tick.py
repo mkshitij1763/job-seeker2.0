@@ -13,14 +13,9 @@ from jobseeker.db.applications import wake_snoozed
 from jobseeker.db.core import iso
 from jobseeker.db.locks import acquire, release
 from jobseeker.db.users import user_by_id
+from jobseeker.pipeline.eligible import active_users
 
 log = logging.getLogger(__name__)
-
-
-def active_users(conn) -> list:
-    rows = conn.execute("""SELECT u.id FROM users u JOIN user_prefs p ON p.user_id = u.id
-                           WHERE p.onboarded_at IS NOT NULL AND u.disabled_at IS NULL ORDER BY u.id""").fetchall()
-    return [user_by_id(conn, r["id"]) for r in rows]
 
 
 def scheduled_due(conn, cfg, now: datetime) -> bool:

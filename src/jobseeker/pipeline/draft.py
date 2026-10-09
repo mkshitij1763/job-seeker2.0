@@ -11,11 +11,7 @@ from jobseeker.db.jobs import get_job, job_from_row
 from jobseeker.db.usage import Budget, Limit
 from jobseeker.llm import LLMError, LLMQuotaExceeded, LLMUnavailable
 from jobseeker.outreach.drafter import draft_outreach
-
-
-def drafts_enabled(user) -> bool:
-    """Until sub-project 5 adds users.outreach_enabled, only the owner (admin) gets AI drafts."""
-    return bool(user.is_admin)
+from jobseeker.pipeline.eligible import share_divisor
 
 
 def draft_application(conn, app_id: int, llm, facts, prefs, now: datetime | None = None) -> None:
@@ -57,7 +53,7 @@ class Drafter:
 def draft_round_robin(conn, drafters: list[Drafter], llm, cfg, now: datetime,
                       heartbeat: Callable[[], None] = lambda: None) -> str | None:
     b = cfg.budgets
-    share = b.global_drafts_per_day // max(1, len(drafters))
+    share = b.global_drafts_per_day // share_divisor(conn, "draft", len(drafters))
     for d in drafters:
         d.budget = Budget(conn, d.user_id, {"draft": Limit("day", b.global_drafts_per_day, share)}, app_now(now))
         d.room = min(b.draft_per_run, max(0, share - int(d.budget.used("draft"))))
