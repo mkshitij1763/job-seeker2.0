@@ -162,3 +162,9 @@ def test_logout_all_with_an_old_session_does_not_reissue_the_cookie(web, setting
 def test_startup_refuses_short_secret_key(settings):
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         create_app(settings.model_copy(update={"secret_key": "short"}))
+
+
+def test_startup_refuses_missing_or_bad_token_key(settings):
+    for bad in ("", "short"):
+        with pytest.raises(RuntimeError, match="TOKEN_KEY"):
+            create_app(settings.model_copy(update={"token_key": bad}))

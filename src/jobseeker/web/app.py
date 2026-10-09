@@ -60,6 +60,11 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
         raise RuntimeError("Set " + ", ".join(n.upper() for n in missing) + " in .env before starting the web app")
     if len(settings.secret_key) < 32:
         raise RuntimeError("SECRET_KEY must be at least 32 characters (run `jobseeker gen-key`)")
+    from jobseeker.crypto import TokenKeyError, load_token_key
+    try:
+        token_key = load_token_key(settings.token_key)
+    except TokenKeyError as e:
+        raise RuntimeError(str(e)) from e
     if not settings.app_config_path.exists():
         raise RuntimeError("Run `jobseeker migrate` (with the owner's files in $JOBSEEKER_HOME/profile/), "
                            "or copy config/app.example.yaml to config/app.yaml")
@@ -73,6 +78,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     templates.env.globals["asset"] = asset
     templates.env.globals.update(tier=tier, TIER_LABELS=TIER_LABELS, STEPS=STEPS)
     app.state.settings = settings
+    app.state.token_key = token_key
     app.state.app_config = load_app_config(settings.app_config_path)  # server-wide; a change needs a restart
     app.state.rubric = load_rubric(app.state.app_config.rubric_path)
     app.state.templates = templates

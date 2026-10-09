@@ -39,9 +39,15 @@
   | P3-T8 export and delete account | `770f00f` |
   | P3-T9 safety test, acceptance, Advanced matching, handoff | `558b0fd` |
 
-- **Tests at the review-fix commit:** 709 pytest, 19 node, after the build/devops2 merge `765f56c` (704). `git status` is clean.
+- **Plan 5** `docs/superpowers/plans/2026-10-08-mu-outreach.md` (spec `docs/superpowers/specs/2026-10-08-mu-outreach-design.md`), base `ee7bed9`:
+
+  | Task | Commit |
+  |---|---|
+  | P5-T1 token sealing under TOKEN_KEY | `this commit` |
+
+- **Tests at `P5-T1`:** 719 pytest, 19 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** build the outreach plan `docs/superpowers/plans/2026-10-08-mu-outreach.md` (approved by `manager`). Do **P5-T1 (crypto) and P5-T2 (migration v5) only**, then hold T3+ until `manager` confirms devops-lead2 is done with settings/admin/account.py (extras T12/T14, pipeline T14/T16). Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
+- **NEXT:** plan 5 **Task 2** (migration v5, `User.outreach_enabled`). Then HOLD: T3+ wait until `manager` confirms devops-lead2 is done with settings/admin/account.py. Ledger `.superpowers/sdd/2026-10-08-mu-outreach/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force). A task's own row says "this commit"; the next task commit fills in its hash.
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -90,6 +96,7 @@
     - #4: an unmatched query that isn't already a title word aborts v2's golden check (latent; the live owner passes).
     - #7: Caddy's 6 MB cap gives a bare 413 above 6 MB.
     - #8: deleting an account frees that day's global facts headroom.
+- P5-T1: no deviations. `TOKEN_KEY` is required at web startup; `scripts/server/env.example` and `ready.sh` already list it. Tests get it through `AUTH_TEST`.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

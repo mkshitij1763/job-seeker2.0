@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     base_url: str = ""
     secret_key: str = ""
+    token_key: str = ""  # base64 of 32 bytes: seals Gmail tokens (separate from BACKUP_KEY)
     cookie_secure: bool = True
     gemini_api_key: str = ""
     cloudflare_api_token: str = ""

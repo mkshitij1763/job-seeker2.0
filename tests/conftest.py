@@ -1,3 +1,4 @@
+import base64
 import shutil
 from pathlib import Path
 
@@ -23,7 +24,8 @@ def home(tmp_path: Path) -> Path:
 
 
 AUTH_TEST = dict(google_client_id="cid.apps.googleusercontent.com", google_client_secret="secret",
-                 base_url="https://testserver", secret_key="k" * 32, owner_email="owner@example.com")
+                 base_url="https://testserver", secret_key="k" * 32, owner_email="owner@example.com",
+                 token_key=base64.b64encode(b"t" * 32).decode())
 
 
 @pytest.fixture(scope="session")
