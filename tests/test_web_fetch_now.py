@@ -56,3 +56,61 @@ def test_pages_load_the_fetch_now_slot(client_as):
     c = client_as(1)
     for page in ("/today", "/settings"):
         assert 'hx-get="/fetch-now/status"' in c.get(page).text, page
+
+
+def _users(conn, ids):
+    for u in ids:
+        conn.execute("INSERT OR IGNORE INTO users (id, email, created_at) VALUES (?, ?, 't')", (u, f"u{u}@x"))
+    conn.commit()
+
+
+def test_queued_requests_count_toward_the_daily_cap(settings):
+    from jobseeker.web.fetch_now import queue_if_allowed
+    conn = connect(settings.db_path)
+    _users(conn, (2, 3, 4))
+    for i in range(5):  # 5 of 6 used today
+        start_run(conn, NOW - timedelta(minutes=i), None, kind="fetch", trigger="fetch_now")
+    states = [queue_if_allowed(conn, u, NOW, CFG)["state"] for u in (1, 2, 3, 4)]
+    assert states == ["ready", "used_up", "used_up", "used_up"]
+    assert conn.execute("SELECT COUNT(*) FROM run_requests").fetchone()[0] == 1
+
+
+def test_concurrent_double_post_queues_one_row(settings, monkeypatch):
+    import threading
+
+    from jobseeker.db import run_requests
+    from jobseeker.web.fetch_now import queue_if_allowed
+    real, gate = run_requests.pending, threading.Barrier(2, timeout=5)
+
+    def slow_pending(conn, user_id):  # both requests read "nothing pending" before either inserts, if unguarded
+        row = real(conn, user_id)
+        try:
+            gate.wait(timeout=0.5)
+        except threading.BrokenBarrierError:
+            pass
+        return row
+
+    monkeypatch.setattr(run_requests, "pending", slow_pending)
+    results = []
+
+    def post():
+        c = connect(settings.db_path)
+        results.append(queue_if_allowed(c, 1, NOW, CFG)["state"])
+        c.close()
+
+    threads = [threading.Thread(target=post) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join(10) for t in threads]
+    assert sorted(results) == ["queued", "ready"]
+    assert connect(settings.db_path).execute("SELECT COUNT(*) FROM run_requests").fetchone()[0] == 1
+
+
+def test_one_pending_request_per_user_in_the_schema(settings):
+    import sqlite3
+
+    import pytest
+    conn = connect(settings.db_path)
+    conn.execute("INSERT INTO run_requests (user_id, requested_at, status) VALUES (1, 't', 'queued')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO run_requests (user_id, requested_at, status) VALUES (1, 't', 'running')")
+    conn.execute("INSERT INTO run_requests (user_id, requested_at, status) VALUES (1, 't', 'done')")  # history is fine

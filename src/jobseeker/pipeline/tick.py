@@ -58,6 +58,9 @@ def tick(conn, *, settings, cfg, now: datetime, run, backup=nightly_backup, ping
             return "scheduled"
         req = run_requests.next_queued(conn)
         if req:
+            if run_requests.fetch_now_count_today(conn, now, include_queued=False) >= cfg.fetch_now.max_per_day:
+                run_requests.mark(conn, req["id"], "failed", now)  # queued past the cap: never run it
+                return "fetch_now_refused"
             run_requests.mark(conn, req["id"], "running", now)
             user = user_by_id(conn, req["user_id"])
             report = run("fetch_now", [user], cfg.search.max_searches_fetch_now)

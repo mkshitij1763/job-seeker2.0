@@ -105,3 +105,16 @@ def test_stuck_running_request_is_failed_after_takeover(tmp_path):
     mark(conn, queue(conn, 1, t), "running", t)
     _tick(conn, t + timedelta(minutes=20))
     assert conn.execute("SELECT status FROM run_requests").fetchone()[0] == "failed"
+
+
+def test_queued_request_over_the_daily_cap_is_refused_not_run(tmp_path):
+    conn = _db(tmp_path)
+    now = datetime(2026, 10, 11, 4, 0, tzinfo=UTC)
+    for i in range(CFG.fetch_now.max_per_day):
+        start_run(conn, now - timedelta(minutes=i + 1), None, kind="fetch", trigger="fetch_now")
+    conn.execute("INSERT INTO run_requests (user_id, requested_at, status) VALUES (1, ?, 'queued')", (now.isoformat(),))
+    conn.commit()
+    runs = []
+    assert _tick(conn, now, runs=runs) == "fetch_now_refused"
+    assert runs == []
+    assert conn.execute("SELECT status FROM run_requests").fetchone()[0] == "failed"
