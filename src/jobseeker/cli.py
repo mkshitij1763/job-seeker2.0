@@ -38,7 +38,7 @@ def _ctx(email: str | None = None):
 def init() -> None:
     """Create the folders and the database."""
     settings = Settings()
-    for d in (settings.data_dir, settings.logs_dir, settings.secrets_dir):
+    for d in (settings.data_dir, settings.logs_dir):
         d.mkdir(parents=True, exist_ok=True)
     connect(settings.db_path).close()
     typer.echo(f"Ready in {settings.jobseeker_home}. Run `jobseeker migrate` to import profile/ and write config/app.yaml.")
@@ -219,16 +219,6 @@ def serve(port: int = 8000,
 
     extra = {"proxy_headers": True, "forwarded_allow_ips": "127.0.0.1"} if proxy_headers else {}
     uvicorn.run(create_app(Settings()), host="127.0.0.1", port=port, **extra)
-
-
-@app.command("auth-gmail")
-def auth_gmail() -> None:
-    """One-time Google sign-in (draft-only permission)."""
-    from jobseeker.gmail.client import authorize
-
-    settings = Settings()
-    authorize(settings.secrets_dir / "credentials.json", settings.secrets_dir / "token.json")
-    typer.echo("Gmail connected (drafts only).")
 
 
 @app.command("gen-key")

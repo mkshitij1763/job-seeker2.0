@@ -17,13 +17,13 @@ router = APIRouter()
 SESSION_MAX_AGE = 30 * 24 * 3600
 
 
-def exchange_code(settings, code: str, verifier: str) -> str:
+def exchange_code(settings, code: str, verifier: str, redirect_path: str = "/auth/callback") -> dict:
     r = httpx.post(TOKEN_URL, timeout=10, data={
         "code": code, "client_id": settings.google_client_id, "client_secret": settings.google_client_secret,
-        "redirect_uri": f"{settings.base_url}/auth/callback", "grant_type": "authorization_code",
+        "redirect_uri": f"{settings.base_url}{redirect_path}", "grant_type": "authorization_code",
         "code_verifier": verifier})
     r.raise_for_status()
-    return r.json()["id_token"]
+    return r.json()
 
 
 def verify_id_token(token: str, client_id: str) -> dict:
@@ -76,7 +76,7 @@ def _callback(request: Request, code: str, state: str, error: str, conn):
     if not state or not secrets.compare_digest(state, data.get("state", "")):
         return _page(request, 400, "Sign-in expired, try again.")
     try:
-        token = exchange_code(s, code, data["verifier"])
+        token = exchange_code(s, code, data["verifier"])["id_token"]
     except (httpx.HTTPError, KeyError, ValueError):
         return _page(request, 502, "Couldn't reach Google, try again.")
     try:

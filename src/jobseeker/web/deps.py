@@ -38,6 +38,8 @@ def render(request: Request, conn, name: str, **ctx):
     ctx["nav"] = nav_counts(conn, user.id)
     ctx["user"] = user
     ctx["can_outreach"] = user.outreach_enabled
+    if user.outreach_enabled and request.query_params.get("reconnect") == "1":
+        ctx["reconnect_url"] = f"/gmail/connect?next={request.url.path}"
     return request.app.state.templates.TemplateResponse(request, name, ctx)
 
 

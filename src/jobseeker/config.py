@@ -69,10 +69,6 @@ class Settings(BaseSettings):
     def app_config_path(self) -> Path:
         return self.jobseeker_home / "config" / "app.yaml"
 
-    @property
-    def secrets_dir(self) -> Path:
-        return self.jobseeker_home / "secrets"
-
 
 class Thresholds(BaseModel):
     apply: int = 70

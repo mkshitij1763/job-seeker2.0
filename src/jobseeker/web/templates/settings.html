@@ -58,6 +58,22 @@
 <section class="card block" id="account">
   <h2 class="section-title">Account</h2>
   {% include "_fetch_now_slot.html" %}
+  {% if can_outreach %}
+  <div class="field" id="gmail">
+    <h3 class="label">Gmail</h3>
+    {% if gmail and gmail.status == "expired" %}
+    <p class="warnc">Gmail needs reconnecting. Drafts went to {{ gmail.account_email }}.</p>
+    <p><a class="btn btn-primary" href="/gmail/connect?next=/settings" hx-boost="false">Reconnect Gmail</a></p>
+    {% elif gmail %}
+    <p>Drafts go to {{ gmail.account_email }} · connected {% set a = gmail.connected_at|age %}{{ a if a == 'today' else a ~ ' ago' }}
+      · <a href="/gmail/connect?next=/settings" hx-boost="false">Reconnect</a></p>
+    {% else %}
+    <p class="muted">Not connected. Approving a draft puts it in your Gmail drafts; nothing is sent for you.</p>
+    <p class="muted">Google will warn that this app isn't verified. It's {{ owner_first }}'s personal app: tap Advanced → Continue.</p>
+    <p><a class="btn btn-primary" href="/gmail/connect?next=/settings" hx-boost="false">Connect Gmail</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
   <p><a class="btn" href="/settings/export" hx-boost="false">Download my data</a></p>
   <form method="post" action="/logout"><button class="btn">Sign out</button></form>
   <form method="post" action="/logout/all"><button class="btn-ghost">Sign out everywhere</button></form>

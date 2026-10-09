@@ -17,12 +17,15 @@ from jobseeker.web.deps import current_facts, current_prefs, current_user, get_c
 router = APIRouter(prefix="/applications")
 
 
-def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err: str | None = None):
+def _back(app_id: int, next_: str | None = None, *, msg: str | None = None, err: str | None = None,
+          reconnect: bool = False):
     local = oauth.local_path(next_) is not None
     target = next_ if local else f"/applications/{app_id}"
     if msg or err:
         sep = "&" if "?" in target else "?"
         target += f"{sep}{'msg' if msg else 'err'}={quote(msg or err)}"
+    if reconnect:  # the flash offers Reconnect Gmail, which comes back to this page
+        target += f"{'&' if '?' in target else '?'}reconnect=1"
     return RedirectResponse(target, status_code=303)
 
 

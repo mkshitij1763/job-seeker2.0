@@ -10,7 +10,8 @@ from fastapi.responses import RedirectResponse, Response
 from jobseeker.config import effective_prefs
 from jobseeker.db.account import delete_account, export_zip
 from jobseeker.db.profile import facts_row, get_user_prefs, load_user_context, save_user_prefs
-from jobseeker.db.users import LastAdmin
+from jobseeker.db.gmail_tokens import token_info
+from jobseeker.db.users import LastAdmin, owner_first_name
 from jobseeker.pipeline.evaluate import reevaluate
 from jobseeker.profile.resume import ResumeRejected
 from jobseeker.web.deps import current_user, get_conn, render
@@ -32,6 +33,8 @@ def _page(request, conn, user, status: int = 200, **ctx):
     ctx.setdefault("up", get_user_prefs(conn, user.id))
     ctx.setdefault("errors", {})
     ctx.setdefault("vapid_public_key", request.app.state.settings.vapid_public_key)
+    ctx.setdefault("gmail", token_info(conn, user.id))
+    ctx.setdefault("owner_first", owner_first_name(conn))
     response = render(request, conn, "settings.html", cfg=request.app.state.app_config,
                       facts_info=facts_row(conn, user.id), **status_context(conn, user.id, "/settings"), **ctx)
     response.status_code = status

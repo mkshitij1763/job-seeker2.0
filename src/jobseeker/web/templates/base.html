@@ -51,7 +51,7 @@
     <header class="topbar"><a class="brand" href="/today"><span class="brand-mark">J</span>Job Seeker</a>{{ run_notes_box() }}</header>
     <main class="main">
       {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
-      {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+      {% if err %}<div class="flash err">{{ err }}{% if reconnect_url %} <a class="btn btn-primary" href="{{ reconnect_url }}" hx-boost="false">Reconnect Gmail</a>{% endif %}</div>{% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>

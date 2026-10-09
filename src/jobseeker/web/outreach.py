@@ -10,6 +10,7 @@ from jobseeker.db.applications import (
     BlockedContact, get_status, record_followup, save_contact, save_draft, set_gmail_draft_id, transition,
 )
 from jobseeker.db.usage import Budget, outreach_limits
+from jobseeker.db.gmail_tokens import mark_expired
 from jobseeker.gmail.client import GmailUnavailable, create_draft
 from jobseeker.gmail.mime import build_raw_message
 from jobseeker.llm import LLMError
@@ -23,6 +24,15 @@ from jobseeker.web.deps import current_facts, current_prefs, current_user, get_c
 router = APIRouter(prefix="/applications")
 KINDS = {"email", "li_note", "li_dm"}
 REGENERATABLE = {"new", "shortlisted", "drafted", "approved"}
+
+
+def gmail_failed(conn, user_id: int, app_id: int, e: GmailUnavailable, parts: list[str] | None = None):
+    """Drafts already made stay named; an expired grant is marked and the flash offers Reconnect Gmail."""
+    parts = list(parts or [])
+    if e.reconnect:
+        mark_expired(conn, user_id)
+        return _back(app_id, err="; ".join(parts + ["Gmail needs reconnecting"]), reconnect=True)
+    return _back(app_id, err="; ".join(parts + [f"Gmail draft not created: {e}"]))
 
 
 @router.post("/{app_id}/contact")
@@ -116,7 +126,7 @@ def _approve(state, conn, prefs, user_id: int, app_id: int, form):
     created, failure, first_draft_id = [], None, None
     for p in targets:
         try:
-            draft_id = create_draft(state.gmail_factory(), _raw_for(state, prefs, user_id, p["email"], p["name"], email))
+            draft_id = create_draft(state.gmail_factory(conn, user_id), _raw_for(state, prefs, user_id, p["email"], p["name"], email))
         except GmailUnavailable as e:
             failure = e
             break
@@ -133,7 +143,7 @@ def _approve(state, conn, prefs, user_id: int, app_id: int, form):
     if skipped:
         parts.append(f"skipped {', '.join(skipped)} (no usable email)")
     if failure:
-        return _back(app_id, err="; ".join(parts + [f"Gmail draft not created: {failure}"]))
+        return gmail_failed(conn, user_id, app_id, failure, parts)
     return _back(app_id, msg="; ".join(parts) + ". Review and press Send in Gmail")
 
 
@@ -155,9 +165,9 @@ def _approve_single(state, conn, prefs, user_id: int, app_id: int, d: dict, emai
     if contact["email_status"] != "verified" and not confirm_unverified:
         return _back(app_id, err="Email is unverified. Tick the confirmation box to draft anyway")
     try:
-        draft_id = create_draft(state.gmail_factory(), _raw_for(state, prefs, user_id, contact["email"], contact["name"], email))
+        draft_id = create_draft(state.gmail_factory(conn, user_id), _raw_for(state, prefs, user_id, contact["email"], contact["name"], email))
     except GmailUnavailable as e:
-        return _back(app_id, err=f"Gmail draft not created: {e}")
+        return gmail_failed(conn, user_id, app_id, e)
     previous = email["gmail_draft_id"]
     set_gmail_draft_id(conn, app_id, draft_id)
     transition(conn, app_id, "approved", {"gmail_draft_id": draft_id})

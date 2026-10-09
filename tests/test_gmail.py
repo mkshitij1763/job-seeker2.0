@@ -24,9 +24,11 @@ def test_build_raw_message_with_attachment(tmp_path):
     assert any(p.get_content_type() == "text/plain" and "Body text" in p.get_payload(decode=True).decode() for p in parts)
 
 
-def test_load_service_without_token(tmp_path):
-    with pytest.raises(GmailUnavailable):
-        load_service(tmp_path / "token.json")
+def test_load_service_without_token_needs_connecting(settings):
+    from jobseeker.db.core import connect
+    with pytest.raises(GmailUnavailable) as e:
+        load_service(connect(settings.db_path), 1, b"k" * 32)
+    assert e.value.reconnect
 
 
 def test_create_draft_returns_id():
@@ -42,11 +44,30 @@ def test_create_draft_returns_id():
     assert calls["body"] == {"message": {"raw": "cmF3"}}
 
 
-def test_load_service_with_corrupt_token(tmp_path):
-    token = tmp_path / "token.json"
-    token.write_text("{not json", encoding="utf-8")
-    with pytest.raises(GmailUnavailable):
-        load_service(token)
+def test_load_service_with_undecryptable_token_needs_reconnecting(settings):
+    from jobseeker.db.core import connect
+    conn = connect(settings.db_path)
+    conn.execute("INSERT INTO gmail_tokens (user_id, account_email, token_enc, connected_at) VALUES (1, 'o', ?, 't')",
+                 (b"garbage" * 8,))
+    with pytest.raises(GmailUnavailable) as e:
+        load_service(conn, 1, b"k" * 32)
+    assert e.value.reconnect
+
+
+def test_create_draft_401_needs_reconnecting():
+    from googleapiclient.errors import HttpError
+
+    def denied():
+        raise HttpError(SimpleNamespace(status=401, reason="Unauthorized"), b"{}")
+
+    class Drafts:
+        def create(self, userId, body):
+            return SimpleNamespace(execute=denied)
+
+    service = SimpleNamespace(users=lambda: SimpleNamespace(drafts=lambda: Drafts()))
+    with pytest.raises(GmailUnavailable) as e:
+        create_draft(service, "cmF3")
+    assert e.value.reconnect
 
 
 @pytest.mark.parametrize("error", [OSError("network down"), "transport"])

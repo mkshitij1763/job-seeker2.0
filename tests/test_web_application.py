@@ -43,7 +43,7 @@ def ctx(settings, seeded, facts):
     llm = FakeLLM(handler=lambda schema, prompt: DraftBundle(
         contact_role="Founder", contact_reason="r", email_subject="New subject",
         email_body="Fresh body citing 67%.", li_note="n", li_dm="d"))
-    client = signed_in_client(settings, llm_factory=lambda: llm, gmail_factory=lambda: gmail,
+    client = signed_in_client(settings, llm_factory=lambda: llm, gmail_factory=lambda conn, uid: gmail,
                         follow_redirects=False)
     return client, settings, seeded, gmail
 
@@ -89,7 +89,7 @@ def test_approve_unverified_needs_confirmation_then_creates_draft(ctx):
 def test_approve_gmail_unavailable_keeps_state(settings, seeded, facts):
     owner_resume(settings).write_bytes(b"%PDF fake")
     a = seeded[0]
-    client = signed_in_client(settings, gmail_factory=lambda: FakeGmail(fail=True), follow_redirects=False)
+    client = signed_in_client(settings, gmail_factory=lambda conn, uid: FakeGmail(fail=True), follow_redirects=False)
     client.post(f"/applications/{a}/contact", data={"name": "A", "role": "PM", "linkedin_url": "",
                                                     "email": "a@x.com", "email_status": "verified"})
     r = client.post(f"/applications/{a}/approve")

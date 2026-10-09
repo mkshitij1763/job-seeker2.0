@@ -124,7 +124,7 @@ def email_third(request: Request, app_id: int, user=Depends(current_user), prefs
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
-    from jobseeker.web.outreach import _raw_for
+    from jobseeker.web.outreach import _raw_for, gmail_failed
 
     if not third_due(conn, app_id, datetime.now(UTC)):
         return _back(app_id, err="Email #3 is offered 5 days after Mark sent with no reply")
@@ -133,11 +133,11 @@ def email_third(request: Request, app_id: int, user=Depends(current_user), prefs
         return _back(app_id, err="No usable email for #3")
     email = conn.execute("SELECT * FROM drafts WHERE application_id = ? AND kind = 'email'", (app_id,)).fetchone()
     try:
-        draft_id = create_draft(request.app.state.gmail_factory(),
+        draft_id = create_draft(request.app.state.gmail_factory(conn, user.id),
                                 _raw_for(request.app.state, prefs, user.id, third["email"], third["name"], dict(email),
                                          extra="I also reached out to your colleague earlier."))
     except GmailUnavailable as e:
-        return _back(app_id, err=f"Gmail draft not created: {e}")
+        return gmail_failed(conn, user.id, app_id, e)
     conn.execute("UPDATE application_contacts SET gmail_draft_id = ?, emailed_at = ? WHERE application_id = ? AND rank = 3",
                  (draft_id, utcnow(), app_id))
     conn.commit()
@@ -156,7 +156,7 @@ def follow_up(request: Request, app_id: int, user=Depends(current_user), prefs=D
     from jobseeker.db.applications import record_followup
     from jobseeker.db.core import utcnow
     from jobseeker.gmail.client import GmailUnavailable, create_draft
-    from jobseeker.web.outreach import _raw_for
+    from jobseeker.web.outreach import _raw_for, gmail_failed
 
     due = nudge_due(conn, app_id, datetime.now(UTC))
     if not due:
@@ -168,7 +168,7 @@ def follow_up(request: Request, app_id: int, user=Depends(current_user), prefs=D
     created, failure = [], None
     for p in due:
         try:
-            create_draft(request.app.state.gmail_factory(), _raw_for(request.app.state, prefs, user.id, p["email"], p["name"], note))
+            create_draft(request.app.state.gmail_factory(conn, user.id), _raw_for(request.app.state, prefs, user.id, p["email"], p["name"], note))
         except GmailUnavailable as e:
             failure = e
             break
@@ -180,5 +180,5 @@ def follow_up(request: Request, app_id: int, user=Depends(current_user), prefs=D
         record_followup(conn, app_id)
     parts = [f"Follow-up drafts created for {', '.join(created)}"] if created else []
     if failure:
-        return _back(app_id, err="; ".join(parts + [f"Gmail draft not created: {failure}"]))
+        return gmail_failed(conn, user.id, app_id, failure, parts)
     return _back(app_id, msg="; ".join(parts) + ". Review and press Send in Gmail")

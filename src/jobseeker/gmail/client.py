@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
+import json
+from datetime import UTC, datetime
 
 from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -13,36 +13,31 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.compose"]
 
 
 class GmailUnavailable(RuntimeError):
-    pass
+    def __init__(self, message: str, reconnect: bool = False):
+        super().__init__(message)
+        self.reconnect = reconnect  # True: the grant is gone or expired; the user taps Reconnect Gmail
 
 
-def authorize(credentials_path: Path, token_path: Path) -> None:
-    if not credentials_path.exists():
-        raise GmailUnavailable(f"Download an OAuth desktop client JSON to {credentials_path}")
-    flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
-    creds = flow.run_local_server(port=0)
-    token_path.parent.mkdir(parents=True, exist_ok=True)
-    token_path.write_text(creds.to_json(), encoding="utf-8")
+def load_service(conn, user_id: int, key: bytes):
+    """This user's Gmail, from their sealed token; a refreshed token is sealed and written back."""
+    from jobseeker.db.gmail_tokens import load_token, mark_expired, save_token, token_info
 
-
-def load_service(token_path: Path):
-    if not token_path.exists():
-        raise GmailUnavailable("Gmail is not connected. Run `jobseeker auth-gmail`.")
     try:
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-    except ValueError as e:  # includes a truncated or hand-edited token.json
-        raise GmailUnavailable(f"Gmail token is unreadable ({e}). Run `jobseeker auth-gmail`.") from e
+        info = json.loads(load_token(conn, key, user_id))  # raises GmailUnavailable(reconnect=True)
+        creds = Credentials.from_authorized_user_info(info, SCOPES)
+    except ValueError as e:
+        mark_expired(conn, user_id)
+        raise GmailUnavailable("Gmail needs reconnecting", reconnect=True) from e
     if not creds.valid:
-        if creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except RefreshError as e:
-                raise GmailUnavailable(f"Gmail sign-in expired ({e}). Run `jobseeker auth-gmail`.") from e
-            except TransportError as e:
-                raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Check the internet and try again.") from e
-            token_path.write_text(creds.to_json(), encoding="utf-8")
-        else:
-            raise GmailUnavailable("Gmail token is invalid. Run `jobseeker auth-gmail`.")
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            mark_expired(conn, user_id)
+            raise GmailUnavailable("Gmail needs reconnecting", reconnect=True) from e
+        except TransportError as e:
+            raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Check the internet and try again.") from e
+        save_token(conn, key, user_id, token_info(conn, user_id)["account_email"], creds.to_json(), datetime.now(UTC),
+                   refreshed=True)
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
@@ -51,7 +46,7 @@ def create_draft(service, raw: str) -> str:
         res = service.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
     except HttpError as e:
         if getattr(e, "status_code", None) in (401, 403) or (e.resp is not None and e.resp.status in (401, 403)):
-            raise GmailUnavailable(f"Gmail rejected the request ({e}). Run `jobseeker auth-gmail`.") from e
+            raise GmailUnavailable("Gmail needs reconnecting", reconnect=True) from e
         raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Try again in a minute.") from e
     except (TransportError, OSError) as e:
         raise GmailUnavailable(f"Couldn't reach Gmail ({e}). Check the internet and try again.") from e

@@ -54,7 +54,7 @@ def link_three(settings, a, statuses=("verified", "verified", "verified")):
 
 def client(settings, gmail):
     owner_resume(settings).write_bytes(b"%PDF fake")
-    return signed_in_client(settings, gmail_factory=lambda: gmail, follow_redirects=False)
+    return signed_in_client(settings, gmail_factory=lambda conn, uid: gmail, follow_redirects=False)
 
 
 def test_approve_drafts_top_two_with_own_greetings(settings, seeded):
@@ -183,7 +183,7 @@ def test_approve_does_gmail_work_off_the_event_loop(settings, seeded):
     link_three(settings, a)
     on_loop = []
 
-    def factory():
+    def factory(conn, uid):
         try:
             asyncio.get_running_loop()
             on_loop.append(True)

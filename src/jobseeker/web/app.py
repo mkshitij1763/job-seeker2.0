@@ -48,7 +48,7 @@ class _Static(StaticFiles):
 def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contacts_deps_factory=None) -> FastAPI:
     from jobseeker.gmail.client import load_service
     from jobseeker.llm import FallbackLLM, build_llm
-    from jobseeker.web import admin, application, auth, contacts, health, inbox, onboarding, outreach, pipeline
+    from jobseeker.web import admin, application, auth, contacts, health, gmail, inbox, onboarding, outreach, pipeline
     from jobseeker.web import settings as settings_routes
     from jobseeker.web import fetch_now
     from jobseeker.web import push as push_web
@@ -86,7 +86,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.state.templates = templates
     app.state.llm_factory = llm_factory or (
         lambda: FallbackLLM(build_llm(settings), app.state.app_config.models.fallbacks))
-    app.state.gmail_factory = gmail_factory or (lambda: load_service(settings.secrets_dir / "token.json"))
+    app.state.gmail_factory = gmail_factory or (lambda conn, uid: load_service(conn, uid, app.state.token_key))
     app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory,
                                                                               app.state.app_config))
     app.mount("/static", _Static(directory=HERE / "static"), name="static")
@@ -102,6 +102,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.include_router(application.router, dependencies=[Depends(require_onboarded), Depends(owned_app)])
     app.include_router(outreach.router, dependencies=gate)
     app.include_router(contacts.router, dependencies=gate)
+    app.include_router(gmail.router, dependencies=[Depends(require_outreach)])
     app.include_router(pipeline.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
     app.include_router(admin.router, dependencies=[Depends(require_onboarded)])
     app.include_router(settings_routes.router, dependencies=[Depends(current_user), Depends(require_onboarded)])
