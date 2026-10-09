@@ -52,7 +52,7 @@ The full runbook, with every **(verify)** step, is in `docs/superpowers/plans/20
    `JOBSEEKER_HOME` is set by the systemd units, not in `.env`.
 4. **First run.** The web service and timer stay off until `scripts/server/ready.sh` finds the `.env` values above plus `data/jobseeker.db` and `config/app.yaml`.
    - **Moving from the old single-user Mac app:** follow the data move in hosting spec §10 (copy the DB and `profile/` up, then `js migrate --dry-run`, `js migrate`, then `js refilter` and `js refilter --apply` once). The cutover checklist in `HANDOFF.md` §8 covers it end to end.
-   - **A fresh install:** `js init`, then `sudo -u jobseeker cp /srv/jobseeker/app/config/app.example.yaml /srv/jobseeker/config/app.yaml` (create `config/` first). `migrate` only writes `app.yaml` when it imports an old `profile/`. Then sign in as the owner and go through onboarding.
+   - **A fresh install:** `js init`, then `js migrate`. On a new database `migrate` changes no schema, but it writes `config/app.yaml` from `config/app.example.yaml` whenever that file is missing (it never overwrites one). Then sign in as the owner and go through onboarding.
    - Re-run `bootstrap.sh`; it enables `jobseeker-web` and `jobseeker-tick.timer`.
 5. **Invite people.** Open `/admin` → Invites, add their Google address, and send them the site link yourself (invites send no email). For outreach, first add their Gmail address as a test user in Google Cloud, then turn **Outreach on** for them in `/admin` → Users. They tap Settings → Connect Gmail once.
 
@@ -64,9 +64,9 @@ The full runbook, with every **(verify)** step, is in `docs/superpowers/plans/20
 
 ## Run it locally (development)
 1. `uv sync`
-2. Make a home outside the repo, e.g. `mkdir -p ~/js-home/config && cp config/app.example.yaml ~/js-home/config/app.yaml`.
+2. Pick a home for `data/` and `config/app.yaml`, e.g. `mkdir ~/js-home` (`config/app.yaml` is git-ignored if you use the repo itself).
 3. `cp .env.example .env` and fill it in. For local use: `JOBSEEKER_HOME=~/js-home` (use the full path), `BASE_URL=http://127.0.0.1:8000`, `COOKIE_SECURE=false`, a Web OAuth client with the redirect URIs `http://127.0.0.1:8000/auth/callback` and `/gmail/callback`, and keys from `uv run jobseeker gen-key`.
-4. `uv run jobseeker init`, then `uv run jobseeker serve`, then open http://127.0.0.1:8000 and sign in as `OWNER_EMAIL`.
+4. `uv run jobseeker init`, `uv run jobseeker migrate` (writes `config/app.yaml`), then `uv run jobseeker serve`, then open http://127.0.0.1:8000 and sign in as `OWNER_EMAIL`.
 5. `uv run jobseeker run` runs the pipeline once (add `--user <email>` for one person).
 
 Tests: `uv run pytest -p no:warnings` and `node --test tests/js/*.test.mjs`. They need no network and no `.env`.

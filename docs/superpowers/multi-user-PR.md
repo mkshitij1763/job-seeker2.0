@@ -53,7 +53,6 @@ Follow `HANDOFF.md` §8 "Cutover checklist" (hosting plan Task 5 + hosting spec 
 - Plan 3 review #7: Caddy's 6 MB request cap gives a bare 413 for a resume over 6 MB.
 - From `main`: with no `GROQ_API_KEY` at all, Find contacts and Regenerate return a 500.
 - A bounce-only contact edit by any outreach user marks the shared row bounced for everyone (an accepted trade-off of spec 5).
-- Found in the readiness pass: on a fresh install, `jobseeker init` says "Run `jobseeker migrate` to … write config/app.yaml", but `migrate` on a new DB says "Already at v5" and writes nothing. Copy `config/app.example.yaml` by hand (the README says so). A wording fix in `init`.
-- Found in the readiness pass: `config/app.yaml` isn't in `.gitignore`. On the server it lives outside the checkout (`/srv/jobseeker/config`), but a local run with `JOBSEEKER_HOME=.` would leave it untracked in the repo.
+- Fixed after the readiness pass: `jobseeker migrate` now writes `config/app.yaml` from `config/app.example.yaml` whenever it's missing (a fresh install), never overwriting one, and `init` says so; `config/app.yaml` is git-ignored.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -45,6 +45,14 @@ def _write_app_yaml(home: Path, prefs: Preferences | None) -> Path:
     return path
 
 
+def ensure_app_yaml(home: Path) -> bool:
+    """Write config/app.yaml from config/app.example.yaml when it's missing (a fresh install); True if written."""
+    if (home / "config" / "app.yaml").exists():
+        return False
+    _write_app_yaml(home, None)
+    return True
+
+
 def _user_prefs_from(prefs: Preferences, labels_by_query: dict[str, str]) -> UserPrefs:
     roles, unmatched = [], []
     for q in prefs.search.queries:
