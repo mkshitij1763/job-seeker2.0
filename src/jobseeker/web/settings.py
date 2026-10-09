@@ -18,7 +18,8 @@ from jobseeker.web.oauth import SESSION_COOKIE
 from jobseeker.web.onboarding import accept_upload, parse_step, save_facts_form, status_context
 
 router = APIRouter(prefix="/settings")
-FILTER_FIELDS = {"roles", "custom_role", "cities", "remote_india_ok", "drop_if_min_years_at_least", "title_deny"}
+FILTER_FIELDS = {"roles", "custom_role", "cities", "remote_india_ok", "drop_if_min_years_at_least", "title_deny",
+                 "title_allow_extra"}
 SECTIONS = {"roles", "where", "experience"}
 
 

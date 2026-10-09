@@ -53,7 +53,17 @@ def parse_step(step: str, form, cfg) -> tuple[dict, dict[str, str]]:
             errors["custom_role"] = f"Keep it under {ITEM_MAX} characters"
         if not roles and not custom:
             errors["roles"] = "Pick at least one role"
-        return {"roles": roles, "custom_role": custom}, errors
+        fields = {"roles": roles, "custom_role": custom}
+        if form.get("use_chips") == "1":  # Settings: drop custom matching, go back to the catalog's words
+            fields.update(title_allow_extra=[], target_roles_text=[])
+        elif "title_allow_extra_text" in form or "target_roles_text" in form:  # Settings' Advanced disclosure
+            allow = [x.strip() for x in (form.get("title_allow_extra_text") or "").split(",") if x.strip()]
+            prose = [x.strip() for x in (form.get("target_roles_text") or "").splitlines() if x.strip()]
+            for key, items in (("title_allow_extra", allow), ("target_roles_text", prose)):
+                if len(items) > TITLE_DENY_MAX or any(len(x) > ITEM_MAX for x in items):
+                    errors[key] = f"Up to {TITLE_DENY_MAX} items of {ITEM_MAX} characters"
+            fields.update(title_allow_extra=allow, target_roles_text=prose)
+        return fields, errors
     if step == "where":
         cities = _list(form, "cities")
         remote = form.get("remote_india_ok") == "on"
