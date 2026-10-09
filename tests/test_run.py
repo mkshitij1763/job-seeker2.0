@@ -6,7 +6,6 @@ from jobseeker.db.runs import last_run
 from jobseeker.llm import LLMError, LLMQuotaExceeded
 from jobseeker.models import RawJob
 from jobseeker.outreach.drafter import DraftBundle
-from jobseeker.pipeline.run import run_daily
 from jobseeker.scoring.scorer import LLMScore
 from tests.fakes import FakeLLM
 
@@ -42,14 +41,25 @@ def handler(schema, prompt):
     return SCORE if schema is LLMScore else DRAFT
 
 
-def _run(conn, sources, llm, prefs, rubric, facts):
-    return run_daily(conn, user_id=1, sources=sources, client=None, llm=llm, facts=facts, prefs=prefs, rubric=rubric, now=NOW)
+def _run(conn, sources, llm, prefs, rubric, facts, *, cfg=None, **kw):
+    from jobseeker.db.users import user_by_id
+    from jobseeker.pipeline.run import run_all
+    from tests.test_run_all import _cfg
+    return run_all(conn, users=[user_by_id(conn, 1)], trigger="cli", fetch=True, plan_cap=60, client=None, llm=llm,
+                   cfg=cfg or _cfg(prefs), rubric=rubric, now=NOW, describe=lambda s, i: "",
+                   sources_factory=lambda *a, **k: list(sources), context=lambda c, uid: (prefs, facts),
+                   notify=lambda *a: None, **kw)
+
+
+def _errors(report):
+    return report.fetch.errors + report.users[1].errors
 
 
 def test_full_run_scores_shortlists_and_drafts(prefs, rubric, facts):
     conn = connect(":memory:")
-    stats = _run(conn, [StaticSource("lever:cred", [raw()])], FakeLLM(handler=handler), prefs, rubric, facts)
-    assert (stats.fetched, stats.new, stats.scored, stats.shortlisted, stats.drafted) == (1, 1, 1, 1, 1)
+    r = _run(conn, [StaticSource("lever:cred", [raw()])], FakeLLM(handler=handler), prefs, rubric, facts)
+    u = r.users[1]
+    assert (r.fetch.fetched, r.fetch.new, u.scored, u.shortlisted, u.drafted) == (1, 1, 1, 1, 1)
     assert get_status(conn, 1) == "drafted"
     assert set(get_drafts(conn, 1)) == {"email", "li_note", "li_dm"}
     assert last_run(conn, 1)["finished_at"] is not None
@@ -59,39 +69,39 @@ def test_run_dedups_across_sources(prefs, rubric, facts):
     conn = connect(":memory:")
     dup = raw(source="greenhouse", source_job_id="gh-1", company="Cred", title="Sr. Product Analyst",
               location="Bangalore, Karnataka, IN", apply_url="https://linkedin.com/jobs/view/1")
-    stats = _run(conn, [StaticSource("lever:cred", [raw()]), StaticSource("greenhouse:cred", [dup])],
-                 FakeLLM(handler=handler), prefs, rubric, facts)
-    assert (stats.new, stats.duplicates, stats.scored) == (1, 1, 1)
+    r = _run(conn, [StaticSource("lever:cred", [raw()]), StaticSource("greenhouse:cred", [dup])],
+             FakeLLM(handler=handler), prefs, rubric, facts)
+    assert (r.fetch.new, r.fetch.duplicates, r.users[1].scored) == (1, 1, 1)
     assert conn.execute("SELECT COUNT(*) FROM applications").fetchone()[0] == 1
 
 
 def test_failing_source_and_llm_errors_do_not_abort(prefs, rubric, facts):
     conn = connect(":memory:")
     llm = FakeLLM(handler=lambda schema, prompt: LLMError("boom"))
-    stats = _run(conn, [StaticSource("greenhouse:x", error=RuntimeError("404")),
-                        StaticSource("lever:cred", [raw()])], llm, prefs, rubric, facts)
-    assert stats.new == 1 and stats.scored == 0
-    assert any("greenhouse:x" in e for e in stats.errors) and any("score job" in e for e in stats.errors)
+    r = _run(conn, [StaticSource("greenhouse:x", error=RuntimeError("404")),
+                    StaticSource("lever:cred", [raw()])], llm, prefs, rubric, facts)
+    assert r.fetch.new == 1 and r.users[1].scored == 0
+    assert any("greenhouse:x" in e for e in _errors(r)) and any("score job" in e for e in _errors(r))
     # next run retries scoring of the same job
-    stats2 = _run(conn, [], FakeLLM(handler=handler), prefs, rubric, facts)
-    assert stats2.scored == 1
+    r2 = _run(conn, [], FakeLLM(handler=handler), prefs, rubric, facts)
+    assert r2.users[1].scored == 1
 
 
 def test_filtered_jobs_are_not_scored(prefs, rubric, facts):
     conn = connect(":memory:")
-    stats = _run(conn, [StaticSource("lever:cred", [raw(title="Sales Manager")])], FakeLLM(handler=handler),
-                 prefs, rubric, facts)
-    assert (stats.filtered, stats.scored) == (1, 0)
+    r = _run(conn, [StaticSource("lever:cred", [raw(title="Sales Manager")])], FakeLLM(handler=handler),
+             prefs, rubric, facts)
+    assert (r.users[1].filtered, r.users[1].scored) == (1, 0)
 
 
 def test_quota_exhausted_stops_llm_work(prefs, rubric, facts):
     conn = connect(":memory:")
     llm = FakeLLM(handler=lambda schema, prompt: LLMQuotaExceeded("daily quota used up"))
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
-    stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
+    r = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
     chain = 1 + len(prefs.models.fallbacks[prefs.models.scoring])
-    assert len(llm.calls) == chain and stats.scored == 0 and stats.new == 3  # each model tried once, then stop
-    assert any("quota" in e for e in stats.errors)
+    assert len(llm.calls) == chain and r.users[1].scored == 0 and r.fetch.new == 3  # each model tried once, then stop
+    assert any("quota" in e for e in _errors(r))
 
 
 def test_scoring_continues_on_fallback_model_and_records_it(prefs, rubric, facts):
@@ -100,27 +110,28 @@ def test_scoring_continues_on_fallback_model_and_records_it(prefs, rubric, facts
                                                   if llm.calls[-1]["model"] == prefs.models.scoring
                                                   else handler(schema, prompt)))
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(2)]
-    stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
+    r = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
     fallback = prefs.models.fallbacks[prefs.models.scoring][0]
-    assert stats.scored == 2
+    assert r.users[1].scored == 2
     assert {r[0] for r in conn.execute("SELECT model FROM scores")} == {fallback}
 
 
 def test_budget_limits_scoring(prefs, rubric, facts):
     conn = connect(":memory:")
-    prefs.budgets.score_per_run = 2
+    from tests.test_run_all import _cfg
+    cfg = _cfg(prefs)
+    cfg.budgets.score_per_run = 2  # budgets live in AppConfig now
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(5)]
-    stats = _run(conn, [StaticSource("lever:cred", jobs)], FakeLLM(handler=handler), prefs, rubric, facts)
-    assert stats.scored == 2
+    r = _run(conn, [StaticSource("lever:cred", jobs)], FakeLLM(handler=handler), prefs, rubric, facts, cfg=cfg)
+    assert r.users[1].scored == 2
 
 
 def test_run_records_actual_finish_time(prefs, rubric, facts):
     from datetime import timedelta
 
     conn = connect(":memory:")
-    times = iter([NOW, NOW + timedelta(minutes=5)])
-    run_daily(conn, user_id=1, sources=[], client=None, llm=FakeLLM(handler=handler), facts=facts, prefs=prefs,
-              rubric=rubric, clock=lambda: next(times))
+    _run(conn, [], FakeLLM(handler=handler), prefs, rubric, facts,
+         clock=lambda: NOW + timedelta(minutes=5))  # run_all starts at `now` and reads the clock once, at the end
     run = last_run(conn, 1)
     assert run["started_at"] == "2026-10-07T02:00:00+00:00"
     assert run["finished_at"] == "2026-10-07T02:05:00+00:00"
@@ -132,6 +143,6 @@ def test_llm_unavailable_stops_all_llm_work(prefs, rubric, facts):
     conn = connect(":memory:")
     llm = FakeLLM(handler=lambda schema, prompt: LLMUnavailable("Groq unreachable"))
     jobs = [raw(source_job_id=str(i), title=f"Product Analyst {i}") for i in range(3)]
-    stats = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
-    assert len(llm.calls) == 1 + len(prefs.models.fallbacks[prefs.models.scoring]) and stats.scored == 0
-    assert stats.errors == ["scoring stopped: Groq unreachable"]
+    r = _run(conn, [StaticSource("lever:cred", jobs)], llm, prefs, rubric, facts)
+    assert len(llm.calls) == 1 + len(prefs.models.fallbacks[prefs.models.scoring]) and r.users[1].scored == 0
+    assert _errors(r) == ["scoring stopped: Groq unreachable"]
