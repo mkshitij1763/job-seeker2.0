@@ -87,7 +87,8 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     app.state.llm_factory = llm_factory or (
         lambda: FallbackLLM(build_llm(settings), app.state.app_config.models.fallbacks))
     app.state.gmail_factory = gmail_factory or (lambda: load_service(settings.secrets_dir / "token.json"))
-    app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory))
+    app.state.contacts_deps_factory = contacts_deps_factory or (lambda: _contacts_deps(settings, app.state.llm_factory,
+                                                                              app.state.app_config))
     app.mount("/static", _Static(directory=HERE / "static"), name="static")
     app.add_middleware(GZipMiddleware, minimum_size=1000)  # the inbox is ~50 KB of HTML, ~8 KB gzipped
     app.include_router(health.router)  # public, before the guarded routers
@@ -136,7 +137,7 @@ def create_app(settings: Settings, llm_factory=None, gmail_factory=None, contact
     return app
 
 
-def _contacts_deps(settings: Settings, llm_factory):
+def _contacts_deps(settings: Settings, llm_factory, app_config):
     from jobseeker.contacts.finder import Deps
     from jobseeker.contacts.providers import ApifyClient, HunterClient
     from jobseeker.contacts.tavily import TavilyClient
@@ -144,4 +145,5 @@ def _contacts_deps(settings: Settings, llm_factory):
     return Deps(tavily=TavilyClient(settings.tavily_api_key) if settings.tavily_api_key else None,
                 llm=llm_factory(),
                 apify=ApifyClient(settings.apify_api_token) if settings.apify_api_token else None,
-                hunter=HunterClient(settings.hunter_api_key) if settings.hunter_api_key else None)
+                hunter=HunterClient(settings.hunter_api_key) if settings.hunter_api_key else None,
+                global_drafts_per_day=app_config.budgets.global_drafts_per_day)

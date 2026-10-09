@@ -4,23 +4,24 @@ import socket
 import sqlite3
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 from jobseeker.config import Preferences
 from jobseeker.contacts import names
 from jobseeker.contacts.domains import FREE_MAIL, domain_from_text, mx_host, pick_domain
-from jobseeker.contacts.people import from_results, rank, role_words, search_queries
+from jobseeker.contacts.people import Candidate, from_results, rank, role_words, search_queries
 from jobseeker.contacts.smtp_verify import BudgetExceeded, PortBlocked, SmtpVerifier, VerifyUnavailable
 from jobseeker.db.contacts_repo import (
-    blocked_names, blocked_profile_urls, bounced_emails, emailed_count, get_domain, known_catch_all, link_contact,
-    save_candidates, save_domain, set_find_status, upsert_contact,
+    blocked_names, blocked_profile_urls, bounced_emails, cached_search, emailed_count, get_domain, known_catch_all, link_contact,
+    save_candidates, save_domain, set_find_status, store_search, upsert_contact,
 )
 from jobseeker.db.core import connect, iso
 from jobseeker.db.jobs import get_job
 from jobseeker.db.applications import get_application
-from jobseeker.db.usage import Budget, contacts_limits
+from jobseeker.clock import app_now
+from jobseeker.db.usage import Budget, outreach_limits
 from jobseeker.llm import LLM
 from jobseeker.pipeline.normalize import normalize_company
 
@@ -39,14 +40,23 @@ class Deps:
     smtp_factory: Callable | None = None
     sleep: Callable[[float], None] = time.sleep
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    global_drafts_per_day: int = 20
 
 
-def _search(deps: Deps, budget: Budget, notes: list[str], query: str, **kw) -> list[dict]:
+def _search(deps: Deps, conn: sqlite3.Connection, company: str, budget: Budget, notes: list[str], query: str,
+            **kw) -> list[dict]:
+    """Tavily, through the shared 30-day people_searches cache: a hit costs no one anything."""
+    key = f"{query}|{sorted(kw.items())}"
+    hit = cached_search(conn, company, key, "tavily", deps.now())
+    if hit is not None:
+        return hit
     if not budget.can("tavily"):
-        notes.append(f"Tavily budget used for {budget.month}")
+        notes.append(budget.exhausted_note("tavily", "Tavily"))
         return []
     budget.spend("tavily")
-    return deps.tavily.search(query, **kw)
+    results = deps.tavily.search(query, **kw)
+    store_search(conn, company, key, "tavily", results, deps.now())
+    return results
 
 
 def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, deps: Deps) -> dict:
@@ -58,7 +68,8 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     user_id = app["user_id"]
     job = get_job(conn, app["job_id"])
     company, norm = job["company"], normalize_company(job["company"])
-    budget = Budget(conn, user_id, contacts_limits(prefs.contacts), deps.now())
+    budget = Budget(conn, user_id, outreach_limits(conn, prefs.contacts, deps.global_drafts_per_day),
+                    app_now(deps.now()))
     notes: list[str] = []
     family = (conn.execute("SELECT role_family FROM scores WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1",
                            (user_id, job["id"])).fetchone() or {"role_family": ""})["role_family"]
@@ -67,22 +78,29 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     seen = set(blocked_profile_urls(conn, user_id, company))
     cands = []
     for q in search_queries(company, job["title"], family, job["location_city"]):
-        cands += from_results(_search(deps, budget, notes, q, include_domains=["linkedin.com"], max_results=10),
+        cands += from_results(_search(deps, conn, company, budget, notes, q, include_domains=["linkedin.com"], max_results=10),
                               company, seen)
     if len(cands) < 3 and deps.apify is not None:
-        if budget.can("apify", deps.apify.SEARCH_PAGE_USD):
+        words = role_words(job["title"], family)
+        key = f"{words}|{job['location_city']}"
+        cached = cached_search(conn, company, key, "apify", deps.now())
+        found_people = None
+        if cached is not None:
+            found_people = [Candidate(**c) for c in cached]
+        elif budget.can("apify", deps.apify.SEARCH_PAGE_USD):
             budget.spend("apify", deps.apify.SEARCH_PAGE_USD)
             try:
-                found_people = deps.apify.search_people(company, role_words(job["title"], family), job["location_city"])
+                found_people = deps.apify.search_people(company, words, job["location_city"])
+                store_search(conn, company, key, "apify", [asdict(c) for c in found_people], deps.now())
             except Exception as e:  # a fallback failing must not lose the run
                 notes.append(f"Apify people search failed ({type(e).__name__})")
                 found_people = []
-            for c in found_people:
-                if c.linkedin_url not in seen:
-                    seen.add(c.linkedin_url)
-                    cands.append(c)
         else:
-            notes.append(f"Apify budget used for {budget.month}")
+            notes.append(budget.exhausted_note("apify", "Apify"))
+        for c in found_people or []:
+            if c.linkedin_url not in seen:
+                seen.add(c.linkedin_url)
+                cands.append(c)
     blocked = blocked_names(conn, user_id, company)
     if blocked:
         cands = [c for c in cands if (nm := names.clean_name(c.name)) is None or (nm.first, nm.last) not in blocked]
@@ -101,7 +119,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
     if not domain:  # generic names ("slice") need context: city + India, then Groq picks this employer's site
         query = " ".join(f'"{company}" {job["location_city"] or ""} India official website'.split())
         domain = pick_domain(deps.llm, prefs.models.scoring, company, job["title"], job["location_city"],
-                             job["jd_text"], _search(deps, budget, notes, query, max_results=8),
+                             job["jd_text"], _search(deps, conn, company, budget, notes, query, max_results=8),
                              has_mail=lambda d: deps.resolver(d) is not None)
         if not domain:
             notes.append(f"Couldn't tell which website is {company}'s; set the email domain on the card")
@@ -110,7 +128,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         notes.append(f"{domain} has no mail server")
     hints = [dom["pattern"]] if dom.get("pattern") else []
     if domain and mx and not hints:
-        text = " ".join(r.get("content", "") for r in _search(deps, budget, notes, f'"@{domain}"', max_results=10))
+        text = " ".join(r.get("content", "") for r in _search(deps, conn, company, budget, notes, f'"@{domain}"', max_results=10))
         inferred = names.infer_pattern(names.emails_in_text(text, domain))
         if inferred:
             hints.append(inferred)
@@ -157,7 +175,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
         if i in results or deps.apify is None:
             continue
         if not budget.can("apify", deps.apify.PROFILE_EMAIL_USD):
-            notes.append(f"Apify budget used for {budget.month}")
+            notes.append(budget.exhausted_note("apify", "Apify"))
             break
         budget.spend("apify", deps.apify.PROFILE_EMAIL_USD)
         try:
@@ -198,7 +216,7 @@ def find_contacts(conn: sqlite3.Connection, app_id: int, prefs: Preferences, dep
                     results[i] = (listed[(nm.first, nm.last)].lower(), "verified", "hunter")
                     taken.add(results[i][0])
         else:
-            notes.append(f"Hunter budget used for {budget.month}")
+            notes.append(budget.exhausted_note("hunter", "Hunter"))
 
     # Verified addresses at this company beat any hint: guesses follow their pattern.
     for i in sorted(results):

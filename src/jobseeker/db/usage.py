@@ -23,6 +23,18 @@ def contacts_limits(cfg: ContactsConfig) -> dict[str, Limit]:
             "smtp": Limit("day", cfg.smtp_daily_limit, cfg.smtp_daily_limit)}
 
 
+def outreach_limits(conn: sqlite3.Connection, cfg: ContactsConfig, global_drafts_per_day: int) -> dict[str, Limit]:
+    """Each outreach user's share of the free tiers; matching-only users hold none (no pooling). The users are
+    counted by pipeline.eligible, the one place that counts who shares a cap."""
+    from jobseeker.pipeline.eligible import eligible_count
+    n = max(1, eligible_count(conn, "draft"))
+    return {"tavily": Limit("month", cfg.tavily_monthly_limit, cfg.tavily_monthly_limit // n),
+            "apify": Limit("month", cfg.apify_monthly_usd_limit, round(cfg.apify_monthly_usd_limit / n, 2)),
+            "hunter": Limit("month", cfg.hunter_monthly_limit, cfg.hunter_monthly_limit // n),
+            "smtp": Limit("day", cfg.smtp_daily_limit, cfg.smtp_daily_limit // n),
+            "draft": Limit("day", global_drafts_per_day, global_drafts_per_day // n)}
+
+
 class Budget:
     """Free-tier guard: every outside call checks can() and records spend(). A user stops at their share and
     everyone stops at the global cap, so nothing is ever paid for."""
@@ -58,7 +70,16 @@ class Budget:
 
     def summary(self) -> str:
         lim = self.limits
-        return (f"Tavily {self.used('tavily'):.0f}/{lim['tavily'].share_cap:.0f} · "
-                f"Apify ${self.used('apify'):.2f}/${lim['apify'].share_cap:.2f} · "
-                f"Hunter {self.used('hunter'):.0f}/{lim['hunter'].share_cap:.0f} · "
-                f"SMTP today {self.used('smtp'):.0f}/{lim['smtp'].share_cap:.0f}")
+
+        def part(label, svc, money=False):
+            f = (lambda v: f"${v:.2f}") if money else (lambda v: f"{v:.0f}")
+            return (f"{label} {f(self.used(svc))}/{f(lim[svc].share_cap)} · "
+                    f"All {f(self.used_all(svc))}/{f(lim[svc].global_cap)}")
+        return " · ".join(["Your " + part("Tavily", "tavily"), part("Apify", "apify", True), part("Hunter", "hunter"),
+                           part("SMTP today", "smtp")])
+
+    def exhausted_note(self, service: str, label: str) -> str:
+        period = datetime.strptime(self.month, "%Y-%m").strftime("%B") if self.limits[service].period == "month" \
+            else "today"
+        mine = self.used(service) >= self.limits[service].share_cap - 1e-9
+        return f"Your {label} share is used for {period}" if mine else f"Shared {label} budget used for {period}"

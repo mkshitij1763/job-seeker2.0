@@ -24,8 +24,9 @@ def _shortlist(conn, user_id, n):
         transition(conn, ensure_application(conn, user_id, j, NOW), "shortlisted")
 
 
-def test_only_admin_drafts_until_outreach_lands():
-    assert drafts_enabled(User(1, "o@x", "O", True, None)) and not drafts_enabled(User(2, "r@x", "R", False, None))
+def test_drafts_enabled_follows_the_switch():
+    assert drafts_enabled(User(2, "r@x", "R", False, None, True))
+    assert not drafts_enabled(User(1, "o@x", "O", True, None, False))   # admin alone no longer implies drafts
 
 
 def test_two_per_user_round_robin_within_share(tmp_path, prefs, facts):
@@ -50,7 +51,7 @@ def test_one_drafter_run_gets_only_its_slice(tmp_path, prefs, facts):
     from jobseeker.config import AppConfig
 
     conn = connect(tmp_path / "db")
-    conn.execute("INSERT INTO users (id, email, is_admin, created_at) VALUES (2, 'a2@x', 1, 't')")
+    conn.execute("INSERT INTO users (id, email, outreach_enabled, created_at) VALUES (2, 'a2@x', 1, 't')")
     conn.execute("INSERT INTO users (id, email, created_at) VALUES (3, 'r@x', 't')")
     for u in (1, 2, 3):
         conn.execute("""INSERT OR REPLACE INTO user_prefs (user_id, data, version, onboarding_step, onboarded_at,
@@ -61,7 +62,7 @@ def test_one_drafter_run_gets_only_its_slice(tmp_path, prefs, facts):
     cfg.budgets.global_drafts_per_day, cfg.budgets.draft_per_run = 8, 8
     drafters = [Drafter(1, prefs, facts, UserStats())]
     draft_round_robin(conn, drafters, FakeLLM(handler=lambda schema, prompt: DRAFT), cfg, NOW)
-    assert drafters[0].stats.drafted == 8 // 2  # two admins can draft; the roommate doesn't count
+    assert drafters[0].stats.drafted == 8 // 2  # two outreach users draft; the matching-only roommate doesn't count
 
 
 def test_eligible_count_rules(tmp_path):

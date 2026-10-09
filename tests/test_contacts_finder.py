@@ -157,7 +157,7 @@ def test_budget_exhausted_skips_searches(prefs):
     conn, app = setup_app()
     prefs.contacts.tavily_monthly_limit = 0
     d, _ = deps()
-    with pytest.raises(FinderError, match="Tavily budget"):
+    with pytest.raises(FinderError, match="Your Tavily share is used for October"):
         find_contacts(conn, app, prefs, d)
 
 
@@ -438,3 +438,37 @@ def test_changing_the_domain_replaces_verified_addresses_on_the_old_domain(prefs
     find_contacts(conn, app, prefs, deps(FakeSMTP(default=250))[0])
     p = people(conn, app)[0]
     assert p["email"] == "asha.rao@zeptonow.com" and p["email_status"] == "unverified"
+
+
+def _second_user_app(conn, app1):
+    from jobseeker.db.users import set_outreach
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (2, 'b@example.com', 't')")
+    set_outreach(conn, 2, True)
+    return ensure_application(conn, 2, get_application(conn, app1)["job_id"], NOW)
+
+
+def test_second_user_same_company_reuses_search_and_spends_no_tavily(prefs):
+    from jobseeker.db.usage import Budget, outreach_limits
+    conn, app1 = setup_app()
+    app2 = _second_user_app(conn, app1)
+    tavily = FakeTavily()
+    d, _ = deps(FakeSMTP(default=250), tavily=tavily)
+    find_contacts(conn, app1, prefs, d)
+    asked = len(tavily.queries)
+    find_contacts(conn, app2, prefs, d)
+    assert len(tavily.queries) == asked                                   # every search came from people_searches
+    assert Budget(conn, 2, outreach_limits(conn, prefs.contacts, 20), NOW).used("tavily") == 0
+    mine = {p["contact_id"] for p in people(conn, app2)}
+    assert mine and conn.execute("SELECT COUNT(*) FROM application_contacts WHERE application_id = ?",
+                                 (app2,)).fetchone()[0] == len(mine)       # the roommate's own links
+
+
+def test_person_blocked_by_b_is_still_found_for_a(prefs):
+    from jobseeker.db.applications import mark_not_interested
+    conn, app1 = setup_app()
+    app2 = _second_user_app(conn, app1)
+    d, _ = deps(FakeSMTP(default=250))
+    find_contacts(conn, app2, prefs, d)
+    mark_not_interested(conn, app2, block_company=True)                   # B blocks the people and the company
+    find_contacts(conn, app1, prefs, d)                                    # A, served from the cache
+    assert "Asha Rao" in [p["name"] for p in people(conn, app1)]

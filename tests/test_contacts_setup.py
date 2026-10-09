@@ -67,7 +67,8 @@ def test_budget_caps_and_summary():
     b.spend("smtp")
     assert not b.can("smtp")
     assert Budget(conn, 1, contacts_limits(ContactsConfig(smtp_daily_limit=1)), NOW.replace(day=9)).can("smtp")  # daily resets
-    assert b.summary() == "Tavily 2/2 · Apify $0.10/$0.15 · Hunter 0/45 · SMTP today 1/1"
+    assert b.summary() == ("Your Tavily 2/2 · All 2/2 · Apify $0.10/$0.15 · All $0.10/$0.15 · Hunter 0/45 · All 0/45 · "
+                           "SMTP today 1/1 · All 1/1")
 
 
 def test_budget_share_and_global_caps(tmp_path):

@@ -10,7 +10,8 @@ from jobseeker.db.contacts_repo import (
     claim_find, edit_contact, emailed_count, find_state, get_domain, link_contact, next_candidate, nudge_due, people, third_due,
     upsert_contact,
 )
-from jobseeker.db.usage import Budget, contacts_limits
+from jobseeker.clock import app_now
+from jobseeker.db.usage import Budget, outreach_limits
 from jobseeker.pipeline.normalize import normalize_company
 from jobseeker.web.application import _back
 from jobseeker.web.deps import current_prefs, current_user, get_conn
@@ -30,7 +31,9 @@ def card_context(request: Request, conn, app_id: int, prefs) -> dict:
             "third_due": third_due(conn, app_id, datetime.now(UTC)),
             "nudge_due": nudge_due(conn, app_id, datetime.now(UTC)),
             "already_emailed": emailed_count(conn, app_id) > 0,
-            "usage": Budget(conn, request.state.user.id, contacts_limits(prefs.contacts), datetime.now(UTC)).summary(),
+            "usage": Budget(conn, request.state.user.id,
+                            outreach_limits(conn, prefs.contacts, state.app_config.budgets.global_drafts_per_day),
+                            app_now()).summary(),
             "has_tavily": bool(state.settings.tavily_api_key)}
 
 

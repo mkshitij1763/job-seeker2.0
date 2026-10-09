@@ -13,12 +13,12 @@ def active_users(conn) -> list:
 
 
 def drafts_enabled(user) -> bool:
-    """Until sub-project 5 adds users.outreach_enabled, only the owner (admin) gets AI drafts."""
-    return bool(user.is_admin)
+    """AI drafts (and every outreach share) follow the per-user outreach switch."""
+    return bool(user.outreach_enabled)
 
 
 def eligible_count(conn, stage: str) -> int:
-    """Active users for "score"; active users with drafts enabled for "draft"."""
+    """Active users for "score"; active users with outreach on for "draft" (drafts and contact-finding shares)."""
     users = active_users(conn)
     if stage == "draft":
         users = [u for u in users if drafts_enabled(u)]

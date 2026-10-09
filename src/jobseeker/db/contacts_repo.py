@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -7,6 +8,7 @@ from jobseeker.db.core import iso, utcnow
 from jobseeker.pipeline.normalize import normalize_company
 
 CATCH_ALL_TTL = timedelta(days=30)
+SEARCH_TTL = timedelta(days=30)  # people searches are shared between users and reused this long
 STALE_AFTER = timedelta(minutes=20)  # worst case: Apify search + 3 profile lookups at 180 s each, plus SMTP
 
 
@@ -231,3 +233,19 @@ def edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int,
                  (app_id, rank))
     conn.commit()
     return cid
+
+
+def cached_search(conn: sqlite3.Connection, company: str, query: str, provider: str, now: datetime) -> list[dict] | None:
+    row = conn.execute("""SELECT results FROM people_searches WHERE company_norm = ? AND query = ? AND provider = ?
+                          AND searched_at >= ?""",
+                       (normalize_company(company), query, provider, iso(now - SEARCH_TTL))).fetchone()
+    return json.loads(row["results"]) if row else None
+
+
+def store_search(conn: sqlite3.Connection, company: str, query: str, provider: str, results: list[dict],
+                 now: datetime) -> None:
+    conn.execute("""INSERT INTO people_searches (company_norm, query, provider, results, searched_at)
+                    VALUES (?, ?, ?, ?, ?) ON CONFLICT (company_norm, query, provider) DO UPDATE
+                    SET results = excluded.results, searched_at = excluded.searched_at""",
+                 (normalize_company(company), query, provider, json.dumps(results), iso(now)))
+    conn.commit()
