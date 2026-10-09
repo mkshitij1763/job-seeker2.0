@@ -86,3 +86,38 @@ def test_last_admin_delete_route_is_403_and_button_disabled(client_as):
     web = client_as(1, follow_redirects=False)
     assert "You're the only admin" in web.get("/settings/delete").text
     assert web.post("/settings/delete", data={"email": "owner@example.com"}).status_code == 403
+
+
+def test_delete_covers_gmail_tokens_and_private_contacts(seeded_two, settings):
+    from datetime import UTC, datetime
+
+    from jobseeker.crypto import load_token_key
+    from jobseeker.db.applications import save_contact
+    from jobseeker.db.gmail_tokens import save_token
+    from tests.conftest import AUTH_TEST
+    conn = connect(settings.db_path)
+    key = load_token_key(AUTH_TEST["token_key"])
+    save_token(conn, key, 2, "r@gmail.com", "{}", datetime.now(UTC))
+    private = save_contact(conn, seeded_two["roommate_app"], name="P", role="", linkedin_url="", email="p@x.com",
+                           email_status="unverified")
+    shared_before = conn.execute("SELECT COUNT(*) FROM contacts WHERE owner_user_id IS NULL").fetchone()[0]
+    delete_account(conn, settings.jobseeker_home, 2)
+    assert conn.execute("SELECT COUNT(*) FROM gmail_tokens WHERE user_id = 2").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM contacts WHERE id = ?", (private,)).fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM contacts WHERE owner_user_id IS NULL").fetchone()[0] == shared_before
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_export_has_gmail_json_without_the_token(seeded, settings):
+    from datetime import UTC, datetime
+
+    from jobseeker.crypto import load_token_key
+    from jobseeker.db.gmail_tokens import save_token
+    from tests.conftest import AUTH_TEST
+    conn = connect(settings.db_path)
+    save_token(conn, load_token_key(AUTH_TEST["token_key"]), 1, "o@gmail.com", '{"refresh_token": "rt-SECRET-42"}',
+               datetime.now(UTC))
+    z = zipfile.ZipFile(io.BytesIO(export_zip(conn, settings.jobseeker_home, 1)))
+    gmail = json.loads(z.read("gmail.json"))
+    assert gmail == {"account_email": "o@gmail.com", "connected_at": gmail["connected_at"]}
+    assert all(b"rt-SECRET-42" not in z.read(n) and b"token_enc" not in z.read(n) for n in z.namelist() if n != "resume.pdf")

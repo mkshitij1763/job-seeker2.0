@@ -8,6 +8,7 @@ import sqlite3
 import zipfile
 from pathlib import Path
 
+from jobseeker.db.gmail_tokens import token_info
 from jobseeker.db.applications import get_drafts, get_events
 from jobseeker.db.contacts_repo import people
 from jobseeker.db.jobs import latest_score
@@ -44,7 +45,9 @@ def delete_account(conn: sqlite3.Connection, home: Path, user_id: int) -> None:
         for t, how in [x for x in tables if x[1] == "application_id"]:
             conn.execute(f"DELETE FROM {t} WHERE application_id IN (SELECT id FROM applications WHERE user_id = ?)",
                          (user_id,))
-        # contacts.owner_user_id rows go after application_contacts (above), before applications/users
+        # contacts.owner_user_id rows go after application_contacts (above), before applications/users;
+        # applications.contact_id may point at one of them, so unlink it first
+        conn.execute("UPDATE applications SET contact_id = NULL WHERE user_id = ?", (user_id,))
         # runs go last: run_requests.run_id can point at the user's own run
         for t, how in sorted([x for x in tables if x[1] != "application_id" and x[0] != "applications"],
                              key=lambda x: x[0] == "runs"):
@@ -87,6 +90,9 @@ def export_zip(conn: sqlite3.Connection, home: Path, user_id: int) -> bytes:
         z.writestr("profile.json", json.dumps(profile, indent=2, ensure_ascii=False))
         z.writestr("applications.json", json.dumps(apps, indent=2, ensure_ascii=False, default=str))
         z.writestr("job_verdicts.csv", verdicts.getvalue())
+        gmail = token_info(conn, user_id)
+        if gmail:  # where drafts go; never the token itself
+            z.writestr("gmail.json", json.dumps({k: gmail[k] for k in ("account_email", "connected_at")}))
         resume = resume_path(home, user_id)
         if resume.exists():
             z.write(resume, "resume.pdf")
