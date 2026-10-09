@@ -32,10 +32,29 @@
 | `2f473a9` | `manager` merged `build/devops` into `multi-user` (550 pytest); `build/devops2` starts here |
 | `010f6a9` | extras T9, `/healthz` (GET/HEAD, read-only) |
 | `89cbaa9` | extras T13, public landing + invite-only page |
-| (this commit) | pipeline T7, `fetch_shared` |
+| `8fc47f6` | pipeline T7, `fetch_shared` |
+| `5c67a71` | fast-forward of `build/devops2` to `multi-user` (plan 3 T1–T3: v2, AppConfig, load_user_context, effective_prefs) |
+| `261892e` | extras T7, migration v3 |
+| `298ceba` | pipeline T3, AppConfig schedule/fetch-now/lock/fairness settings |
+| `a035569` | merge origin/multi-user `3ab1864` (plan 3 T4, require_onboarded) |
+| `c8053cf` | pipeline T4, migration v4 (+ `migrated_owner_db` fixture) |
+| `1ba85b9` | pipeline T5, heartbeat run lock |
+| `a72db4e` | extras T8, `nightly_backup` + `jobseeker backup` (tiny cli.py edit: the `backup` command body only) |
+| `e5e920f` | extras T10, `notify_new_matches` |
+| `c0180a0` | pipeline T9, `profile_hash`-aware score freshness + per-run `exclude` |
+| `20e7314` | pipeline T10, round-robin scoring (`pipeline/score.py`) |
+| `de9d3c0` | pipeline T11, round-robin drafting (`pipeline/draft.py`; run.py's copy of `draft_application` stays until T12) |
+| `1cca283` | pipeline T15, per-user header notes (`header_run`, `explain_stats`), IST `age`/greeting/yesterday. Small web/deps.py edit: `render`'s run lines + imports only |
+| `bd8188c` | merge origin/multi-user `770f00f` (plan 3 T5–T8: reevaluate, onboarding, Settings, export/delete) |
+| `839db77` | extras T11, `/sw.js` + `/push/*` (app.py: 1 import + 2 include_router lines; guard test exempts `/push/`) |
+| `887a13d` | pipeline T8, `evaluate` + `describe_shared` (evaluate.py: 2 import lines + an appended block; jobs.py: appended `set_verdict`, `linkedin_picks`) |
+| `bf1875c` | follow-up (manager): `evaluate` skips early apps of newly hidden jobs via the shared `skip_hidden_apps` (extracted from `reevaluate`) |
+| `85487b6` | docs: handoff rows for T8 + follow-up |
+| `198cb0e` | pipeline T12, `run_all` replaces `run_daily` (golden-checked); web/application.py: 1 import repointed to `pipeline.draft` |
+| (this commit) | pipeline T13, `jobseeker tick` (schedule, catch-up, Fetch now, backup, ping), `run`/`rescore` on `run_all` + lock; `db/run_requests.py` |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT:** devops2 batch done (extras T9, T13, pipeline T7). **Stand by** until `manager` merges `build/devops2` into `multi-user` after plan 3 lands. Then the WAIT list: extras T7, T8, T10, T11 (incl. sw.js), T12, T14; pipeline T3, T4, T5, T8–T16; hosting T5 (manual, with the user). The executing-plans final whole-branch review is still owed at the end.
+- **NEXT (approved by `manager`, in order):** merge origin/multi-user (plan 3 complete at `558b0fd`) → extras T12 (Settings alerts card) → extras T14 (admin Backups card + delete coverage) → pipeline T14 (Fetch now) → pipeline T16 (delete coverage + final check). For T16, also run `evaluate` against a migrated `.backup` copy of the live DB (never the live DB) and report how many verdicts change. backend-lead2 saw 5 hidden + 5 restored from pre-existing verdict drift, which T8's jd_hash re-evaluation should absorb. Hosting T5 is manual, with the user. The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
@@ -62,7 +81,16 @@
 - Extras T4: the brief's Interfaces block says `archive.MEMBERS_ALLOWED`; the test and code use `member_allowed(name)`, which is what was built. `db.backup.snapshot(db_path, out) -> Path` added and `backup()` now calls it; take plan 2's version at merge.
 - Extras T9: `test_schema_mismatch_is_503` builds the client BEFORE setting `user_version = 0`, because plan 2's `create_app` refuses an out-of-date DB at startup; the test now models the schema changing under a running app.
 - Extras T13: `landing.html` extends `bare.html` (plan allows it), not `base.html`, so `base.html` is untouched for plan 3; `bare.html` gains one empty `{% block head %}`. The page wrapper is `<div class="landing">`, because `bare.html` already provides `<main>`. CSS uses ui.css's real tokens (`--line-strong`, px spacing): `--space-*`/`--border-strong` don't exist. The test_auth invite line uses the fallback ("Ask the person who shared this link"), because its fixture owner has no name. `test_web_guards` root assertion changed from 303→/login to 200 landing (plan 2's interim behaviour, replaced by this task). Google "G" path data is the standard 18px mark; verify against developers.google.com/identity/branding-guidelines before launch.
-- **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops` (that branch only, never force).
+- Extras T7: the v3 function is `migrate_v3` (matching `migrate_v1`/`migrate_v2`), not the plan's `_v3_extras`. `test_endpoint_unique_and_user_required` drops its `INSERT INTO users (id=1…)`, because a fresh DB already seeds the placeholder owner as user 1.
+- Pipeline T4: function is `migrate_v4` (file convention). `migrated_owner_db` (conftest) imports `live_like_v0`/`_ctx` from `tests/test_migrations.py` rather than refactoring that file (owned by backend-lead2), then migrates with the fixture profile/.
+- Extras T10: `notify_new_matches`'s `keys` default is a `...` sentinel (reads VAPID from Settings), as in the plan's code; `keys=None` explicitly means "no VAPID keys", so no send. The Interfaces line's `keys=None` default is superseded by the code.
+- Pipeline T10: the test's `SCORE` uses `role_family="product_analyst"`, not the plan's `"pa"`, which `LLMScore`'s Literal rejects.
+- Pipeline T15 (built before T12): `header_run`'s fallback, when the user has no `kind='user'` run, also takes a `kind='legacy'` run of theirs or a shared one (not only `kind='fetch'`), so run notes don't vanish while `run_daily` still writes legacy runs or across the upgrade. `deps.py` drops its now-unused `import json`.
+- Extras T11: there is no `users` fixture, so the two tests that sign in as user 2 request `seeded_two`. The test file gets the plan's autouse fixture that resets `_last_test`. `tests/test_web_guards.py` adds `"/push/"` to the require_onboarded exemption tuple (`/sw.js` is already in `PUBLIC`).
+- Pipeline T8: plan 3 already owns `tests/test_evaluate.py`, so T8's tests live in `tests/test_evaluate_pipeline.py`. **Follow-up `bf1875c` (manager's ruling):** `evaluate` now applies plan 3's rule too. A job going from visible or never-judged to hidden skips its new/shortlisted/drafted app (undoable; reason "pipeline: the job description changed"), and apps at approved or later are never touched. The skip loop is extracted from `reevaluate` into `evaluate.skip_hidden_apps(conn, app_ids, reason, now)`, which both functions call.
+- Pipeline T12: GOLDEN was frozen from `run_daily` on `GOLDEN_JOBS` = `([('0',1),('1',1),('2',0),('3',1),('4',0)], ['0','1','3'], ['1','0','3'])`, and `run_all` matches it. Ported tests: `test_run.py`'s budget test sets `cfg.budgets` (budgets now live in AppConfig). The finish-time test passes `clock=` returning +5 min, because `run_all` reads the clock once, at the end. `test_run_discovery.py`'s helper mirrors `prefs.budgets.score_per_run`/`prefs.search.linkedin_descriptions_per_run` into cfg. Its `stats.candidates == 2` assertion is dropped, because nothing in the plan's code fills `UserStats.candidates`. The `jobs_seen` counts needed no change. `cli.py`'s `_run` still imports `run_daily`, so `jobseeker run`/`rescore` are broken at this commit only; T13 rewrites them.
+- Pipeline T13: `_pipeline` (rubric, companies, LLM) is built lazily inside the `run` closure, not up front. A busy `tick` or a lock-refused `run` therefore never builds the LLM, which needs `GROQ_API_KEY` (the plan's own fallback note). Per the plan, `rescore` now REQUIRES `--user`, and `run` no longer calls `backup`: the nightly backup belongs to `tick`. **At cutover:** the Mac's launchd job (on `main`) runs `jobseeker run`. Once this code reaches the Mac, that job stops backing up, so the server's `jobseeker-tick` timer is the replacement. cli.py drops its now-unused top-level `load_companies`/`load_rubric`/`build_llm` imports.
+- **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops2` (that branch only, never force).
 
 ## 4. Gotchas
 - **pytest:** `FORCE_COLOR= uv run pytest --color=no -p no:warnings`. Don't pass `-q`.

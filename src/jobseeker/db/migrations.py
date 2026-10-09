@@ -283,3 +283,54 @@ def migrate_v2(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
 
 
 MIGRATIONS.append(Migration(2, "preferences, facts and resume", migrate_v2))
+
+
+def migrate_v3(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
+    """Push subscriptions, the per-user daily alert marker and the backup log (extras)."""
+    conn.execute("""CREATE TABLE push_subscriptions (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        last_success_at TEXT,
+        failures INTEGER NOT NULL DEFAULT 0)""")
+    conn.execute("CREATE INDEX idx_push_subscriptions_user ON push_subscriptions (user_id)")
+    conn.execute("ALTER TABLE users ADD COLUMN notified_on TEXT")
+    conn.execute("""CREATE TABLE backups (
+        day TEXT PRIMARY KEY,
+        local_path TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        uploaded_at TEXT,
+        upload_error TEXT,
+        created_at TEXT NOT NULL)""")
+
+
+MIGRATIONS.append(Migration(3, "extras", migrate_v3))
+
+
+def migrate_v4(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
+    """Run triggers and parents, the heartbeat lock, Fetch-now requests, and scores.profile_hash (back-filled)."""
+    conn.execute("ALTER TABLE runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'cli'")
+    conn.execute("ALTER TABLE runs ADD COLUMN parent_id INTEGER REFERENCES runs(id)")
+    conn.execute("ALTER TABLE scores ADD COLUMN profile_hash TEXT")
+    conn.execute("""CREATE TABLE locks (name TEXT PRIMARY KEY, holder TEXT NOT NULL, acquired_at TEXT NOT NULL,
+                    heartbeat_at TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE run_requests (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+                    requested_at TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
+                    run_id INTEGER REFERENCES runs(id), finished_at TEXT)""")
+    conn.execute("CREATE INDEX idx_run_requests_status ON run_requests (status, requested_at)")
+    conn.execute("CREATE INDEX idx_runs_kind ON runs (kind, trigger, started_at)")
+    from jobseeker.config import load_app_config
+    from jobseeker.db.profile import load_user_context
+    from jobseeker.pipeline.profile_hash import profile_hash
+
+    prefs, facts = load_user_context(conn, 1, load_app_config(ctx.home / "config" / "app.yaml"))
+    if facts is not None:  # an owner who hasn't onboarded has nothing to back-fill
+        conn.execute("UPDATE scores SET profile_hash = ? WHERE user_id = 1", (profile_hash(prefs, facts),))
+
+
+MIGRATIONS.append(Migration(4, "pipeline", migrate_v4))

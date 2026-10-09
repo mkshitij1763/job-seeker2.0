@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 
+from jobseeker.clock import app_now
 from jobseeker.db import queries
 from jobseeker.web.deps import current_user, get_conn, render
 
@@ -16,7 +17,7 @@ def pipeline(request: Request, user=Depends(current_user), conn=Depends(get_conn
 
 
 def _local_hour() -> int:
-    return datetime.now().astimezone().hour
+    return app_now().hour
 
 
 @router.get("/today")

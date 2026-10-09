@@ -2,8 +2,23 @@
 models: {scoring: openai/gpt-oss-20b, drafting: openai/gpt-oss-120b, facts: openai/gpt-oss-120b}
 thresholds: {apply: 70, review: 50}
 min_prescore: 30
-budgets: {score_per_run: 80, draft_per_run: 10, facts_per_user_per_day: 3, facts_per_day: 10}
-search: {hours_old: 72, results_per_search: 25, sites: [linkedin, naukri, indeed], linkedin_descriptions_per_run: 15}
+budgets:
+  score_per_run: 80               # per user, per run
+  draft_per_run: 10
+  facts_per_user_per_day: 3
+  facts_per_day: 10
+  global_scores_per_day: 150      # provisional: set from the spike's Groq quota measurement
+  global_drafts_per_day: 20       # provisional: as above
+  score_batch: 5
+  draft_batch: 2
+search:
+  hours_old: 72
+  results_per_search: 25
+  sites: [linkedin, naukri, indeed]
+  linkedin_descriptions_per_run: 15
+  max_searches_per_run: 60        # provisional: set from the hosting spike's first week
+  max_searches_fetch_now: 30
+  max_custom_queries: 3
 contacts: {tavily_monthly_limit: 950, apify_monthly_usd_limit: 4.5, hunter_monthly_limit: 45, smtp_daily_limit: 60}
 default_title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president,
                      account executive, recruiter, designer, design lead, engineer, engineering, developer, architect,
@@ -19,3 +34,7 @@ roles:
   - {label: Data Analyst,              query: Data Analyst,              allow: [data analyst, analytics, insights, business intelligence]}
   - {label: Program Manager,           query: Program Manager,           allow: [program manager, programme manager]}
   - {label: Strategy & Ops,            query: Strategy and Operations,   allow: [strategy, operations]}
+timezone: Asia/Kolkata
+schedule: {daily_at: "11:15", max_attempts_per_day: 2}
+fetch_now: {min_hours_between_per_user: 2, max_per_day: 6}
+lock: {takeover_after_minutes: 15}

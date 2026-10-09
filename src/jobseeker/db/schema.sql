@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0,
   disabled_at TEXT,
   created_at TEXT NOT NULL,
-  last_login_at TEXT
+  last_login_at TEXT,
+  notified_on TEXT
 );
 CREATE TABLE IF NOT EXISTS invites (
   email TEXT PRIMARY KEY,
@@ -70,7 +71,8 @@ CREATE TABLE IF NOT EXISTS scores (
   model TEXT NOT NULL,
   rubric_version TEXT NOT NULL,
   jd_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  profile_hash TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scores_user_job ON scores (user_id, job_id, id);
 
@@ -147,7 +149,9 @@ CREATE TABLE IF NOT EXISTS runs (
   stats TEXT NOT NULL DEFAULT '{}',
   errors TEXT NOT NULL DEFAULT '[]',
   user_id INTEGER REFERENCES users (id),
-  kind TEXT NOT NULL DEFAULT 'legacy'
+  kind TEXT NOT NULL DEFAULT 'legacy',
+  trigger TEXT NOT NULL DEFAULT 'cli',
+  parent_id INTEGER REFERENCES runs (id)
 );
 
 CREATE TABLE IF NOT EXISTS discovered_companies (
@@ -226,3 +230,39 @@ CREATE TABLE IF NOT EXISTS user_facts (
   resume_uploaded_at TEXT,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  last_success_at TEXT,
+  failures INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions (user_id);
+CREATE TABLE IF NOT EXISTS backups (
+  day TEXT PRIMARY KEY,
+  local_path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  uploaded_at TEXT,
+  upload_error TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS locks (
+  name TEXT PRIMARY KEY,
+  holder TEXT NOT NULL,
+  acquired_at TEXT NOT NULL,
+  heartbeat_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS run_requests (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id),
+  requested_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
+  run_id INTEGER REFERENCES runs (id),
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_run_requests_status ON run_requests (status, requested_at);
+CREATE INDEX IF NOT EXISTS idx_runs_kind ON runs (kind, trigger, started_at);

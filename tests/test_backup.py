@@ -38,4 +38,5 @@ def test_backup_command(settings, monkeypatch, tmp_path):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path / "bk"))
     connect(settings.db_path).close()
     out = CliRunner().invoke(app, ["backup"]).output
-    assert "Backup written to" in out and len(list((tmp_path / "bk").glob("jobseeker-*.db.gz"))) == 1
+    assert "Backup written to" in out and "Off-site backup isn't configured" in out
+    assert len(list((tmp_path / "bk").glob("jobseeker-*.tar.gz"))) == 1

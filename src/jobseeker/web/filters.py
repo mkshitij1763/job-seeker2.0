@@ -15,14 +15,29 @@ def highlight(text: str, terms: list[str]) -> Markup:
     return Markup(safe.replace("\n", "<br>"))
 
 
-def age(value: str | None) -> str:
+def age(value: str | None, now: datetime | None = None) -> str:
+    """Whole IST days since `value` ("today" on the same IST date)."""
+    from jobseeker.clock import app_today
+
     if not value:
         return "?"
     dt = datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    days = (datetime.now(UTC) - dt).days
+    days = (app_today(now) - app_today(dt if dt.tzinfo else dt.replace(tzinfo=UTC))).days
     return "today" if days <= 0 else f"{days}d"
+
+
+def explain_stats(stats: dict) -> list[dict]:
+    """Header notes from run stats: the user's score share and the search plan's rotation. Neither needs action."""
+    user, fetch, notes = stats.get("user") or {}, stats.get("fetch") or {}, []
+    why = user.get("stopped_by")
+    if why == "share":
+        notes.append({"text": f"You've used today's {user.get('scored', 0)} scores; more tomorrow", "action": False})
+    elif why in ("global_cap", "quota"):
+        notes.append({"text": "The shared AI limit ran out today; scoring resumes tomorrow", "action": False})
+    if fetch.get("searches_trimmed"):
+        notes.append({"text": f"Searched {fetch.get('searches_run', 0)} of {fetch.get('searches_planned', 0)} role and city "
+                              "combinations today; the rest rotate in over the next runs", "action": False})
+    return notes
 
 
 _OPENING_GREETING = re.compile(r"^\s*(hi|hello|hey|dear)\b[^,.!\n]{0,20}[,.!]\s*", re.I)

@@ -17,7 +17,7 @@ from jobseeker.gmail.client import GmailUnavailable, create_draft
 from jobseeker.gmail.mime import build_raw_message
 from jobseeker.llm import LLMError
 from jobseeker.outreach.drafter import greeting, signature
-from jobseeker.pipeline.run import draft_application
+from jobseeker.pipeline.draft import draft_application
 from jobseeker.profile.resume import resume_path
 from jobseeker.status import InvalidTransition
 from jobseeker.web import oauth

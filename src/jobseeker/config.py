@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import time
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]  # the code checkout (…/src/jobseeker/config.py → repo root)
@@ -187,6 +188,10 @@ class AppBudgets(BaseModel):
     draft_per_run: int = 10
     facts_per_user_per_day: int = 3
     facts_per_day: int = 10
+    global_scores_per_day: int = 150  # provisional: set from the spike's Groq quota measurement
+    global_drafts_per_day: int = 20  # provisional: as above
+    score_batch: int = 5
+    draft_batch: int = 2
 
 
 class AppSearch(BaseModel):
@@ -194,6 +199,32 @@ class AppSearch(BaseModel):
     results_per_search: int = 25
     sites: list[Literal["linkedin", "naukri", "indeed"]] = ["linkedin", "naukri", "indeed"]
     linkedin_descriptions_per_run: int = 15
+    max_searches_per_run: int = 60  # provisional: set from the hosting spike's first week
+    max_searches_fetch_now: int = 30
+    max_custom_queries: int = 3
+
+
+class ScheduleConfig(BaseModel):
+    daily_at: str = "11:15"
+    max_attempts_per_day: int = 2
+
+    @field_validator("daily_at")
+    @classmethod
+    def _hhmm(cls, v: str) -> str:
+        time.fromisoformat(v)  # raises ValueError on 25:99
+        return v
+
+    def daily_time(self) -> time:
+        return time.fromisoformat(self.daily_at)
+
+
+class FetchNowConfig(BaseModel):
+    min_hours_between_per_user: float = 2
+    max_per_day: int = 6
+
+
+class LockConfig(BaseModel):
+    takeover_after_minutes: int = 15
 
 
 class AppConfig(BaseModel):
@@ -208,6 +239,10 @@ class AppConfig(BaseModel):
     roles: list[Role] = []
     companies_path: Path = REPO_ROOT / "companies.yaml"
     rubric_path: Path = REPO_ROOT / "rubric.yaml"
+    timezone: str = "Asia/Kolkata"
+    schedule: ScheduleConfig = ScheduleConfig()
+    fetch_now: FetchNowConfig = FetchNowConfig()
+    lock: LockConfig = LockConfig()
 
 
 def load_app_config(path: Path | str) -> AppConfig:

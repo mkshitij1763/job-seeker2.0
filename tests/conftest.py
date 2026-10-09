@@ -176,3 +176,19 @@ def anon_client(settings):
     from jobseeker.web.app import create_app
     return lambda **kw: TestClient(create_app(settings, **kw), base_url="https://testserver", follow_redirects=False,
                                    headers={"Origin": "https://testserver"})
+
+
+@pytest.fixture
+def migrated_owner_db(tmp_path):
+    """The live-shaped v0 DB plus the fixture profile/, migrated to latest; yields (conn, home)."""
+    from jobseeker.db.migrations import migrate
+    from tests.test_migrations import _ctx, live_like_v0
+
+    db = live_like_v0(tmp_path / "db.sqlite")
+    (tmp_path / "profile").mkdir()
+    shutil.copy(ROOT / "tests" / "fixtures" / "preferences.yaml", tmp_path / "profile" / "preferences.yaml")
+    shutil.copy(ROOT / "tests" / "fixtures" / "facts.json", tmp_path / "profile" / "facts.json")
+    migrate(db, _ctx(tmp_path), tmp_path / "bk")
+    conn = connect(db)
+    yield conn, tmp_path
+    conn.close()

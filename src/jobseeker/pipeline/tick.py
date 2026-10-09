@@ -1,0 +1,73 @@
+"""The only host hook: run every 5 minutes. The schedule, catch-up, Fetch now and the nightly backup live here."""
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+
+import httpx
+
+from jobseeker.backup.nightly import nightly_backup
+from jobseeker.clock import app_now, app_today, day_start_utc
+from jobseeker.db import run_requests
+from jobseeker.db.applications import wake_snoozed
+from jobseeker.db.core import iso
+from jobseeker.db.locks import acquire, release
+from jobseeker.db.users import user_by_id
+
+log = logging.getLogger(__name__)
+
+
+def active_users(conn) -> list:
+    rows = conn.execute("""SELECT u.id FROM users u JOIN user_prefs p ON p.user_id = u.id
+                           WHERE p.onboarded_at IS NOT NULL AND u.disabled_at IS NULL ORDER BY u.id""").fetchall()
+    return [user_by_id(conn, r["id"]) for r in rows]
+
+
+def scheduled_due(conn, cfg, now: datetime) -> bool:
+    local = app_now(now)
+    if local.time() < cfg.schedule.daily_time():
+        return False
+    since = iso(day_start_utc(app_today(now)))
+    rows = conn.execute("SELECT finished_at FROM runs WHERE kind = 'fetch' AND trigger = 'schedule' AND started_at >= ?",
+                        (since,)).fetchall()
+    if any(r["finished_at"] for r in rows):
+        return False
+    return len(rows) < cfg.schedule.max_attempts_per_day
+
+
+def ping(url: str, ok: bool, get=httpx.get) -> None:
+    if not url:
+        return
+    try:
+        get(url if ok else url.rstrip("/") + "/fail", timeout=5.0)
+    except Exception as e:  # a dead pinger must never fail the tick
+        log.warning("health ping failed: %s", e)
+
+
+def tick(conn, *, settings, cfg, now: datetime, run, backup=nightly_backup, ping_fn=None, holder: str) -> str:
+    wake_snoozed(conn, now)
+    if not acquire(conn, "run", holder, now, cfg.lock.takeover_after_minutes):
+        return "busy"
+    try:
+        run_requests.fail_stuck(conn, now, cfg.lock.takeover_after_minutes)
+        if scheduled_due(conn, cfg, now):
+            report = run("schedule", active_users(conn), cfg.search.max_searches_per_run)
+            try:
+                result = backup(conn, settings, now)
+                backup_ok = result.ok
+            except Exception as e:
+                log.error("backup failed: %s", e)
+                backup_ok = False
+            ok = report.aborted is None and backup_ok
+            (ping_fn or (lambda url, good: ping(url, good)))(getattr(settings, "healthcheck_ping_url", ""), ok)
+            return "scheduled"
+        req = run_requests.next_queued(conn)
+        if req:
+            run_requests.mark(conn, req["id"], "running", now)
+            user = user_by_id(conn, req["user_id"])
+            report = run("fetch_now", [user], cfg.search.max_searches_fetch_now)
+            run_requests.mark(conn, req["id"], "failed" if report.aborted else "done", now, report.fetch_run_id)
+            return "fetch_now"
+        return "idle"
+    finally:
+        release(conn, "run", holder)
