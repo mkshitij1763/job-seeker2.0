@@ -84,3 +84,9 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 - Empty-state sentence rendered twice in the Jobs DOM (table row + phone card list); fine visually per width, but screen readers read it twice. CHECK.
 - Filter menus: "All roles"/"All cities"/"All sources" links go to `/?band=apply`, dropping the current band (e.g. on Review, choosing All roles jumps back to Apply). P2 bug.
 - Desktop sidebar: brand "J Job Seeker" tile, Today/Jobs/Pipeline/Settings; no counts shown for a new user (fine). Keyboard hint "j/k move · enter open · s skip · z snooze" shown even with 0 rows.
+- Today (new user, 1470): "Good morning, Kshitij." + "Here's what needs you today." + Fetch now (outline, unexplained) + tiles 0 New today / 0 Shortlisted + "All caught up". Spec wanted date + "last run finished" line: missing. img p1-15.
+- **Fetch now used (the review's one, user OK'd) on the roommate at 05:07 IST.** Result: green flash "Queued, starts in a few minutes" at the top; the Fetch now button vanished; no visible status slot / "Running since" line. img p1-16. Timings to follow.
+
+## Quota/OK ledger
+- Fetch now: USED on roommate 05:07 IST (user OK). None left.
+- Find contacts: not used.
