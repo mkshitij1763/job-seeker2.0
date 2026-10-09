@@ -177,11 +177,14 @@ def blocked_names(conn: sqlite3.Connection, user_id: int, company: str) -> set[t
 
 def upsert_contact(conn: sqlite3.Connection, user_id: int, company: str, name: str, role: str, linkedin_url: str, email: str,
                    email_status: str, domain: str | None = None) -> int | None:
-    row = conn.execute("SELECT id, email, email_status FROM contacts WHERE linkedin_url = ? AND linkedin_url != ''",
+    # Only shared cache rows are ever matched: a user's private (added or edited) row is never adopted.
+    row = conn.execute("""SELECT id, email, email_status FROM contacts
+                          WHERE linkedin_url = ? AND linkedin_url != '' AND owner_user_id IS NULL""",
                        (linkedin_url,)).fetchone()
     if not row and email:  # only adopt an email-matched row that isn't someone else's profile
         row = conn.execute("""SELECT id, email, email_status FROM contacts
-                              WHERE lower(email) = lower(?) AND linkedin_url = ''""", (email,)).fetchone()
+                              WHERE lower(email) = lower(?) AND linkedin_url = '' AND owner_user_id IS NULL""",
+                           (email,)).fetchone()
     if row:
         if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ? AND user_id = ?", (row["id"], user_id)).fetchone():
             return None
@@ -197,5 +200,34 @@ def upsert_contact(conn: sqlite3.Connection, user_id: int, company: str, name: s
     cid = conn.execute(
         """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source)
            VALUES (?,?,?,?,?,?, 'finder')""", (company, name, role, linkedin_url, email, email_status)).lastrowid
+    conn.commit()
+    return cid
+
+
+def edit_contact(conn: sqlite3.Connection, user_id: int, app_id: int, rank: int, name: str, email: str,
+                 email_status: str) -> int:
+    """A user's edit never changes another user's view: shared rows are copied on write, except a bounce,
+    which is a fact about the address and is recorded on the shared row for everyone."""
+    row = conn.execute("""SELECT c.* FROM application_contacts ac JOIN contacts c ON c.id = ac.contact_id
+                          WHERE ac.application_id = ? AND ac.rank = ?""", (app_id, rank)).fetchone()
+    if row is None:
+        raise LookupError("no contact at that rank")
+    name, email = name.strip(), email.strip()
+    bounce_only = (row["owner_user_id"] is None and name == row["name"] and email.lower() == (row["email"] or "").lower()
+                   and email_status == "bounced")
+    if row["owner_user_id"] == user_id or bounce_only:
+        cid = row["id"]
+        conn.execute("UPDATE contacts SET name = ?, email = ?, email_status = ? WHERE id = ?",
+                     (name, email, email_status, cid))
+    else:
+        cid = conn.execute(
+            """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source, owner_user_id)
+               VALUES (?, ?, ?, ?, ?, ?, 'manual', ?)""",
+            (row["company"], name, row["role"], row["linkedin_url"], email, email_status, user_id)).lastrowid
+        conn.execute("UPDATE application_contacts SET contact_id = ? WHERE application_id = ? AND rank = ?",
+                     (cid, app_id, rank))
+        conn.execute("UPDATE applications SET contact_id = ? WHERE id = ? AND contact_id = ?", (cid, app_id, row["id"]))
+    conn.execute("UPDATE application_contacts SET email_source = 'manual' WHERE application_id = ? AND rank = ?",
+                 (app_id, rank))
     conn.commit()
     return cid

@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from jobseeker.contacts import names
 from jobseeker.contacts.finder import run_find
 from jobseeker.db.contacts_repo import (
-    claim_find, emailed_count, find_state, get_domain, link_contact, next_candidate, nudge_due, people, third_due,
+    claim_find, edit_contact, emailed_count, find_state, get_domain, link_contact, next_candidate, nudge_due, people, third_due,
     upsert_contact,
 )
 from jobseeker.db.usage import Budget, contacts_limits
@@ -105,18 +105,13 @@ def remove(app_id: int, rank: int, user=Depends(current_user), conn=Depends(get_
 
 @router.post("/{app_id}/contacts/{rank}/edit")
 def edit(app_id: int, rank: int, name: str = Form(...), email: str = Form(""),
-         email_status: str = Form("unverified"), conn=Depends(get_conn)):
+         email_status: str = Form("unverified"), user=Depends(current_user), conn=Depends(get_conn)):
     if email_status not in {"unverified", "verified", "bounced"}:
         return _back(app_id, err="Bad email status")
-    row = conn.execute("SELECT contact_id FROM application_contacts WHERE application_id = ? AND rank = ?",
-                       (app_id, rank)).fetchone()
-    if not row:
-        raise HTTPException(404)
-    conn.execute("UPDATE contacts SET name = ?, email = ?, email_status = ? WHERE id = ?",
-                 (name.strip(), email.strip(), email_status, row["contact_id"]))
-    conn.execute("UPDATE application_contacts SET email_source = 'manual' WHERE application_id = ? AND rank = ?",
-                 (app_id, rank))
-    conn.commit()
+    try:
+        edit_contact(conn, user.id, app_id, rank, name, email, email_status)  # copy-on-write for shared rows
+    except LookupError:
+        raise HTTPException(404) from None
     return _back(app_id, msg="Saved")
 
 

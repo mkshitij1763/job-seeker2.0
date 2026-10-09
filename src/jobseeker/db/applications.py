@@ -134,24 +134,31 @@ def save_contact(conn: sqlite3.Connection, app_id: int, *, name: str, role: str,
                  email: str, email_status: str) -> int:
     company = _company_of(conn, app_id)
     user_id = get_application(conn, app_id)["user_id"]
+    # "Not interested" is per user and may sit on a shared row or on this user's own row for the same person.
+    if conn.execute("""SELECT 1 FROM contacts c JOIN blocklist b ON b.contact_id = c.id AND b.user_id = ?
+                       WHERE (c.owner_user_id IS NULL OR c.owner_user_id = ?)
+                         AND ((? != '' AND lower(c.email) = lower(?)) OR (? != '' AND c.linkedin_url = ?))""",
+                    (user_id, user_id, email, email, linkedin_url, linkedin_url)).fetchone():
+        raise BlockedContact(f"{name or email} said not interested; not attaching")
+    # Someone added by hand is always this user's private row: matched only among their own rows, never shared.
     existing = None
     if email:
-        existing = conn.execute("SELECT id FROM contacts WHERE lower(email) = lower(?)", (email,)).fetchone()
+        existing = conn.execute("SELECT id FROM contacts WHERE lower(email) = lower(?) AND owner_user_id = ?",
+                                (email, user_id)).fetchone()
     if not existing and linkedin_url:
-        existing = conn.execute("SELECT id FROM contacts WHERE linkedin_url = ?", (linkedin_url,)).fetchone()
+        existing = conn.execute("SELECT id FROM contacts WHERE linkedin_url = ? AND owner_user_id = ?",
+                                (linkedin_url, user_id)).fetchone()
     if existing:
         cid = existing["id"]
-        if conn.execute("SELECT 1 FROM blocklist WHERE contact_id = ? AND user_id = ?", (cid, user_id)).fetchone():
-            raise BlockedContact(f"{name or email} said not interested; not attaching")
         conn.execute(
             "UPDATE contacts SET name=?, role=?, linkedin_url=?, email=?, email_status=? WHERE id=?",
             (name, role, linkedin_url, email, email_status, cid),
         )
     else:
         cid = conn.execute(
-            """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status)
-               VALUES (?,?,?,?,?,?)""",
-            (company, name, role, linkedin_url, email, email_status),
+            """INSERT INTO contacts (company, name, role, linkedin_url, email, email_status, source, owner_user_id)
+               VALUES (?,?,?,?,?,?, 'manual', ?)""",
+            (company, name, role, linkedin_url, email, email_status, user_id),
         ).lastrowid
     conn.execute("UPDATE applications SET contact_id = ?, updated_at = ? WHERE id = ?", (cid, utcnow(), app_id))
     add_event(conn, app_id, "contact", {"contact_id": cid, "email_status": email_status})
