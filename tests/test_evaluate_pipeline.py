@@ -51,3 +51,24 @@ def test_late_joiner_gets_verdicts_for_existing_jobs(tmp_path, prefs, facts):
     evaluate(conn, 1, prefs.model_copy(update={'min_prescore': 0}), facts, NOW)
     evaluate(conn, 2, prefs.model_copy(update={'min_prescore': 0}), facts, NOW)
     assert get_user_job(conn, 2, j) is not None
+
+
+def test_changed_description_that_filters_skips_early_apps_only(tmp_path, prefs, facts):
+    from jobseeker.db.applications import ensure_application, get_status, transition
+
+    conn = _db(tmp_path)
+    p = prefs.model_copy(update={"min_prescore": 0})
+    early, _ = upsert_job(conn, make_job(source_job_id="e", fingerprint="fe", posted_at=NOW), NOW)
+    late, _ = upsert_job(conn, make_job(source_job_id="l", fingerprint="fl", posted_at=NOW), NOW)
+    evaluate(conn, 1, p, facts, NOW)
+    a_early = ensure_application(conn, 1, early, NOW)
+    transition(conn, a_early, "shortlisted")
+    a_late = ensure_application(conn, 1, late, NOW)
+    for status in ("shortlisted", "drafted", "approved"):
+        transition(conn, a_late, status)
+    conn.execute("UPDATE jobs SET jd_text = 'Requires 12+ years of experience', jd_hash = 'changed'")
+    conn.commit()
+    evaluate(conn, 1, p, facts, NOW)
+    assert get_user_job(conn, 1, early)["filter_reason"] and get_user_job(conn, 1, late)["filter_reason"]
+    assert get_status(conn, a_early) == "skipped"   # hidden now, before outreach: skipped (undoable)
+    assert get_status(conn, a_late) == "approved"   # a Gmail draft exists: never touched
