@@ -11,7 +11,7 @@ import httpx
 from jobseeker.clock import app_day
 from jobseeker.config import Settings
 from jobseeker.db.core import iso
-from jobseeker.push.send import VapidKeys, send_one, vapid_from_settings
+from jobseeker.push.send import InvalidSubscription, VapidKeys, send_one, vapid_from_settings
 
 RUN_NOTE = "Couldn't send the match alert"
 MAX_FAILURES = 5
@@ -55,7 +55,11 @@ def notify_new_matches(conn: sqlite3.Connection, user_id: int, run_started_at: d
             for sub in subs:
                 try:
                     status = send_one(client, sub["endpoint"], sub["p256dh"], sub["auth"], payload, keys, now)
-                except httpx.HTTPError as e:
+                except InvalidSubscription as e:
+                    log.warning("push subscription %s pruned: %s", sub["id"], e)
+                    conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
+                    continue
+                except Exception as e:  # one device must never cost the others their alert
                     log.warning("push to %s failed: %s", sub["id"], e)
                     status = 0
                 if 200 <= status < 300:

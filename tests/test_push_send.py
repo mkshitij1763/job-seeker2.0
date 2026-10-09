@@ -67,3 +67,33 @@ def test_valid_keys():
     assert valid_keys(p256dh, auth_b64)
     assert not valid_keys("abc", auth_b64) and not valid_keys(p256dh, "!!!") and not valid_keys(p256dh, "")
     assert len(urlsafe_decode(p256dh)) == 65
+
+
+def test_endpoint_allow_list():
+    from jobseeker.push.send import allowed_endpoint
+    for ok in ("https://fcm.googleapis.com/fcm/send/abc", "https://updates.push.services.mozilla.com/wpush/v2/x",
+               "https://web.push.apple.com/QGz", "https://wns2-par02p.notify.windows.com/w/?token=x"):
+        assert allowed_endpoint(ok), ok
+    for bad in ("http://fcm.googleapis.com/x", "https://evil.example/x", "https://push.apple.com.evil.example/x",
+                "https://fcm.googleapis.com:8443/x", "https://u@fcm.googleapis.com/x", "https://127.0.0.1/x",
+                "https://localhost/x", "https://notify.windows.com/x", "https://xfcm.googleapis.com/x", "nonsense"):
+        assert not allowed_endpoint(bad), bad
+
+
+def test_valid_keys_rejects_a_point_off_the_curve():
+    off_curve = urlsafe_encode(b"\x04" + b"\x01" * 64)
+    assert not valid_keys(off_curve, urlsafe_encode(os.urandom(16)))
+
+
+def test_send_one_refuses_bad_endpoint_or_key_without_a_request():
+    import pytest
+
+    from jobseeker.push.send import InvalidSubscription
+    _, p256dh, auth, _ = _subscriber()
+    with respx.mock(assert_all_called=False) as mock, httpx.Client() as client:
+        route = mock.post(url__regex=r".*").respond(201)
+        with pytest.raises(InvalidSubscription):
+            send_one(client, "https://evil.example/x", p256dh, auth, {"t": 1}, _vapid(), NOW)
+        with pytest.raises(InvalidSubscription):
+            send_one(client, ENDPOINT, urlsafe_encode(b"\x04" + b"\x01" * 64), auth, {"t": 1}, _vapid(), NOW)
+        assert not route.called
