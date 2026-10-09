@@ -1210,6 +1210,12 @@ This is the proposal for ruling (f). It is plain `scp` over Railway SSH (its SFT
    ```
    (verify) The SSH session sees the service's variables: `railway ssh -- printenv OWNER_EMAIL` prints the owner's address. If it doesn't, stop and tell `manager` before running any jobseeker command over SSH; start.sh's own migrate is unaffected. Claude never prints secret values.
 7. **Tidy and guard:**
+   - **Until B2 works (manager ruling iii', 2026-10-10), first prove a Railway backup restores on the Mac:**
+     - on Railway: `railway ssh -- setpriv --reuid=app --regid=app --init-groups env HOME=/data JOBSEEKER_HOME=/data /app/.venv/bin/jobseeker backup` (`backup` always forces a fresh archive; there is no `--force` flag). It writes `/data/backups/jobseeker-<day>.tar.gz` and says the upload is not configured;
+     - copy it down with the "pull the latest Railway backup" command (R3) into `~/JobSeeker-backups/railway/` (never into the repo), and check that `railway ssh -- sha256sum /data/backups/jobseeker-<day>.tar.gz` matches the Mac's `shasum -a 256`;
+     - `uv run jobseeker restore ~/JobSeeker-backups/railway/jobseeker-<day>.tar.gz --to <scratch dir>` passes (manifest, sha, integrity_check), and the restored DB's row counts (step 6's script, pointed at the scratch `jobseeker.db`) match Railway's. Then delete the scratch dir.
+
+     Only then:
    - `railway ssh -- rm -rf /data/profile /data/js-move.tar.gz`, and `rm -rf /tmp/js-move*` on the Mac;
    - set the Healthcheck Path to `/healthz` (MCP `update-service healthcheckPath=/healthz`). It applies from the next deploy.
 8. **Phone:**
@@ -1218,7 +1224,7 @@ This is the proposal for ruling (f). It is plain `scp` over Railway SSH (its SFT
    - the first POST (save a setting) succeeds, not 403 (`BASE_URL` = the origin; X-Forwarded-Proto is trusted);
    - reconnect Gmail through the web flow;
    - the next tick in the logs exits cleanly and prints the memory peak;
-   - `jobseeker backup` (as in step 6) uploads to B2.
+   - `jobseeker backup` (as in step 7) writes the archive; it uploads to B2 only once B2 is set up (open item).
 
    Report the first FULL tick's memory peak to manager (ruling e).
 9. **Mac:** `launchctl bootout gui/$(id -u)/com.kshitij.jobseeker.web` and `tailscale serve reset`. Keep `data/jobseeker.db` untouched for 2 weeks as the rollback.
@@ -1232,6 +1238,11 @@ This is the proposal for ruling (f). It is plain `scp` over Railway SSH (its SFT
   - A deploy failing `/healthz` is marked failed. (verify) Whether the old deployment is then restored or the service is left down; if left down, redeploy the previous commit.
   - start.sh migrates on every boot (a no-op when current).
 - **A tick in progress during a redeploy** is stopped by SIGTERM. The run lock is a heartbeat lock, so the next tick takes over once it goes stale.
+- **Pull the latest Railway backup to the Mac (at least weekly until B2 is set up):** one command, from the Mac checkout that `railway link` points at, with the `js-railway` ssh alias from R2:
+  ```
+  mkdir -p ~/JobSeeker-backups/railway && f=$(railway ssh -- ls -1t /data/backups | tr -d '\r' | grep -m1 '^jobseeker-.*\.tar\.gz$') && scp "js-railway:/data/backups/$f" ~/JobSeeker-backups/railway/ && shasum -a 256 ~/JobSeeker-backups/railway/"$f"
+  ```
+  The Railway volume is the only other copy, so this is the off-site backup until B2 works. The archive is NOT encrypted (only the B2 copy is); it holds the DB and résumés, so it stays out of the repo and out of synced folders. The Mac's own `data/jobseeker.db` stays untouched as agreed.
 - **Logs:** MCP `get-logs` or `railway logs`. Memory: MCP `get-service-metrics`. Credit: the dashboard's "days or $ left".
 
 #### R4. Trial end: exit to a real VM
