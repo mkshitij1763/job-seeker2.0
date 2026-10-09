@@ -42,14 +42,15 @@ def test_callback_stores_sealed_token_for_the_account_google_returned(client_as,
                                                                     "email_verified": True, "sub": "g"})
     with respx.mock:
         respx.post(oauth.TOKEN_URL).mock(return_value=httpx.Response(200, json={
-            "id_token": "x", "access_token": "at", "refresh_token": "rt", "expires_in": 3600}))
+            "id_token": "x", "access_token": "at", "refresh_token": "rt-SECRET-42", "expires_in": 3600,
+            "scope": SCOPE_FULL}))
         r = web.get(f"/gmail/callback?code=c&state={q['state'][0]}")
     assert r.status_code == 303 and r.headers["location"].startswith("/applications/1")
     conn = connect(settings.db_path)
     assert token_info(conn, 1)["account_email"] == "other@gmail.com"      # drafts go where Google said
     blob = conn.execute("SELECT token_enc FROM gmail_tokens WHERE user_id = 1").fetchone()[0]
-    assert b"rt" not in blob
-    assert json.loads(load_token(conn, web.app.state.token_key, 1))["refresh_token"] == "rt"
+    assert b"rt-SECRET-42" not in blob  # a short needle like b"rt" can occur in random ciphertext
+    assert json.loads(load_token(conn, web.app.state.token_key, 1))["refresh_token"] == "rt-SECRET-42"
 
 
 def test_callback_without_refresh_token_is_refused(client_as, settings, monkeypatch):
@@ -58,7 +59,8 @@ def test_callback_without_refresh_token_is_refused(client_as, settings, monkeypa
     monkeypatch.setattr(auth, "verify_id_token", lambda tok, cid: {"nonce": q["nonce"][0], "email": "o@gmail.com",
                                                                     "email_verified": True, "sub": "g"})
     with respx.mock:
-        respx.post(oauth.TOKEN_URL).mock(return_value=httpx.Response(200, json={"id_token": "x", "access_token": "at"}))
+        respx.post(oauth.TOKEN_URL).mock(return_value=httpx.Response(200, json={"id_token": "x", "access_token": "at",
+                                                                                "scope": SCOPE_FULL}))
         r = web.get(f"/gmail/callback?code=c&state={q['state'][0]}")
     assert "Google didn't grant offline access" in html.unescape(r.text) and token_info(connect(settings.db_path), 1) is None
 
@@ -138,3 +140,77 @@ def test_turning_outreach_off_deletes_the_grant(settings, client_as):
     save_token(conn, key, 1, "o@gmail.com", CREDS, T)
     set_outreach(conn, 1, False)
     assert token_info(conn, 1) is None
+
+
+def _callback(web, monkeypatch, token_json, verify=None):
+    q = _connect(web)
+    monkeypatch.setattr(auth, "verify_id_token", verify or (lambda tok, cid: {
+        "nonce": q["nonce"][0], "email": "o@gmail.com", "email_verified": True, "sub": "g"}))
+    with respx.mock:
+        respx.post(oauth.TOKEN_URL).mock(return_value=httpx.Response(200, json=token_json))
+        return web.get(f"/gmail/callback?code=c&state={q['state'][0]}")
+
+
+def test_review_5_callback_without_the_compose_scope_is_refused(client_as, settings, monkeypatch):
+    r = _callback(client_as(1, follow_redirects=False), monkeypatch, {
+        "id_token": "x", "access_token": "at", "refresh_token": "rt", "scope": "openid email"})
+    assert r.status_code == 400 and "Compose" in html.unescape(r.text)
+    assert token_info(connect(settings.db_path), 1) is None
+
+
+def test_review_8_cert_fetch_failure_is_a_retry_page_not_a_500(client_as, settings, monkeypatch):
+    from google.auth.exceptions import TransportError
+
+    def down(tok, cid):
+        raise TransportError("certs unreachable")
+    r = _callback(client_as(1, follow_redirects=False), monkeypatch, {
+        "id_token": "x", "access_token": "at", "refresh_token": "rt", "scope": SCOPE_FULL}, verify=down)
+    assert r.status_code == 400 and "Couldn't reach Google" in html.unescape(r.text)
+
+
+SCOPE_FULL = "openid https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/userinfo.email"
+
+
+def _refresh_doing(monkeypatch, side_effect):
+    """A refresh during which something else happens to the row (a reconnect, an expiry, a delete)."""
+    from google.oauth2.credentials import Credentials
+    monkeypatch.setattr(Credentials, "valid", property(lambda self: self.token == "fresh"))
+
+    def refresh(self, req):
+        side_effect()
+        self.token = "fresh"
+    monkeypatch.setattr(Credentials, "refresh", refresh)
+
+
+def test_review_7a_refresh_never_overwrites_a_reconnect(settings, client_as, monkeypatch):
+    key = client_as(1).app.state.token_key
+    conn = connect(settings.db_path)
+    save_token(conn, key, 1, "old@gmail.com", CREDS, T)
+    new = CREDS.replace('"rt"', '"rt-new"')
+    _refresh_doing(monkeypatch, lambda: save_token(connect(settings.db_path), key, 1, "new@gmail.com", new,
+                                                   datetime(2026, 10, 9, 1, tzinfo=UTC)))
+    load_service(conn, 1, key)
+    assert token_info(conn, 1)["account_email"] == "new@gmail.com"
+    assert json.loads(load_token(conn, key, 1))["refresh_token"] == "rt-new"   # the new account's grant survives
+
+
+def test_review_7b_refresh_never_resets_an_expired_grant(settings, client_as, monkeypatch):
+    from jobseeker.db.gmail_tokens import mark_expired
+    key = client_as(1).app.state.token_key
+    conn = connect(settings.db_path)
+    save_token(conn, key, 1, "o@gmail.com", CREDS, T)
+    _refresh_doing(monkeypatch, lambda: mark_expired(connect(settings.db_path), 1))
+    with pytest.raises(GmailUnavailable) as e:                         # expired meanwhile: no draft, no reset
+        load_service(conn, 1, key)
+    assert e.value.reconnect and token_info(conn, 1)["status"] == "expired"
+
+
+def test_review_7c_grant_removed_mid_refresh_is_not_a_crash(settings, client_as, monkeypatch):
+    from jobseeker.db.gmail_tokens import delete_token
+    key = client_as(1).app.state.token_key
+    conn = connect(settings.db_path)
+    save_token(conn, key, 1, "o@gmail.com", CREDS, T)
+    _refresh_doing(monkeypatch, lambda: delete_token(connect(settings.db_path), 1))
+    with pytest.raises(GmailUnavailable) as e:
+        load_service(conn, 1, key)
+    assert e.value.reconnect and token_info(conn, 1) is None

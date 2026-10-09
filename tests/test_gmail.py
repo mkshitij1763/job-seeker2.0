@@ -86,3 +86,24 @@ def test_create_draft_network_failure_is_unavailable(error):
     service = SimpleNamespace(users=lambda: SimpleNamespace(drafts=lambda: Drafts()))
     with pytest.raises(GmailUnavailable, match="reach Gmail"):
         create_draft(service, "cmF3")
+
+
+@pytest.mark.parametrize(("status", "reason", "reconnect"), [
+    (403, "rateLimitExceeded", False), (403, "userRateLimitExceeded", False), (403, "accessNotConfigured", False),
+    (403, "insufficientPermissions", True), (403, "authError", True), (401, "authError", True)])
+def test_review_6_only_auth_failures_need_reconnecting(status, reason, reconnect):
+    import json as _json
+
+    from googleapiclient.errors import HttpError
+    body = _json.dumps({"error": {"code": status, "errors": [{"reason": reason}]}}).encode()
+
+    def fails():
+        raise HttpError(SimpleNamespace(status=status, reason="x"), body)
+
+    class Drafts:
+        def create(self, userId, body):
+            return SimpleNamespace(execute=fails)
+
+    with pytest.raises(GmailUnavailable) as e:
+        create_draft(SimpleNamespace(users=lambda: SimpleNamespace(drafts=lambda: Drafts())), "cmF3")
+    assert e.value.reconnect is reconnect
