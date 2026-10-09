@@ -46,7 +46,7 @@
   | P5-T1 token sealing under TOKEN_KEY | `444ff5c` |
   | P5-T2 migration v5, User.outreach_enabled | `d9f0017` |
 
-- **Tests at the build/devops2 merge (513521d, pipeline T14 Fetch now):** 735 pytest, **26 node** (devops added JS tests). `git status` is clean.
+- **Tests at the build/devops2 merge (74d041e, pipeline complete):** 736 pytest, 26 node. `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
 - **NEXT:** HOLD. Plan 5 T1–T2 went in early, before the user approved outreach; they stay (isolated, reversible). **Do not start plan 5 T3 or anything further until `manager` relays the user's go.** When it comes: devops-lead2 is out of admin and account.py, but still in `settings.py`/`settings.html` (pipeline T14, the Fetch now card), so coordinate the Settings Gmail card in P5-T8. Ledger `.superpowers/sdd/2026-10-08-mu-outreach/progress.md`. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
@@ -100,6 +100,7 @@
 - P5-T1: no deviations. `TOKEN_KEY` is required at web startup; `scripts/server/env.example` and `ready.sh` already list it. Tests get it through `AUTH_TEST`.
 - P5-T2: no deviations. Live-copy migrate v1→v5 is clean: the FK check is empty, contacts split 15 shared / 1 private (the owner's), the owner has `outreach_enabled=1`, and there are no dangling `application_contacts`. The 5,000-job reevaluate timing test now takes the median of 3 runs (`c48d5e7`, a devops-lead2 flake report).
 - devops-lead2's Fetch now (pipeline T14) put `{% include "_fetch_now_slot.html" %}` in `today.html`, `settings.html` (Account) and `onboarding/done.html`, and `include_router(fetch_now, require_onboarded)` in `app.py`. **Keep those lines** when plan 5 edits these files.
+- devops-lead2's pipeline T16 found an FK bug in `delete_account`: `run_requests.run_id` can point at the user's own run. `runs` is now deleted last in the second loop (`tests/test_account_pipeline.py`). Plan 5 T9's delete changes must keep that ordering.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;
