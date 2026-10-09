@@ -76,3 +76,11 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 - **Fonts (`/static/fonts/*.woff2`) and manifest are not fingerprinted** → revalidated (304, ~300 B) on every page load = an extra US round trip each. CSS/JS are fingerprinted and served from cache (0 ms). Recommendation: fingerprint fonts + long immutable cache; preload Geist.
 - `/fetch-now/status` loaded by hx-get after page load on Today and Settings = a second sequential round trip; inline its initial state in the page.
 - No CLS measured (0) in iframes; layout shift to re-check visually in pass 4.
+
+## Pass 1: first matches (new roommate, ~05:12 IST)
+- Done card updates to "Checked 3,285 jobs; 170 match your filters. Your first scores arrive with the next run." — never says *when* (11:15 IST, ~6 h away). Fetch now is offered as a quiet outline button with no explanation of what it does or that it's limited.
+- **P1 first-run dead end:** Go to Jobs → "0 jobs · We're still looking. New jobs arrive after the 11:15 run, or change the filters." on Apply, Review AND All. The 170 jobs that "match your filters" are invisible anywhere until scored. Today says "**All caught up** — Shortlist jobs from Jobs…" (wrong state for a user who has seen nothing; points to an empty Jobs). Pipeline all zeros. Biggest drop-off risk of the journey: the app's promise (landing: "you read 10 jobs, not 600") meets an empty app. img p1-14.
+  Recommendation: auto-queue the first Fetch now/scoring on Finish (or show unscored matches in Review with "score pending"), give a time ("first scores by ~11:30 today"), and a distinct first-run empty state on Today/Jobs.
+- Empty-state sentence rendered twice in the Jobs DOM (table row + phone card list); fine visually per width, but screen readers read it twice. CHECK.
+- Filter menus: "All roles"/"All cities"/"All sources" links go to `/?band=apply`, dropping the current band (e.g. on Review, choosing All roles jumps back to Apply). P2 bug.
+- Desktop sidebar: brand "J Job Seeker" tile, Today/Jobs/Pipeline/Settings; no counts shown for a new user (fine). Keyboard hint "j/k move · enter open · s skip · z snooze" shown even with 0 rows.
