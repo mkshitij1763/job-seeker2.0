@@ -75,7 +75,7 @@
 | `dfa85b0` | docs: handoff row for fix 3 |
 | `e348668` | trial fix 4: bare `/onboarding` redirects to the current step, or /today once onboarded |
 | `ede0fbf` | docs: handoff row for fix 4 |
-| (gcp commit) | host → GCP e2-micro: bootstrap swap block (2 GB, swappiness 10), tick `MemoryHigh=600M` + `Nice=10`, spec/plan T5 runbook, HANDOFF.md §8, §6 here |
+| `579047e` | host → GCP e2-micro: bootstrap swap block (2 GB, swappiness 10), tick `MemoryHigh=600M` + `Nice=10`, spec/plan T5 runbook, HANDOFF.md §8, §6 here |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **UPDATE from `manager` (2026-10-09, after backend-lead2's e46bcce):** FIRST merge `origin/multi-user` (now at `e46bcce`, 826 pytest; outreach plan 5 complete + review fixes). For fix #2, backend-lead2 ALREADY made facts extraction refund its budget unit on every failure (LLMUnavailable included) in `profile/extract.py`. So fix #2 is now ONLY the user-facing wording for LLMUnavailable; don't touch the budget logic. backend-lead2 is now idle, so its files are free, but keep edits minimal.
