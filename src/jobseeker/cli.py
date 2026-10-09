@@ -73,14 +73,21 @@ def run(user: str = typer.Option("", "--user", help="The user's email (default: 
 
 @app.command()
 def backup() -> None:
-    """Save a gzipped copy of the database (keeps the last 7 days); facts live in the database."""
-    from datetime import datetime
+    """Write today's backup archive now (and upload it when B2 is configured), even if one exists."""
+    from datetime import UTC, datetime
 
-    from jobseeker.db.backup import backup as write_backup
+    from jobseeker.backup.nightly import BackupFailed, nightly_backup
 
     settings = Settings()
-    out = write_backup(settings.db_path, settings.backup_path, datetime.now().astimezone())
-    typer.echo(f"Backup written to {out}")
+    conn = connect(settings.db_path)
+    try:
+        result = nightly_backup(conn, settings, datetime.now(UTC), force=True)
+    except BackupFailed as e:
+        typer.echo(f"Backup failed: {e}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Backup written to {result.path}")
+    if result.error:
+        typer.echo(result.error, err=not result.ok)
 
 
 @app.command()
