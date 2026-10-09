@@ -43,10 +43,11 @@
 | `e5e920f` | extras T10, `notify_new_matches` |
 | `c0180a0` | pipeline T9, `profile_hash`-aware score freshness + per-run `exclude` |
 | `20e7314` | pipeline T10, round-robin scoring (`pipeline/score.py`) |
-| (this commit) | pipeline T11, round-robin drafting (`pipeline/draft.py`; run.py's copy of `draft_application` stays until T12) |
+| `de9d3c0` | pipeline T11, round-robin drafting (`pipeline/draft.py`; run.py's copy of `draft_application` stays until T12) |
+| (this commit) | pipeline T15, per-user header notes (`header_run`, `explain_stats`), IST `age`/greeting/yesterday. Small web/deps.py edit: `render`'s run lines + imports only |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT (approved by `manager`, in order):** pipeline T15 → extras T11 (unblocked: plan 3 T4 landed at `3ab1864`; merge origin/multi-user first; `/push/*` and `/sw.js` stay WITHOUT `require_onboarded`, so add them to the guard test's exemption list) → merge origin/multi-user (plan 3 T5 `69585bc`) → pipeline T8 (build ON plan 3's `pipeline/evaluate.py`, don't redefine `verdict`) → T12 → T13. Still waiting on plan 3: extras T12, T14; pipeline T14, T16; hosting T5 (manual). Stay out of files plan 3 T4–T9 edit (web/app.py, web/deps.py, cli.py, pipeline/evaluate.py, pipeline/refilter.py, db/account.py, base.html, onboarding/settings modules) or keep edits tiny and report them. The executing-plans final whole-branch review is still owed at the end.
+- **NEXT (approved by `manager`, in order):** extras T11 (unblocked: plan 3 T4 landed at `3ab1864`; merge origin/multi-user first; `/push/*` and `/sw.js` stay WITHOUT `require_onboarded`, so add them to the guard test's exemption list) → merge origin/multi-user (plan 3 T5 `69585bc`) → pipeline T8 (build ON plan 3's `pipeline/evaluate.py`, don't redefine `verdict`) → T12 → T13. Still waiting on plan 3: extras T12, T14; pipeline T14, T16; hosting T5 (manual). Stay out of files plan 3 T4–T9 edit (web/app.py, web/deps.py, cli.py, pipeline/evaluate.py, pipeline/refilter.py, db/account.py, base.html, onboarding/settings modules) or keep edits tiny and report them. The executing-plans final whole-branch review is still owed at the end.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
@@ -77,6 +78,7 @@
 - Pipeline T4: function is `migrate_v4` (file convention). `migrated_owner_db` (conftest) imports `live_like_v0`/`_ctx` from `tests/test_migrations.py` rather than refactoring that file (owned by backend-lead2), then migrates with the fixture profile/.
 - Extras T10: `notify_new_matches`'s `keys` default is a `...` sentinel (reads VAPID from Settings), as in the plan's code; `keys=None` explicitly means "no VAPID keys", so no send. The Interfaces line's `keys=None` default is superseded by the code.
 - Pipeline T10: the test's `SCORE` uses `role_family="product_analyst"`, not the plan's `"pa"`, which `LLMScore`'s Literal rejects.
+- Pipeline T15 (built before T12): `header_run`'s fallback, when the user has no `kind='user'` run, also takes a `kind='legacy'` run of theirs or a shared one (not only `kind='fetch'`), so run notes don't vanish while `run_daily` still writes legacy runs or across the upgrade. `deps.py` drops its now-unused `import json`.
 - **Standing rule (user, via `manager`):** every task commit also updates §2 here (commit row + NEXT) and §3 rulings, then `git push origin build/devops2` (that branch only, never force).
 
 ## 4. Gotchas

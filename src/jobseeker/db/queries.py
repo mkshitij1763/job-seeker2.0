@@ -4,6 +4,7 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 
+from jobseeker.clock import app_today, day_start_utc
 from jobseeker.db.applications import get_application, get_drafts, get_events
 from jobseeker.db.core import iso
 from jobseeker.db.jobs import get_job, latest_score
@@ -123,7 +124,7 @@ def today(conn: sqlite3.Connection, user_id: int, now: datetime) -> dict:
             WHERE a.user_id = ? AND a.status IN ('new', 'shortlisted', 'drafted', 'approved', 'sent')
             ORDER BY s.score DESC, a.id""", (user_id,)).fetchall()]
     drafted = [r for r in rows if r["status"] == "drafted"]
-    since = iso(now - timedelta(days=1))
+    since = iso(day_start_utc(app_today(now) - timedelta(days=1)))
     return {
         "send": [r for r in rows if r["status"] == "approved"],
         "followups": [r for r in rows if r["status"] == "sent"
