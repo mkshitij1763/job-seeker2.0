@@ -62,6 +62,12 @@ def claim_extract(conn, user_id: int, now: datetime) -> bool:
     return cur.rowcount == 1
 
 
+def extract_running(conn, user_id: int, now: datetime) -> bool:
+    row = conn.execute("SELECT extract_status, extract_started_at FROM user_facts WHERE user_id = ?",
+                       (user_id,)).fetchone()
+    return bool(row) and row["extract_status"] == "running" and (row["extract_started_at"] or "") >= iso(now - STALE_EXTRACT)
+
+
 def set_extract_status(conn, user_id: int, status: str, note: str = "") -> None:
     conn.execute("UPDATE user_facts SET extract_status = ?, extract_error = ? WHERE user_id = ?", (status, note, user_id))
     conn.commit()

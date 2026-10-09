@@ -136,3 +136,53 @@ def test_provider_errors_never_reach_the_page(newbie, client_as, monkeypatch):
     html = web.get("/onboarding/resume/status").text
     assert "401" not in html and "API Key" not in html and "Enter my skills myself" in html
     assert "read your resume right now" in html
+
+
+@pytest.mark.parametrize("path,data", [
+    ("/onboarding/where", {"cities": ["Chennai"]}),
+    ("/onboarding/roles", {"roles": ["Data Analyst"]}),
+    ("/onboarding/finish", {}),
+    ("/onboarding/facts", {"headline": "H", "skills_text": "SQL"}),
+])
+def test_onboarded_user_posting_a_step_changes_nothing(client_as, settings, path, data):
+    before = get_user_prefs(connect(settings.db_path), 1)
+    r = client_as(1, follow_redirects=False).post(path, data=data)
+    assert r.status_code == 303 and r.headers["location"] == "/settings"
+    conn = connect(settings.db_path)
+    assert get_onboarding(conn, 1)[1] is not None and get_user_prefs(conn, 1) == before
+
+
+def test_clearing_one_achievement_keeps_each_org_with_its_text():
+    from starlette.datastructures import FormData
+
+    from jobseeker.web.onboarding import parse_facts_form
+    form = FormData([("headline", "H"), ("skills_text", "SQL"),
+                     ("achievement_org", "OrgA"), ("achievement", ""),
+                     ("achievement_org", "OrgB"), ("achievement", "Grew revenue 20%"),
+                     ("achievement_org", "OrgC"), ("achievement", "Cut cost 10%")])
+    facts, errors = parse_facts_form(form)
+    assert not errors
+    assert [(a.org, a.text) for a in facts.achievements] == [("OrgB", "Grew revenue 20%"), ("OrgC", "Cut cost 10%")]
+
+
+def test_upload_while_reading_is_refused_and_nothing_is_stored(newbie, client_as, settings):
+    from datetime import UTC, datetime
+
+    from jobseeker.db.profile import claim_extract
+    from jobseeker.profile.resume import resume_path
+    web = client_as(newbie, follow_redirects=False)
+    _to_resume_step(web)
+    claim_extract(connect(settings.db_path), newbie, datetime.now(UTC))     # an extraction is running
+    r = web.post("/onboarding/resume", files={"resume": ("cv.pdf", pdf_bytes(), "application/pdf")})
+    assert "Still reading your previous upload" in web.get(r.headers["location"]).text
+    assert not resume_path(settings.jobseeker_home, newbie).exists()
+
+
+def test_extraction_never_saves_facts_for_a_different_file(newbie, settings, monkeypatch, facts, app_config):
+    from jobseeker.db.profile import get_facts
+    from jobseeker.profile.extract import run_extract
+    from jobseeker.profile.resume import store_resume
+    monkeypatch.setattr("jobseeker.profile.extract.extract_facts", lambda llm, text, model: facts)
+    store_resume(settings.jobseeker_home, newbie, pdf_bytes("B " + GOOD))     # the file on disk is B
+    run_extract(settings.db_path, settings.jobseeker_home, newbie, "sha-of-A", app_config, lambda: None)
+    assert get_facts(connect(settings.db_path), newbie) is None

@@ -85,6 +85,9 @@ def import_profile(conn: sqlite3.Connection, user_id: int, profile_dir: Path, ho
                  (user_id, up.model_dump_json(), ts, ts))
     conn.execute("UPDATE users SET name = ? WHERE id = ? AND name = ''", (prefs.name, user_id))
     report.append("imported preferences.yaml")
+    dropped = [q for q in prefs.search.queries if q not in eff.search.queries]
+    if dropped:  # only one custom role is searched; the rest still count as title words
+        report.append("search queries no longer searched (kept as title words): " + ", ".join(dropped))
     facts_file = profile_dir / "facts.json"
     if facts_file.exists():
         data = json.loads(facts_file.read_text(encoding="utf-8"))

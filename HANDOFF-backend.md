@@ -39,9 +39,9 @@
   | P3-T8 export and delete account | `770f00f` |
   | P3-T9 safety test, acceptance, Advanced matching, handoff | `558b0fd` |
 
-- **Tests at `P3-T9`:** 633 pytest (about 21 s), 19 node. `git status` is clean.
+- **Tests at the review-fix commit:** 709 pytest, 19 node, after the build/devops2 merge `765f56c` (704). `git status` is clean.
 - **`manager` independently verified T3:** a real migrate on a `.backup` copy of the live DB gives user_version 1, an empty foreign_key_check, integrity ok, apps 167 / scores 168 / jobs 4497 / user_jobs 4497, all on user 1.
-- **NEXT:** plan 3 final-review findings are with `manager` for rulings (3 Important: the onboarding step POST un-onboards a finished user; achievement/org misalignment when one is cleared; `_apps_needing_drafts` not user-scoped). No fixes until ruled. The outreach plan `docs/superpowers/plans/2026-10-08-mu-outreach.md` is written and awaits `manager`'s review. Don't build it until approved; it needs the pipeline plan fully merged first. Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
+- **NEXT:** build the outreach plan `docs/superpowers/plans/2026-10-08-mu-outreach.md` (approved by `manager`). Do **P5-T1 (crypto) and P5-T2 (migration v5) only**, then hold T3+ until `manager` confirms devops-lead2 is done with settings/admin/account.py (extras T12/T14, pipeline T14/T16). Rule from `manager`: every task commit also updates this §2 table, this NEXT line and §3, then `git push origin multi-user` (never main, never force).
 - **Ledger:** `.superpowers/sdd/2026-10-08-mu-accounts-auth/progress.md` (git-ignored, on disk). Resume from the first task without a "complete" line. Skill scripts: `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done} <plan> <N> [BASE] -- <test cmd>`. The BASE for the next task is the last task commit in the table above. Cloud sessions have no ledger: this file is the record.
 - **Execution:** inline (superpowers:executing-plans), with TDD per task. After each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a design change beyond the spec, or if tests can't be made green.
 
@@ -79,6 +79,17 @@
   - **Extraction errors:** `run_extract` never shows provider text. Any `LLMError` or crash shows "Couldn't read your resume right now…" and is logged. Acceptance caught a raw 401 message on the page.
   - **Test speed:** conftest builds the imported owner DB once per session (32 s → 21 s).
   - **Refilter drift:** the live-copy `refilter` dry run shows 5 hidden and 5 restored. That's pre-existing drift, not the move: migrated and original prefs give identical reports. Spec 4's `jd_hash` re-evaluation should absorb it.
+- Plan 3 final review (fresh Opus; rulings by `manager`):
+  - Fixed, test-first, in "fix(onboarding): review findings":
+    - #1: an onboarded user's POST to `/onboarding/*` (steps, resume, facts, finish) gets a 303 to `/settings` and changes nothing.
+    - #2: `parse_facts_form` pairs each achievement with its org before dropping cleared ones.
+    - #5: the v2 report lists search queries that are no longer searched.
+    - #6: an upload while an extraction is running is refused ("Still reading your previous upload; try again in a minute"), and `run_extract` never saves facts when the file's sha differs from the one it was queued for.
+  - #3 (`_apps_needing_drafts` unscoped) was solved upstream by the pipeline merge.
+  - **Known minors, deferred:**
+    - #4: an unmatched query that isn't already a title word aborts v2's golden check (latent; the live owner passes).
+    - #7: Caddy's 6 MB cap gives a bare 413 above 6 MB.
+    - #8: deleting an account frees that day's global facts headroom.
 - Earlier, accepted by `manager`:
   - a fresh DB seeds `users(1, email='')`, and `ensure_owner()` fills it from `OWNER_EMAIL`;
   - `schema_v0.sql` lives in `src/jobseeker/db/`;

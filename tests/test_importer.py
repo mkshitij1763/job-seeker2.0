@@ -60,3 +60,11 @@ def test_unmatched_query_becomes_custom_role(tmp_path):
     import_profile(conn, 1, prof, tmp_path, NOW)
     from jobseeker.db.profile import get_user_prefs
     assert get_user_prefs(conn, 1).custom_role == "Chief of Staff"
+
+
+def test_dropped_queries_are_reported(tmp_path):
+    prof = _profile(tmp_path)
+    text = (prof / "preferences.yaml").read_text().replace("queries: [", "queries: [Chief of Staff, Strategy, ")
+    (prof / "preferences.yaml").write_text(text)
+    report = import_profile(connect(tmp_path / "db.sqlite"), 1, prof, tmp_path, NOW)
+    assert any("Strategy" in line and "no longer searched" in line for line in report)
