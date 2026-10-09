@@ -25,8 +25,10 @@ COPY scripts/railway/start.sh ./scripts/railway/
 RUN uv sync --frozen --no-dev
 
 # No USER line: Railway mounts the volume root-owned, so start.sh chowns /data and then drops to `app` with setpriv.
+# setpriv (util-linux) and timeout (coreutils) are start.sh's only tools beyond bash: fail the build, not the boot.
 RUN useradd --system --uid 10001 --user-group --home-dir /data --no-create-home app \
-    && chmod 0755 /app/scripts/railway/start.sh
+    && chmod 0755 /app/scripts/railway/start.sh \
+    && setpriv --version && timeout --version
 
 ENV JOBSEEKER_HOME=/data \
     PATH=/app/.venv/bin:$PATH
