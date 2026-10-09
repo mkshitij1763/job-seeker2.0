@@ -1,15 +1,15 @@
-# HANDOFF: devops-lead (multi-user build), 2026-10-08
+# HANDOFF: devops-lead (multi-user build), updated 2026-10-09 by manager
 
-> **START HERE (new session).** You are **devops-lead**, a senior dev on job-seeker2.0's multi-user hosted app. You report to the coordinator session **`manager`** (use `SendMessage` to `manager`), not to the user. Send design questions to `manager`; it makes the calls or passes them to the user. Background on the product: `HANDOFF.md` §1–§3. Treat §8 there as history; this file supersedes it for your work.
+> **START HERE (new or /cleared session).** You are **devops-lead2** (session name), formerly devops-lead, a senior dev on job-seeker2.0's multi-user hosted app. You report to the coordinator session **`manager`** (use `SendMessage` to `manager`), not to the user. Send design questions to `manager`; it makes the calls or passes them to the user. Background on the product: `HANDOFF.md` §1–§3. Treat §8 there as history; this file supersedes it for your work.
 
 ## 1. Where you work
 - **Worktree:** `/Users/user/Desktop/untitled folder/js-devops2`, branch **`build/devops2`** (from `origin/multi-user` `2f473a9`, the merge of `build/devops` into plan 2). You are the only writer on it. The old `js-build` / `build/devops` is merged and finished.
 - **The Bash cwd resets to the MAIN checkout after every call.** That checkout is on `main` and runs the LIVE app. Start every command with `cd "/Users/user/Desktop/untitled folder/js-devops2" && …`. **Never touch the main checkout or `multi-user`.** backend-lead owns `multi-user`, in `../js-mu-backend`.
-- **Git:** commit per task, ending messages with the attribution lines your session uses. Don't push. Push `build/devops2` only (never force, never main or multi-user); `manager` merges it into `multi-user`.
+- **Git:** commit per task, ending messages with the attribution lines your session uses, then `git push origin build/devops2` (that branch only; never force, never `main` or `multi-user`). backend-lead2 merges it into `multi-user` when `manager` says so.
 - **zsh doesn't word-split `$VAR` commands;** use a shell function. Don't chain `grep … && git commit`, because grep also matches "failed".
 
-## 2. Status (at pause)
-- **Order set by `manager`:** pipeline T1 ✓ → hosting T1–T4 ✓ → **extras T1–T6** → **pipeline T2, T6** → stand by.
+## 2. Status (as of 2026-10-09, build/devops2 @ `cec5895`; everything up to `74d041e` is merged into multi-user as `e32a467`)
+- **Built:** extras T1–T14, pipeline T1–T16, hosting T1–T4. ALL buildable devops tasks are done.
 - **Commits:**
 
   | Commit | What |
@@ -61,7 +61,7 @@
 | (this commit) | docs: hosting T5 Step 3 gains the one-off `js refilter --apply` after migrating |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
-- **NEXT:** all buildable tasks are done: extras T1–T14, pipeline T1–T16, hosting T1–T4. **Stand by** for `manager`. Remaining: hosting T5 (manual, with the user, at cutover) and the executing-plans **final whole-branch review** (owed; `manager` decides when). Final verification at this commit: 726 pytest, 726 with `TZ=UTC`, 26 node; no `run_daily`/`RunStats` left in `src`.
+- **NEXT: the whole-branch review** (assigned by `manager`; if a reviewer was already started before the /clear, its result is lost, so start it again). Spawn ONE fresh reviewer subagent on the most capable model over all your product code: `build/devops` from `7136ea9`, plus `build/devops2`'s own commits (exclude the merges of `multi-user`). Focus, in priority order: (1) crypto: AES-GCM nonce handling, key length, AAD; RFC 8291 push encryption and the VAPID JWT; (2) SigV4 signing; no secrets logged; (3) bootstrap.sh/deploy.sh/ready.sh safety: quoting, idempotency, rollback correctness, .env and data-dir permissions, the iptables rules, sshd hardening not locking the user out; (4) lock/tick races and Fetch now rate limits (per-user and global, no bypass via HTMX or concurrent requests); (5) backups: restore never overwrites the live DB, archives exclude .env, retention is correct; (6) /healthz and /push/* expose nothing, and push payloads stay private; (7) per-user isolation in run_all/evaluate/score/draft. Send `manager` the ranked findings with file:line, and **fix nothing until `manager` rules**. After that, stand by: hosting T5 is manual with the user, once their Oracle VM is ready.
 - **Ledgers (git-ignored, on disk):** `.superpowers/sdd/2026-10-08-mu-{hosting,extras,per-user-pipeline}/progress.md`. The first line is the plan path; "Task N: complete" lines mark what's done.
 - **Skill scripts:** `…/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`. Run task-done with `env PYTHONWARNINGS=ignore FORCE_COLOR= uv run pytest --color=no -p no:warnings`.
 - **Reporting:** after each task, send `manager` one line: task, commit, pytest/node counts. Stop and message `manager` if a task needs a spec change.
