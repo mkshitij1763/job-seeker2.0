@@ -90,3 +90,18 @@ Top-level navigation of /today in the real window (500 px): TTFB 286, DCL 396, l
 ## Quota/OK ledger
 - Fetch now: USED on roommate 05:07 IST (user OK). None left.
 - Find contacts: not used.
+
+## Pass 2: owner — Admin (1440, read-only)
+- /admin: Invites table (Email/Invited/Accepted + Remove), Users (Email/Name/Last login/Status/Outreach + Turn outreach on/off + Disable), Usage, Backups.
+- **Dates are UTC, not IST**: horizon invited+accepted "2026-10-09" though it happened 2026-10-10 ~05:05 IST (= 23:35 UTC 9 Oct). Same for Joined/Last login on the user view. P2 (wrong day for ~5.5 h every night).
+- Usage: raw float "0.24000000000000007" (apify) — no rounding, no units ($ vs calls), raw service keys ("groq:facts", "score", "tavily"); tombstone row "deleted-2@invalid". Note "Daily services show today, monthly services this month" doesn't say which is which. P2.
+- No confirmation on Disable / Remove invite / outreach toggles (single click POST). Disable shown on the owner's own row (server refuses via LastAdmin, so P3: hide it). Remove shown for an *accepted* invite (what does it do to the user? unclear). P2.
+- **/admin scrolls horizontally at 1440 and 390** (scrollWidth > innerWidth). P2.
+- Backups: "Off-site backup isn't configured" (expected while B2 off).
+- Owner row name "Kshitij Meshram" and roommate name "Kshitij Meshram" (same Google display name) → only email distinguishes; fine for the test, but avatar/initial would help.
+## Pass 2: Admin user view /admin/users/4 (roommate)
+- Header "Kshitij Meshram ← Admin", "Read-only. Their resume, facts, Gmail, contacts and drafts stay private." Good disclosure.
+- **Privacy/trust P1: Pay (current CTC, target base) is shown to the admin.** Onboarding's notice says "job preferences and application statuses"; the landing says "job preferences". Salary is the item people least expect to be shared with a roommate. Either hide pay from the admin view or say so explicitly next to the CTC fields.
+- Shows "Jobs up to 7 days old" — a setting the user never saw or set (not in onboarding or Settings?). CHECK Settings.
+- **Match quality P1:** Shown 170 for roles PA/APM/PM includes Inventory Analyst (Stalwarts), Clinical Business Analyst, QA Analyst Lead, Senior Incident Response Analyst (Jobgether), Operations Analyst (ANZ), Lead Data Analyst (Target), Product Control Sr Analyst (Deutsche Bank), SENIOR, DATA ANALYST (Walmart). Looks like the role filter admits any "Analyst"; seniority words pass (no senior/lead/principal in default deny). The scorer may sink them, but they cost the user's per-day score share and clutter Review.
+- Top-20 table: "Score —" for all (not scored yet); "best score first" with no scores reads oddly.
