@@ -31,6 +31,7 @@ def _back(msg="", err=""):
 def _page(request, conn, user, status: int = 200, **ctx):
     ctx.setdefault("up", get_user_prefs(conn, user.id))
     ctx.setdefault("errors", {})
+    ctx.setdefault("vapid_public_key", request.app.state.settings.vapid_public_key)
     response = render(request, conn, "settings.html", cfg=request.app.state.app_config,
                       facts_info=facts_row(conn, user.id), **status_context(conn, user.id, "/settings"), **ctx)
     response.status_code = status
@@ -49,6 +50,13 @@ def profile(linkedin: str = Form(""), github: str = Form(""), user=Depends(curre
         return _back(err="Links must start with https://")
     save_user_prefs(conn, user.id, get_user_prefs(conn, user.id).model_copy(update=links), datetime.now(UTC))
     return _back(msg="Profile saved")
+
+
+@router.post("/prefs/alerts")  # declared before /prefs/{section}, which would otherwise catch it
+def save_alerts(notify_new_matches: str | None = Form(None), user=Depends(current_user), conn=Depends(get_conn)):
+    up = get_user_prefs(conn, user.id).model_copy(update={"notify_new_matches": bool(notify_new_matches)})
+    save_user_prefs(conn, user.id, up, datetime.now(UTC))
+    return RedirectResponse("/settings?msg=Saved#alerts", 303)
 
 
 @router.post("/prefs/{section}")

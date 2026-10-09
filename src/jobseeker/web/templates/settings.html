@@ -53,6 +53,8 @@
   {% include "_resume_status.html" %}
 </section>
 
+{% include "_push_card.html" %}
+
 <section class="card block" id="account">
   <h2 class="section-title">Account</h2>
   <p><a class="btn" href="/settings/export" hx-boost="false">Download my data</a></p>
@@ -62,4 +64,5 @@
 </section>
 
 </div>
+<script src="{{ asset('push.js') }}" defer></script>
 {% endblock %}
