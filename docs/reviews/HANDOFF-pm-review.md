@@ -9,7 +9,7 @@ Live app: https://job-seeker20-production.up.railway.app (Railway trial, US East
 ## UPDATE 06:10 IST — REVIEW WRITTEN UP (read this first)
 - Report is complete: §1 summary, §6 sequencing, findings to **PM-072**, DRAFT line removed. Counts P0 1 (resolved) · P1 12 · P2 40 · P3 19.
 - Roommate run ~06:02 scored 0 (shared AI limit used by the owner's run) → **PM-071 (P1)**; notes copy → PM-072. C3, D8 and the outreach job page are **NOT RUN (blocked: roommate has 0 jobs)**. Re-test them after the next run that scores for the roommate (tomorrow 11:15 at the latest), then update §2.
-- Still to do by the user: turn roommate outreach OFF on /admin.
+- Roommate outreach turned **OFF** by the user on /admin (~06:15 IST). Nothing left for the user.
 
 ## UPDATE 05:58 IST (2nd session)
 - New tab ids: roommate **147722987** (Browser 1), owner **147722990** (Browser 2, read-only GETs only). Old ids are gone.
