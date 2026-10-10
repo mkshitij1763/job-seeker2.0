@@ -40,6 +40,13 @@ def test_railway_json_pins_the_dockerfile_builder():
     assert cfg["build"] == {"builder": "DOCKERFILE", "dockerfilePath": "Dockerfile"}
 
 
+def test_railway_json_gives_a_running_tick_time_to_clean_up():
+    # Railway's default is 0 s between SIGTERM and SIGKILL, so the tick's SIGTERM handler (free the lock, fail the
+    # Fetch now request) would never run; a killed tick then blocks every tick for the 15-minute lock takeover.
+    cfg = json.loads((ROOT / "railway.json").read_text())
+    assert int(cfg["deploy"]["drainingSeconds"]) >= 10
+
+
 def test_uv_is_pinned_inside_uv_build_range():
     # pyproject's build backend is uv_build>=0.11,<0.12; the image's uv must be an exact 0.11.x.
     build_req = tomllib.loads((ROOT / "pyproject.toml").read_text())["build-system"]["requires"][0]
@@ -109,7 +116,14 @@ JOBSEEKER_STUB = """#!/bin/bash
 echo "$*" >> "$STUB_LOG"
 case "$1" in
   migrate) exit "${MIGRATE_EXIT:-0}" ;;
-  tick) echo $$ >> "$STUB_LOG.tickpids"; sleep "${TICK_SLEEP:-0}"; exit "${TICK_EXIT:-0}" ;;
+  tick) echo $$ >> "$STUB_LOG.tickpids"
+        if [ -n "$TICK_CLEANUP" ]; then
+          trap 'sleep "$TICK_CLEANUP"; echo cleaned >> "$STUB_LOG.cleanup"; exit 143' TERM
+          sleep "${TICK_SLEEP:-0}" & wait $!
+        else
+          sleep "${TICK_SLEEP:-0}"
+        fi
+        exit "${TICK_EXIT:-0}" ;;
   serve) echo $$ > "$STUB_LOG.servepid"; trap 'exit 0' TERM; sleep "${SERVE_SLEEP:-60}" & wait $!; exit "${SERVE_EXIT:-0}" ;;
 esac
 """
@@ -248,6 +262,17 @@ def test_sigterm_stops_serve_and_a_running_tick(railway):
     code, _ = _stop(p)
     assert code == 0 and time.monotonic() - t0 < 4
     assert _wait_for(lambda: not _alive(tick_pid) and not _alive(serve_pid), 3)
+
+
+def test_sigterm_waits_for_the_tick_to_clean_up(railway):
+    # The tick turns SIGTERM into SystemExit and needs a moment to close its run log, fail the Fetch now request and
+    # free the lock. If start.sh (PID 1) exited first, the container would be torn down mid-cleanup.
+    start, calls, log, _ = railway
+    p = start(TICK_SLEEP="30", TICK_CLEANUP="0.5")
+    assert _wait_for(lambda: log.with_name("calls.log.tickpids").exists())
+    code, _ = _stop(p)
+    assert code == 0
+    assert log.with_name("calls.log.cleanup").read_text().split() == ["cleaned"]
 
 
 def test_if_serve_dies_the_script_exits_nonzero_and_stops_the_loop(railway):

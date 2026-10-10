@@ -71,12 +71,23 @@ def _runner(settings, conn, now, holder, force_users=frozenset(), fetch=True):
     return cfg, run
 
 
+def _exit_on_sigterm() -> None:
+    """A deploy SIGTERMs the tick (start.sh passes it on). As SystemExit it unwinds through the `finally`s: run_all
+    closes its run log, tick fails the Fetch now request, and the run lock is released, instead of a dead lock
+    blocking every tick until the takeover window passes."""
+    import signal
+    import sys
+
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
+
+
 @app.command()
 def tick() -> None:
     """Called every 5 minutes by the host: runs the daily schedule, Fetch now requests and the nightly backup."""
     from jobseeker.db.locks import holder_id
     from jobseeker.pipeline.tick import tick as do_tick
 
+    _exit_on_sigterm()
     settings, now = Settings(), datetime.now(UTC)
     conn = connect(settings.db_path)
     holder = holder_id()
@@ -102,6 +113,7 @@ def _manual(email: str, fetch: bool, force: bool) -> None:
     from jobseeker.db.locks import acquire, held_since, holder_id, release
     from jobseeker.pipeline.eligible import active_users
 
+    _exit_on_sigterm()
     settings, now = Settings(), datetime.now(UTC)
     conn = connect(settings.db_path)
     holder = holder_id()

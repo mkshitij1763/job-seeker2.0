@@ -7,6 +7,11 @@ from datetime import datetime, timedelta
 from jobseeker.clock import app_today, day_start_utc
 from jobseeker.db.core import iso
 
+# A run the app itself cut short (a deploy or a variables change SIGTERMs the tick). Written into the runs' errors, it
+# frees the user's Fetch now: such runs count toward neither the per-user spacing nor the daily cap.
+INTERRUPTED = "Interrupted by an app update; try again"
+_NOT_INTERRUPTED = "errors NOT LIKE '%' || ? || '%'"
+
 
 def queue(conn: sqlite3.Connection, user_id: int, now: datetime) -> int:
     cur = conn.execute("INSERT INTO run_requests (user_id, requested_at, status) VALUES (?, ?, 'queued')",
@@ -42,16 +47,25 @@ def fail_stuck(conn, now: datetime, minutes: int) -> int:
 
 
 def last_fetch_now_started(conn, user_id: int) -> str | None:
-    row = conn.execute("SELECT MAX(started_at) FROM runs WHERE kind = 'user' AND trigger = 'fetch_now' AND user_id = ?",
-                       (user_id,)).fetchone()
+    row = conn.execute("SELECT MAX(started_at) FROM runs WHERE kind = 'user' AND trigger = 'fetch_now' AND user_id = ? "
+                       f"AND {_NOT_INTERRUPTED}", (user_id, INTERRUPTED)).fetchone()
     return row[0]
+
+
+def interrupted_since(conn, user_id: int, since: datetime) -> bool:
+    """The user's latest request failed because the app interrupted its run, after `since`."""
+    row = conn.execute("""SELECT r.errors FROM run_requests q JOIN runs r ON r.id = q.run_id
+                          WHERE q.user_id = ? AND q.status = 'failed' AND q.finished_at >= ?
+                            AND q.id = (SELECT MAX(id) FROM run_requests WHERE user_id = ?)""",
+                       (user_id, iso(since), user_id)).fetchone()
+    return bool(row) and INTERRUPTED in row["errors"]
 
 
 def fetch_now_count_today(conn, now: datetime, *, include_queued: bool = True) -> int:
     """Fetch now runs started today, plus requests still queued (each will start one). The tick re-checks with
     include_queued=False just before running a request, so the queue can never push the day past the cap."""
-    started = conn.execute("SELECT COUNT(*) FROM runs WHERE kind = 'fetch' AND trigger = 'fetch_now' AND started_at >= ?",
-                           (iso(day_start_utc(app_today(now))),)).fetchone()[0]
+    started = conn.execute("SELECT COUNT(*) FROM runs WHERE kind = 'fetch' AND trigger = 'fetch_now' AND started_at >= ? "
+                           f"AND {_NOT_INTERRUPTED}", (iso(day_start_utc(app_today(now))), INTERRUPTED)).fetchone()[0]
     if not include_queued:
         return started
     return started + conn.execute("SELECT COUNT(*) FROM run_requests WHERE status = 'queued'").fetchone()[0]

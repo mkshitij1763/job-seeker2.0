@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from jobseeker.db.locks import LockLost
+from jobseeker.db.run_requests import INTERRUPTED
 from jobseeker.db.runs import finish_run, start_run
 from jobseeker.llm import FallbackLLM
 from jobseeker.pipeline.describe import describe_shared
@@ -114,6 +115,9 @@ def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, ll
             draft_round_robin(conn, drafters, llm, cfg, now, heartbeat)
     except LockLost:
         report.aborted = "run superseded"
+    except SystemExit:  # SIGTERM (cli.py turns it into SystemExit): close the run log below, then let the exit go on
+        report.aborted = INTERRUPTED
+        raise
     except Exception as e:  # the run log must always be closed
         report.aborted = f"run aborted: {type(e).__name__}: {e}"
     finally:
