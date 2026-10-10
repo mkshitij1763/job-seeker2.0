@@ -16,4 +16,6 @@ def inbox(request: Request, band: str = "apply", family: str = "", city: str = "
     rows = queries.inbox(conn, user.id, band=band, family=family or None, city=city or None,
                          source=source or None, status=status or None)
     f = {"band": band, "family": family, "city": city, "source": source}
-    return render(request, conn, "inbox.html", rows=rows, f=f, **queries.inbox_facets(conn, user.id))
+    show_pending = band in ("review", "all") or not rows
+    pending = queries.pending_scores(conn, user.id) if show_pending else {"count": 0, "rows": []}
+    return render(request, conn, "inbox.html", rows=rows, f=f, pending=pending, **queries.inbox_facets(conn, user.id))

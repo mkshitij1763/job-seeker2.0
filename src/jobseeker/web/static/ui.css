@@ -424,3 +424,7 @@ input, select, textarea { min-width: 0; }
 .prefs-section > summary { cursor: pointer; font-weight: 600; }
 .settings .preview { border-color: var(--accent); background: var(--accent-wash); margin-bottom: 12px; }
 #account form { margin: 8px 0; }
+/* score pending (Jobs): matches waiting for their first score */
+.pending { margin-bottom: 16px; }
+.pending-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.pending-list li { padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }

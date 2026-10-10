@@ -41,6 +41,24 @@ def inbox(conn: sqlite3.Connection, user_id: int, band: str = "apply", family: s
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
+_PENDING = """FROM user_jobs uj JOIN jobs j ON j.id = uj.job_id
+               WHERE uj.user_id = ? AND uj.filter_reason IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM scores s WHERE s.user_id = uj.user_id AND s.job_id = uj.job_id)"""
+
+
+def pending_scores(conn: sqlite3.Connection, user_id: int, limit: int = 20) -> dict:
+    """Jobs that pass this user's filters but have no score yet (scoring is capped per day), best pre-score first."""
+    count = conn.execute(f"SELECT COUNT(*) {_PENDING}", (user_id,)).fetchone()[0]
+    rows = conn.execute(f"""SELECT j.id AS job_id, j.title, j.company, j.apply_url, uj.prescore {_PENDING}
+                            ORDER BY uj.prescore DESC, j.first_seen_at DESC, j.id DESC LIMIT ?""",
+                        (user_id, limit)).fetchall() if limit else []
+    return {"count": count, "rows": [dict(r) for r in rows]}
+
+
+def has_any_score(conn: sqlite3.Connection, user_id: int) -> bool:
+    return conn.execute("SELECT 1 FROM scores WHERE user_id = ? LIMIT 1", (user_id,)).fetchone() is not None
+
+
 def inbox_facets(conn: sqlite3.Connection, user_id: int) -> dict:
     def distinct(sql, params=()):
         return [r[0] for r in conn.execute(sql, params).fetchall() if r[0]]

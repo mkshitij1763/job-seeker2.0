@@ -22,4 +22,6 @@ def _local_hour() -> int:
 
 @router.get("/today")
 def today(request: Request, user=Depends(current_user), conn=Depends(get_conn)):
-    return render(request, conn, "today.html", t=queries.today(conn, user.id, datetime.now(UTC)), now_hour=_local_hour())
+    first_run = not queries.has_any_score(conn, user.id)  # a new user: "All caught up" would be untrue
+    return render(request, conn, "today.html", t=queries.today(conn, user.id, datetime.now(UTC)), now_hour=_local_hour(),
+                  first_run=first_run, pending=queries.pending_scores(conn, user.id, 0)["count"] if first_run else 0)

@@ -5,6 +5,13 @@
 {% set hour = now_hour if now_hour is defined else 9 %}
 {% set first = (user.name or "").split()|first %}
 {% macro job(r) %}<a class="today-job" href="/applications/{{ r.app_id }}"><span class="pill tier-{{ tier(r.score) }}">{{ r.score }}</span><span class="today-job-text"><b>{{ r.title }}</b><small class="muted">{{ r.company }}</small></span></a>{% endmacro %}
+{% macro caught_up(text) %}
+  {% if first_run %}
+  <section class="card empty"><h2>Your first matches are on the way</h2><p>{{ "{:,}".format(pending) }} job{{ "s" if pending != 1 }} match your filters. Scores arrive with your first search; Job search above shows where it is.</p></section>
+  {% else %}
+  <section class="card empty"><h2>All caught up</h2><p>{{ text }}</p></section>
+  {% endif %}
+{% endmacro %}
 <header class="page-head">
   <h1>Good {{ "morning" if hour < 12 else ("afternoon" if hour < 17 else "evening") }}{% if first %}, {{ first }}{% endif %}.</h1>
   <p class="muted">Here's what needs you today.</p>
@@ -27,7 +34,7 @@
     {% for r in t.shortlisted %}<div class="today-row">{{ job(r) }}</div>{% endfor %}
   </section>
   {% else %}
-  <section class="card empty"><h2>All caught up</h2><p>Shortlist jobs from Jobs, then apply on the company site.</p></section>
+  {{ caught_up("Shortlist jobs from Jobs, then apply on the company site.") }}
   {% endif %}
   {% else %}
   {% if t.send %}
@@ -64,7 +71,7 @@
   </section>
   {% endif %}
   {% if not (t.send or t.followups or t.ready or t.find_contacts) %}
-  <section class="card empty"><h2>All caught up</h2><p>Nothing needs you right now. New jobs arrive after the 11:15 run.</p></section>
+  {{ caught_up("Nothing needs you right now. New jobs arrive after the 11:15 run.") }}
   {% endif %}
   {% endif %}
 </div>

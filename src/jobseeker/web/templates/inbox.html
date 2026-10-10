@@ -1,6 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Jobs · Job Seeker{% endblock %}
 {% block content %}
+{% macro pending_card() %}
+{% if pending.count %}
+<section class="card pending" id="pending">
+  <h2 class="section-title">Score pending <span class="pill">{{ pending.count }}</span></h2>
+  <p class="muted">{{ pending.count }} match{{ " is" if pending.count == 1 else "es are" }} waiting for a score. Scores arrive with the next search; the best pre-scores go first.</p>
+  <ul class="pending-list">
+  {% for p in pending.rows %}
+    <li><a href="{{ p.apply_url }}" target="_blank" rel="noopener" hx-boost="false">{{ p.title }}</a> <span class="muted">{{ p.company }}</span> <span class="pill">score pending</span></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endmacro %}
 {% macro q(band=f.band, family=f.family, city=f.city, source=f.source) -%}
   {%- set parts = [] -%}
   {%- for k, v in [("band", band), ("family", family), ("city", city), ("source", source)] if v -%}
@@ -31,6 +44,7 @@
     <div class="menu"><a href="{{ q(source='') }}">All sources</a>{% for x in sources %}<a href="{{ q(source=x) }}">{{ x }}</a>{% endfor %}</div>
   </details>
 </div>
+{{ pending_card() }}
 <div class="card table-card">
 <table class="inbox" data-keys="rows">
   <thead><tr><th>Match</th><th>Role</th><th>Company</th><th>City</th><th>Age</th><th>Why</th><th></th></tr></thead>
@@ -49,7 +63,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="empty">We're still looking. New jobs arrive after the 11:15 run, or change the filters.</td></tr>
+    <tr><td colspan="7" class="empty">{{ 'No scored jobs here yet.' if pending.count else "We're still looking. New jobs arrive after the 11:15 run, or change the filters." }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -78,7 +92,7 @@
     </div>
   </li>
   {% else %}
-  <li class="empty">We're still looking. New jobs arrive after the 11:15 run, or change the filters.</li>
+  <li class="empty">{{ 'No scored jobs here yet.' if pending.count else "We're still looking. New jobs arrive after the 11:15 run, or change the filters." }}</li>
   {% endfor %}
 </ul>
 {% endblock %}
