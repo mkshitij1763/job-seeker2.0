@@ -265,7 +265,8 @@ CREATE TABLE IF NOT EXISTS run_requests (
   requested_at TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
   run_id INTEGER REFERENCES runs (id),
-  finished_at TEXT
+  finished_at TEXT,
+  trigger TEXT NOT NULL DEFAULT 'fetch_now' CHECK (trigger IN ('fetch_now', 'onboarding'))
 );
 CREATE INDEX IF NOT EXISTS idx_run_requests_status ON run_requests (status, requested_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_run_requests_one_pending ON run_requests (user_id)

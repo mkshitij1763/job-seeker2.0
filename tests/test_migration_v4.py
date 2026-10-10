@@ -18,7 +18,8 @@ def test_fresh_shape(tmp_path):
     assert {"trigger", "parent_id", "kind", "user_id"} <= _cols(conn, "runs")
     assert "profile_hash" in _cols(conn, "scores")
     assert _cols(conn, "locks") == {"name", "holder", "acquired_at", "heartbeat_at"}
-    assert _cols(conn, "run_requests") == {"id", "user_id", "requested_at", "status", "run_id", "finished_at"}
+    assert _cols(conn, "run_requests") == {"id", "user_id", "requested_at", "status", "run_id", "finished_at",
+                                         "trigger"}
 
 
 def test_start_run_records_trigger_and_parent(tmp_path):

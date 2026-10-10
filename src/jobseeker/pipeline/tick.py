@@ -58,19 +58,23 @@ def tick(conn, *, settings, cfg, now: datetime, run, backup=nightly_backup, ping
             return "scheduled"
         req = run_requests.next_queued(conn)
         if req:
-            if run_requests.fetch_now_count_today(conn, now, include_queued=False) >= cfg.fetch_now.max_per_day:
+            trigger = req.get("trigger") or "fetch_now"  # 'onboarding': no fetch, exempt from the daily cap
+            if trigger == "fetch_now" and \
+                    run_requests.fetch_now_count_today(conn, now, include_queued=False) >= cfg.fetch_now.max_per_day:
                 run_requests.mark(conn, req["id"], "failed", now)  # queued past the cap: never run it
                 return "fetch_now_refused"
             run_requests.mark(conn, req["id"], "running", now)
             user = user_by_id(conn, req["user_id"])
             try:
-                report = run("fetch_now", [user], cfg.search.max_searches_fetch_now)
+                report = run(trigger, [user], cfg.search.max_searches_fetch_now)
             except SystemExit:  # SIGTERM mid-run: fail the request now (the user sees why), then release the lock
-                rid = conn.execute("SELECT MAX(id) FROM runs WHERE kind = 'fetch' AND trigger = 'fetch_now' "
-                                   "AND started_at >= ?", (iso(now),)).fetchone()[0]
+                kind = "fetch" if trigger == "fetch_now" else "user"
+                rid = conn.execute("SELECT MAX(id) FROM runs WHERE kind = ? AND trigger = ? AND started_at >= ?",
+                                   (kind, trigger, iso(now))).fetchone()[0]
                 run_requests.mark(conn, req["id"], "failed", now, rid)
                 raise
-            run_requests.mark(conn, req["id"], "failed" if report.aborted else "done", now, report.fetch_run_id)
+            run_id = report.fetch_run_id or report.user_runs.get(user.id)  # a no-fetch run has only the user's run
+            run_requests.mark(conn, req["id"], "failed" if report.aborted else "done", now, run_id)
             return "fetch_now"
         return "idle"
     finally:

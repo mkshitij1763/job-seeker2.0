@@ -23,7 +23,7 @@ contacts: {tavily_monthly_limit: 950, apify_monthly_usd_limit: 4.5, hunter_month
            smtp_verify: "off"}  # off | on | auto (auto probes port 25 once a day)
 default_title_deny: [sales, sde, software engineer, intern, internship, director, head of, vp, vice president,
                      account executive, recruiter, designer, design lead, engineer, engineering, developer, architect,
-                     product marketing]
+                     product marketing, senior, sr, lead, principal, staff, head]
 cities: [Bengaluru, Gurgaon, Noida, Pune, Mumbai, Hyderabad, Chennai, Delhi]
 roles:
   - {label: Product Analyst,           query: Product Analyst,           allow: [product, analyst, analytics]}

@@ -118,3 +118,45 @@ def test_queued_request_over_the_daily_cap_is_refused_not_run(tmp_path):
     assert _tick(conn, now, runs=runs) == "fetch_now_refused"
     assert runs == []
     assert conn.execute("SELECT status FROM run_requests").fetchone()[0] == "failed"
+
+
+def test_onboarding_request_runs_even_over_the_fetch_now_cap(tmp_path):
+    from jobseeker.db.run_requests import fetch_now_count_today, queue
+    conn = _db(tmp_path)
+    now = datetime(2026, 10, 11, 4, 0, tzinfo=UTC)
+    for i in range(CFG.fetch_now.max_per_day):
+        start_run(conn, now - timedelta(minutes=i + 1), None, kind="fetch", trigger="fetch_now")
+    queue(conn, 1, now, trigger="onboarding")
+    runs = []
+    assert _tick(conn, now, runs=runs) == "fetch_now"
+    assert runs == [("onboarding", [1], CFG.search.max_searches_fetch_now)]
+    assert conn.execute("SELECT status FROM run_requests").fetchone()[0] == "done"
+    assert fetch_now_count_today(conn, now) == CFG.fetch_now.max_per_day  # the onboarding run isn't counted
+
+
+def test_queued_onboarding_request_does_not_count_toward_the_cap(tmp_path):
+    from jobseeker.db.run_requests import fetch_now_count_today, queue
+    conn = _db(tmp_path)
+    queue(conn, 1, datetime(2026, 10, 11, 4, 0, tzinfo=UTC), trigger="onboarding")
+    assert fetch_now_count_today(conn, datetime(2026, 10, 11, 4, 0, tzinfo=UTC)) == 0
+
+
+def test_no_fetch_request_records_the_users_run(tmp_path):
+    from jobseeker.db.run_requests import queue
+    conn = _db(tmp_path)
+    now = datetime(2026, 10, 11, 4, 0, tzinfo=UTC)
+    queue(conn, 1, now, trigger="onboarding")
+    uid_run = start_run(conn, now, 1, kind="user", trigger="onboarding")
+
+    def run(trigger, users, plan_cap):
+        return RunReport(fetch_run_id=None, user_runs={1: uid_run})
+    tick(conn, settings=None, cfg=CFG, now=now, run=run, holder="me:1")
+    assert conn.execute("SELECT run_id FROM run_requests").fetchone()[0] == uid_run
+
+
+def test_onboarding_run_does_not_start_fetch_now_spacing(tmp_path):
+    from jobseeker.web.fetch_now import fetch_now_state
+    conn = _db(tmp_path)
+    now = datetime(2026, 10, 11, 4, 0, tzinfo=UTC)
+    start_run(conn, now - timedelta(minutes=5), 1, kind="user", trigger="onboarding")
+    assert fetch_now_state(conn, 1, now, CFG)["state"] == "ready"

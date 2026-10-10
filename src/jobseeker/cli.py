@@ -65,7 +65,7 @@ def _runner(settings, conn, now, holder, force_users=frozenset(), fetch=True):
     def run(trigger, users, plan_cap):
         rubric, companies, llm = _pipeline(settings, cfg)
         with make_client() as client:
-            return run_all(conn, users=users, trigger=trigger, fetch=fetch, plan_cap=plan_cap, client=client, llm=llm,
+            return run_all(conn, users=users, trigger=trigger, fetch=fetch and trigger != "onboarding", plan_cap=plan_cap, client=client, llm=llm,
                            cfg=cfg, rubric=rubric, now=now, companies=companies, force_users=force_users,
                            heartbeat=lambda: heartbeat(conn, "run", holder, datetime.now(UTC)))
     return cfg, run

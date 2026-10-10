@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from datetime import UTC, datetime
 from urllib.parse import quote
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Re
 from fastapi.responses import RedirectResponse
 
 from jobseeker.config import ITEM_MAX, LIST_MAX
+from jobseeker.db import run_requests
 from jobseeker.db.core import connect, iso
 from jobseeker.db.profile import (claim_extract, extract_running, facts_row, get_facts, get_onboarding, get_user_prefs,
                                   load_user_context, save_facts, save_user_prefs, set_onboarding)
@@ -252,6 +254,10 @@ def finish(request: Request, background: BackgroundTasks, user=Depends(current_u
         return RedirectResponse("/onboarding/resume?err=Add+your+resume+or+skills+first", 303)
     now = datetime.now(UTC)
     set_onboarding(conn, user.id, None, iso(now), now)
+    try:  # their first scores: the next tick scores the top matches already in the DB (no fetch)
+        run_requests.queue(conn, user.id, now, trigger="onboarding")
+    except sqlite3.IntegrityError:  # already queued or running (a Fetch now from another tab): that run scores them
+        conn.rollback()
     state = request.app.state
     background.add_task(first_evaluation, state.settings.db_path, user.id, state.app_config)
     return RedirectResponse("/onboarding/done", 303)

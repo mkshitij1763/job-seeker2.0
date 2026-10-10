@@ -97,7 +97,7 @@ def migrate(db_path: Path, ctx: MigrationContext, backup_dir: Path, *, migration
             conn.execute("PRAGMA foreign_keys = OFF")  # only takes effect outside a transaction
             conn.execute("BEGIN IMMEDIATE")
             try:
-                mig.apply(conn, ctx)
+                notes = mig.apply(conn, ctx) or []
                 bad = conn.execute("PRAGMA foreign_key_check").fetchall()
                 if bad:
                     raise MigrationError(f"v{mig.version}: foreign key check failed: {[tuple(r) for r in bad][:10]}")
@@ -109,6 +109,7 @@ def migrate(db_path: Path, ctx: MigrationContext, backup_dir: Path, *, migration
             finally:
                 conn.execute("PRAGMA foreign_keys = ON")
             report.append(f"Applied v{mig.version}: {mig.name}")
+            report += [f"  v{mig.version}: {n}" for n in notes]
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise MigrationError("integrity_check failed after migrating")
         after = table_counts(conn)
@@ -388,3 +389,45 @@ def migrate_v5(conn: sqlite3.Connection, ctx: MigrationContext) -> None:
 
 
 MIGRATIONS.append(Migration(5, "per-user outreach", migrate_v5))
+
+
+# ---- v6: run request trigger; seniority words for users still on the old default exclusions ----
+# The default title exclusions before v6, exactly as config/app.example.yaml shipped them (frozen).
+OLD_DEFAULT_TITLE_DENY = ("sales", "sde", "software engineer", "intern", "internship", "director", "head of", "vp",
+                          "vice president", "account executive", "recruiter", "designer", "design lead", "engineer",
+                          "engineering", "developer", "architect", "product marketing")
+SENIORITY_DENY = ("senior", "sr", "lead", "principal", "staff", "head")
+
+
+def migrate_v6(conn: sqlite3.Connection, ctx: MigrationContext) -> list[str]:
+    """Onboarding's first scoring run is a run request too ('onboarding' skips the fetch and is exempt from Fetch
+    now's spacing and daily cap). Users whose saved exclusions are still exactly the old default get the new
+    seniority words; a customised list, or none saved (it follows app.yaml), is left alone. The owner is never
+    touched: the old default was copied from their list, and their target roles include senior ones (ruling by
+    manager). Idempotent: an extended list no longer equals the old default."""
+    import json
+
+    conn.execute("ALTER TABLE run_requests ADD COLUMN trigger TEXT NOT NULL DEFAULT 'fetch_now' "
+                 "CHECK (trigger IN ('fetch_now', 'onboarding'))")
+    old, extended, kept, notes = sorted(OLD_DEFAULT_TITLE_DENY), 0, 0, []
+    owners = {r[0] for r in conn.execute("SELECT id FROM users WHERE id = 1 OR lower(email) = ?",
+                                         (ctx.owner_email.lower(),))}
+    for row in conn.execute("SELECT user_id, data FROM user_prefs").fetchall():
+        if row["user_id"] in owners:
+            notes.append("owner skipped: customised by intent")
+            continue
+        data = json.loads(row["data"])
+        deny = data.get("title_deny")
+        if deny is None:
+            continue
+        if sorted(w.strip().lower() for w in deny) != old:
+            kept += 1
+            continue
+        data["title_deny"] = list(deny) + [w for w in SENIORITY_DENY if w not in deny]
+        conn.execute("UPDATE user_prefs SET data = ? WHERE user_id = ?", (json.dumps(data), row["user_id"]))
+        extended += 1
+    return notes + [f"seniority exclusions added for {extended} user{'' if extended == 1 else 's'} on the old default list "
+            f"({kept} customised list{'' if kept == 1 else 's'} kept)"]
+
+
+MIGRATIONS.append(Migration(6, "run request trigger, seniority exclusions", migrate_v6))

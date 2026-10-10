@@ -33,6 +33,7 @@ class RunReport:
     fetch: FetchStats | None = None
     users: dict[int, UserStats] = field(default_factory=dict)
     aborted: str | None = None
+    user_runs: dict[int, int] = field(default_factory=dict)  # user id -> their kind='user' run
 
 
 def _default_notify(conn, user_id, started, now):
@@ -58,7 +59,7 @@ def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, ll
         from jobseeker.db.profile import load_user_context
         context = lambda c, uid: load_user_context(c, uid, cfg)  # noqa: E731
     report = RunReport(users={u.id: UserStats() for u in users})
-    user_runs: dict[int, int] = {}
+    user_runs = report.user_runs
     contexts: dict[int, tuple] = {}
     try:
         for u in users:

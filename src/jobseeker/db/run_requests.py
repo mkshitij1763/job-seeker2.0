@@ -13,9 +13,10 @@ INTERRUPTED = "Interrupted by an app update; try again"
 _NOT_INTERRUPTED = "errors NOT LIKE '%' || ? || '%'"
 
 
-def queue(conn: sqlite3.Connection, user_id: int, now: datetime) -> int:
-    cur = conn.execute("INSERT INTO run_requests (user_id, requested_at, status) VALUES (?, ?, 'queued')",
-                       (user_id, iso(now)))
+def queue(conn: sqlite3.Connection, user_id: int, now: datetime, trigger: str = "fetch_now") -> int:
+    """trigger 'onboarding' is the new user's first scoring run: no fetch, exempt from Fetch now's spacing and cap."""
+    cur = conn.execute("INSERT INTO run_requests (user_id, requested_at, status, trigger) VALUES (?, ?, 'queued', ?)",
+                       (user_id, iso(now), trigger))
     conn.commit()
     return cur.lastrowid
 
@@ -68,4 +69,5 @@ def fetch_now_count_today(conn, now: datetime, *, include_queued: bool = True) -
                            f"AND {_NOT_INTERRUPTED}", (iso(day_start_utc(app_today(now))), INTERRUPTED)).fetchone()[0]
     if not include_queued:
         return started
-    return started + conn.execute("SELECT COUNT(*) FROM run_requests WHERE status = 'queued'").fetchone()[0]
+    return started + conn.execute("SELECT COUNT(*) FROM run_requests WHERE status = 'queued' "
+                                  "AND trigger = 'fetch_now'").fetchone()[0]

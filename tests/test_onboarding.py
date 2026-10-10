@@ -245,3 +245,30 @@ def test_bare_onboarding_goes_to_the_current_step_or_today(newbie, client_as):
     assert r.status_code == 303 and r.headers["location"] == "/onboarding/where"
     owner = client_as(1, follow_redirects=False).get("/onboarding")
     assert owner.status_code == 303 and owner.headers["location"] == "/today"
+
+
+def _finishable(newbie, client_as, settings, facts):
+    from jobseeker.db.profile import save_facts
+    web = client_as(newbie, follow_redirects=False)
+    _to_resume_step(web)
+    conn = connect(settings.db_path)
+    save_facts(conn, newbie, "sha", facts, edited=False, now=datetime.now(UTC))
+    return web, conn
+
+
+def test_finish_queues_an_onboarding_run(newbie, client_as, settings, facts, monkeypatch):
+    monkeypatch.setattr("jobseeker.web.onboarding.first_evaluation", lambda *a: None)
+    web, conn = _finishable(newbie, client_as, settings, facts)
+    assert web.post("/onboarding/finish").headers["location"] == "/onboarding/done"
+    row = conn.execute("SELECT trigger, status FROM run_requests WHERE user_id = ?", (newbie,)).fetchone()
+    assert tuple(row) == ("onboarding", "queued")
+
+
+def test_finish_while_already_queued_still_finishes(newbie, client_as, settings, facts, monkeypatch):
+    from jobseeker.db.run_requests import queue
+    monkeypatch.setattr("jobseeker.web.onboarding.first_evaluation", lambda *a: None)
+    web, conn = _finishable(newbie, client_as, settings, facts)
+    queue(conn, newbie, datetime.now(UTC))  # e.g. a Fetch now from another tab
+    assert web.post("/onboarding/finish").headers["location"] == "/onboarding/done"
+    assert conn.execute("SELECT COUNT(*) FROM run_requests WHERE user_id = ?", (newbie,)).fetchone()[0] == 1
+    assert get_onboarding(conn, newbie)[1]
