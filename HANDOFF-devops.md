@@ -88,7 +88,7 @@
 | `af8f291` | merge origin/multi-user `db01549` (backend-lead2's admin user view; 877 pytest / 26 node) |
 | `700b40b` | tick at `nice -n 10` in start.sh's tick_loop; Dockerfile build check `nice --version`; `tests/test_railway.py` nice stub + assertions; runbook: Railway RAM is 1 GB |
 | `a7586c1` | docs: handoff row SHAs |
-| (this commit) | SIGTERM-safe tick: `cli._exit_on_sigterm` (tick + run/rescore) → SystemExit; run_all closes runs with `INTERRUPTED`; tick fails the Fetch now request (run_id set); interrupted runs skip the spacing/cap; the chip shows the reason; start.sh's loop waits for the tick's cleanup; railway.json `drainingSeconds: 15`; runbook R3 note (`tests/test_sigterm.py`, 2 new test_railway tests; 884 pytest / 26 node) |
+| `35351c4` | SIGTERM-safe tick: `cli._exit_on_sigterm` (tick + run/rescore) → SystemExit; run_all closes runs with `INTERRUPTED`; tick fails the Fetch now request (run_id set); interrupted runs skip the spacing/cap; the chip shows the reason; start.sh's loop waits for the tick's cleanup; railway.json `drainingSeconds: 15`; runbook R3 note (`tests/test_sigterm.py`, 2 new test_railway tests; 884 pytest / 26 node) |
 
 - **Tests at `2f473a9` (multi-user, plan 2 complete):** 550 pytest per `manager`.
 - **UPDATE from `manager` (2026-10-09, after backend-lead2's e46bcce):** FIRST merge `origin/multi-user` (now at `e46bcce`, 826 pytest; outreach plan 5 complete + review fixes). For fix #2, backend-lead2 ALREADY made facts extraction refund its budget unit on every failure (LLMUnavailable included) in `profile/extract.py`. So fix #2 is now ONLY the user-facing wording for LLMUnavailable; don't touch the budget logic. backend-lead2 is now idle, so its files are free, but keep edits minimal.
