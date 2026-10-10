@@ -6,7 +6,12 @@ Worktree: `/Users/user/Desktop/untitled folder/js-pm-review`, branch `review/pm-
 Live app: https://job-seeker20-production.up.railway.app (Railway trial, US East). **Region move to Singapore is planned AFTER the review** — keep the perf table labelled "before region move".
 
 
-## UPDATE 05:58 IST (2nd session) — read this first
+## UPDATE 06:10 IST — REVIEW WRITTEN UP (read this first)
+- Report is complete: §1 summary, §6 sequencing, findings to **PM-072**, DRAFT line removed. Counts P0 1 (resolved) · P1 12 · P2 40 · P3 19.
+- Roommate run ~06:02 scored 0 (shared AI limit used by the owner's run) → **PM-071 (P1)**; notes copy → PM-072. C3, D8 and the outreach job page are **NOT RUN (blocked: roommate has 0 jobs)**. Re-test them after the next run that scores for the roommate (tomorrow 11:15 at the latest), then update §2.
+- Still to do by the user: turn roommate outreach OFF on /admin.
+
+## UPDATE 05:58 IST (2nd session)
 - New tab ids: roommate **147722987** (Browser 1), owner **147722990** (Browser 2, read-only GETs only). Old ids are gone.
 - Done: roommate Gmail connected by the user (PM-069 no Disconnect); empty-roles Save edge case (PM-001 evidence: screen shows 0 roles, server kept 3); custom-role HTML escaping PASS + preview drift (PM-070); queue/ETA/Today contradiction (PM-068); user-reported JD Markdown folded into PM-047 (now P1/M).
 - Drafted §1 executive summary and §6 sequencing (counts need a final pass; DRAFT line still there).
