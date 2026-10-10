@@ -53,7 +53,7 @@
     <thead><tr><th>User</th>{% for s in usage.services %}<th>{{ s }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for r in usage.rows %}
-      <tr><td>{{ r.user.email }}</td>{% for s in usage.services %}<td class="mono">{{ r["values"].get(s, 0) }}</td>{% endfor %}</tr>
+      <tr><td>{{ r.label }}</td>{% for s in usage.services %}<td class="mono">{{ r["values"].get(s, 0) }}</td>{% endfor %}</tr>
     {% endfor %}
     </tbody>
   </table>

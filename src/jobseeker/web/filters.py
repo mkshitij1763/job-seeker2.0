@@ -26,12 +26,17 @@ def age(value: str | None, now: datetime | None = None) -> str:
     return "today" if days <= 0 else f"{days}d"
 
 
-def explain_stats(stats: dict) -> list[dict]:
-    """Header notes from run stats: the user's score share and the search plan's rotation. Neither needs action."""
+def explain_stats(stats: dict, scored_today: int | None = None) -> list[dict]:
+    """Header notes from run stats: the user's score share and the search plan's rotation. Neither needs action.
+    scored_today is the day's usage (several runs a day); the run's own count is only a fallback."""
     user, fetch, notes = stats.get("user") or {}, stats.get("fetch") or {}, []
     why = user.get("stopped_by")
     if why == "share":
-        notes.append({"text": f"You've used today's {user.get('scored', 0)} scores; more tomorrow", "action": False})
+        n = scored_today if scored_today is not None else user.get("scored", 0)
+        notes.append({"text": f"You've used today's {n} scores; more tomorrow", "action": False})
+    elif why == "reserved":
+        notes.append({"text": "Today's shared AI allowance is held for other users' first scores; yours resume tomorrow",
+                      "action": False})
     elif why in ("global_cap", "quota"):
         notes.append({"text": "The shared AI limit ran out today; scoring resumes tomorrow", "action": False})
     if fetch.get("searches_trimmed"):  # counts are searches (items), not role and city pairs

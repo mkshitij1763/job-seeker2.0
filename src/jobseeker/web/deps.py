@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Request
 from jobseeker.db.core import connect
 from jobseeker.db.runs import header_run
 from jobseeker.db.sessions import user_for_token
+from jobseeker.db.usage import used_today
 from jobseeker.db.users import User
 from jobseeker.web.filters import explain_run, explain_stats
 from jobseeker.web.oauth import SESSION_COOKIE
@@ -33,7 +34,8 @@ def render(request: Request, conn, name: str, **ctx):
     ctx.setdefault("msg", request.query_params.get("msg"))
     ctx.setdefault("err", request.query_params.get("err"))
     ctx["run_errors"] = errors
-    ctx["run_notes"] = explain_run(errors) + explain_stats(stats)
+    ctx["run_notes"] = explain_run(errors) + explain_stats(stats, int(used_today(conn, user.id, "score",
+                                                                                   datetime.now(UTC))))
     ctx["run_finished"] = run["finished_at"] if run else None
     ctx["nav"] = nav_counts(conn, user.id)
     ctx["user"] = user

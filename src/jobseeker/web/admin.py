@@ -31,7 +31,9 @@ def usage_table(conn, now: datetime) -> dict:
     periods = _periods(now)
     rows = conn.execute("SELECT user_id, service, amount FROM usage WHERE period IN (?, ?)", periods).fetchall()
     services = sorted({r["service"] for r in rows})
-    by_user = {u["id"]: {"user": u, "values": {}} for u in list_users(conn)}
+    by_user = {u["id"]: {"user": u, "values": {},  # a deleted account's spend still counts toward today's caps
+                         "label": f"Deleted account ({u['email'][8:-8]})" if is_tombstone(u) else u["email"]}
+               for u in list_users(conn)}
     for r in rows:
         if r["user_id"] in by_user:
             by_user[r["user_id"]]["values"][r["service"]] = r["amount"]

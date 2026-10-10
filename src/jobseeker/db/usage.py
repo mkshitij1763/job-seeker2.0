@@ -35,6 +35,14 @@ def outreach_limits(conn: sqlite3.Connection, cfg: ContactsConfig, global_drafts
             "draft": Limit("day", global_drafts_per_day, global_drafts_per_day // n)}
 
 
+def used_today(conn: sqlite3.Connection, user_id: int, service: str, now: datetime) -> float:
+    """The user's spend on a daily service for today's IST date (Budget's day period)."""
+    from jobseeker.clock import app_now
+    row = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE user_id = ? AND period = ? AND service = ?",
+                       (user_id, app_now(now).strftime("%Y-%m-%d"), service)).fetchone()
+    return row[0]
+
+
 class Budget:
     """Free-tier guard: every outside call checks can() and records spend(). A user stops at their share and
     everyone stops at the global cap, so nothing is ever paid for."""

@@ -56,3 +56,17 @@ def test_tombstone_users_are_not_listed_as_people(seeded_two, client_as, setting
     tomb = conn.execute("SELECT id FROM users WHERE email = 'deleted-2@invalid'").fetchone()[0]
     html = client_as(1).get("/admin").text
     assert f"/admin/users/{tomb}/" not in html                 # no enable/disable/outreach buttons for it
+
+
+def test_usage_card_labels_a_deleted_accounts_spend(seeded_two, client_as, settings):
+    from datetime import UTC, datetime
+
+    from jobseeker.clock import app_now
+    from jobseeker.db.account import delete_account
+    conn = connect(settings.db_path)
+    conn.execute("INSERT INTO usage (user_id, period, service, amount) VALUES (2, ?, 'score', 17)",
+                 (app_now(datetime.now(UTC)).strftime("%Y-%m-%d"),))
+    conn.commit()
+    delete_account(conn, settings.jobseeker_home, 2)
+    usage = client_as(1).get("/admin").text.split("Usage", 1)[1]
+    assert "Deleted account (2)" in usage and "17" in usage and "deleted-2@invalid" not in usage
