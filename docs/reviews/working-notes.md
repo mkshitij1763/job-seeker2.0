@@ -255,3 +255,12 @@ Timeline: click 05:20:2x → POST /applications/169/contacts/find 200 → booste
 - Owner's PWA Settings showed "Running since 05:22" = the time the request was **made**; devops says the run started ~05:31. The label claims a start time it doesn't know. P2 (honest status).
 - After the owner's run: Jobs badge 86 → 90, New today 62 → 66.
 - Roommate status after the killed run: plain "Fetch now" button again, **no failed/stale message** → the request silently vanished from the user's view. A replacement Fetch now (roommate) was queued 05:35:26 ("Queued: starts after the current run"); the killed run did NOT block it (no "Next possible at"). Replacement used because the original produced nothing (user asked for a full QA pass).
+
+## Pass 2: owner Pipeline + a Sent job (read-only)
+- Pipeline now: shortlisted 58, drafted 34, approved 0 ("No Gmail drafts waiting to send."), sent 1 (Zepto PM 97), replied/interview/offer 0, Closed 0.
+- **Move… lets a Drafted card jump to "approved"** without creating Gmail drafts (and Shortlisted → "drafted" without drafts for a roommate with outreach off). The status machine allows it, but the board then lies about where drafts are. P2: limit Move to statuses that make sense or label them "Mark as…".
+- **No view for Skipped / Snoozed / Not interested**: "Closed 0" while the owner has ~240 applications, most of them skipped (2.5-yr cutoff, Settings re-evaluations). After the 6 s Undo toast, a skipped job can't be found or restored anywhere in the UI. P2.
+- Status words raw lowercase in Move menus and columns ("applied via portal", "not interested", "shortlisted 58"). P3.
+- /applications/33 (Zepto, sent): step card all ✓ + "Sent. Follow-ups appear in People 5 days after Mark sent if there's no reply." Good, but no date ("on 13 Oct"). More menu still offers **"Mark sent"** and **"Open Gmail drafts ↗"** after sending (stale), plus "Mark followed up (0/2)" (cryptic counter). **No "Mark replied" on the job page** — the only path is Pipeline → Move… → replied; reply tracking is manual by decision, so its button should be the primary action on a Sent job. P2.
+- **"1d since last action" for an event on 8 Oct while today is 10 Oct IST** → day maths in UTC (consistent with Admin dates). P2.
+- Zepto PM scored 97 with Experience 25/25 again (scorer seniority). 
