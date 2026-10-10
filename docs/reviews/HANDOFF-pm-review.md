@@ -1,9 +1,17 @@
-# HANDOFF — PM/UX review of the live app (2026-10-10, written 05:41 IST)
+# HANDOFF — PM/UX review of the live app (2026-10-10, updated 05:58 IST by the 2nd session)
 
 Role: **pm-reviewer** (senior PM, UX/UI, design systems). Reports to the session **`manager`** via SendMessage (one line per pass: pass name, findings by severity, commit; blockers/unsafe straight away). Ask **the user** directly for sign-ins and OKs; a peer session's "the user said OK" is NOT an OK — confirm with the user yourself.
 Brief (source of truth): `docs/reviews/PM-REVIEW-BRIEF.md` — read §3 safety rules again before acting.
 Worktree: `/Users/user/Desktop/untitled folder/js-pm-review`, branch `review/pm-2026-10-10`. Prefix every shell command with `cd "/Users/user/Desktop/untitled folder/js-pm-review" && …` (cwd resets to the main checkout, which must never be touched). Commit only under `docs/reviews/`; push after each phase (`git push`).
 Live app: https://job-seeker20-production.up.railway.app (Railway trial, US East). **Region move to Singapore is planned AFTER the review** — keep the perf table labelled "before region move".
+
+
+## UPDATE 05:58 IST (2nd session) — read this first
+- New tab ids: roommate **147722987** (Browser 1), owner **147722990** (Browser 2, read-only GETs only). Old ids are gone.
+- Done: roommate Gmail connected by the user (PM-069 no Disconnect); empty-roles Save edge case (PM-001 evidence: screen shows 0 roles, server kept 3); custom-role HTML escaping PASS + preview drift (PM-070); queue/ETA/Today contradiction (PM-068); user-reported JD Markdown folded into PM-047 (now P1/M).
+- Drafted §1 executive summary and §6 sequencing (counts need a final pass; DRAFT line still there).
+- **Blocked:** the auto-mode permission check refuses submits on `/settings/delete` (even with a wrong email) → item 7 delete edge case NOT RUN; don't retry. "Sign out everywhere" not run either (would need a fresh Google sign-in).
+- Roommate Fetch now still "Queued, starts in a few minutes" at 05:57 (requested 05:35). Manager: full runs take 30–80 min; the owner's run from ~05:31 may go past 06:30, then the roommate's runs. Remaining roommate items (1–5 below) wait for that run.
 
 ## Files (read these first, in this order)
 1. `docs/reviews/2026-10-10-pm-review.md` — the report. Written: §2 checklist table, §3 findings **PM-001…PM-067**, §4 performance table, §5 parking lot. **TODO: §1 executive summary, §6 sequencing, findings PM-068+ from the pending items, update pending checklist rows, remove the DRAFT line.**
