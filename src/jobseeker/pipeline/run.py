@@ -41,6 +41,15 @@ def _default_notify(conn, user_id, started, now):
     return notify_new_matches(conn, user_id, started, now)
 
 
+STARVED = {"global_cap", "quota", "reserved"}  # scoring stopped by the shared allowance, not the user's own share
+
+
+def _default_notify_done(conn, user_id, started, now, stats):
+    from jobseeker.push.notify import notify_run_finished
+    return notify_run_finished(conn, user_id, started, now, scored=stats.scored,
+                               starved=stats.stopped_by in STARVED)
+
+
 def _custom_and_updated(conn, user_id: int) -> tuple[str, str]:
     row = conn.execute("SELECT json_extract(data, '$.custom_role') AS c, updated_at FROM user_prefs WHERE user_id = ?",
                        (user_id,)).fetchone()
@@ -49,7 +58,7 @@ def _custom_and_updated(conn, user_id: int) -> tuple[str, str]:
 
 def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, llm, cfg, rubric, now: datetime,
             companies=(), describe=None, sources_factory=build_sources, context=None,
-            notify=_default_notify, force_users: frozenset[int] = frozenset(),
+            notify=_default_notify, notify_done=_default_notify_done, force_users: frozenset[int] = frozenset(),
             heartbeat: Callable[[], None] = lambda: None,
             clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> RunReport:
     if describe is None:
@@ -100,11 +109,12 @@ def run_all(conn, *, users, trigger: str, fetch: bool, plan_cap: int, client, ll
         scorers = [Scorer(uid, p, f, profile_hash(p, f), report.users[uid], force=uid in force_users)
                    for uid, (p, f) in contexts.items()]
         stop = score_round_robin(conn, scorers, llm, rubric, cfg, now, heartbeat)
-        if trigger in ("schedule", "fetch_now"):
+        if trigger in ("schedule", "fetch_now", "onboarding"):  # the daily alert; "your search finished" otherwise
             for uid in contexts:
                 started = conn.execute("SELECT started_at FROM runs WHERE id = ?", (user_runs[uid],)).fetchone()[0]
                 try:
-                    note = notify(conn, uid, datetime.fromisoformat(started), now)
+                    note = notify(conn, uid, datetime.fromisoformat(started), now) if trigger == "schedule" \
+                        else notify_done(conn, uid, datetime.fromisoformat(started), now, report.users[uid])
                 except Exception:
                     note = ALERT_NOTE
                 if note:

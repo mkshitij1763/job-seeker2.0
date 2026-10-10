@@ -33,6 +33,38 @@ def _wants_alerts(conn: sqlite3.Connection, user_id: int) -> bool:
     return json.loads(row["data"]).get("notify_new_matches", True) if row else True
 
 
+def _deliver(conn: sqlite3.Connection, user_id: int, subs, payload: dict, now: datetime, keys: VapidKeys,
+             client: httpx.Client | None) -> int:
+    """Send one payload to each of the user's devices; prune dead subscriptions. Returns how many got it."""
+    own = client is None
+    client = client or httpx.Client()
+    delivered = 0
+    try:
+        for sub in subs:
+            try:
+                status = send_one(client, sub["endpoint"], sub["p256dh"], sub["auth"], payload, keys, now)
+            except InvalidSubscription as e:
+                log.warning("push subscription %s pruned: %s", sub["id"], e)
+                conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
+                continue
+            except Exception as e:  # one device must never cost the others their alert
+                log.warning("push to %s failed: %s", sub["id"], e)
+                status = 0
+            if 200 <= status < 300:
+                delivered += 1
+                conn.execute("UPDATE push_subscriptions SET last_success_at = ?, failures = 0 WHERE id = ?",
+                             (iso(now), sub["id"]))
+            elif status in (404, 410) or sub["failures"] + 1 >= MAX_FAILURES:
+                conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
+            else:
+                conn.execute("UPDATE push_subscriptions SET failures = failures + 1 WHERE id = ?", (sub["id"],))
+        conn.commit()
+    finally:
+        if own:
+            client.close()
+    return delivered
+
+
 def notify_new_matches(conn: sqlite3.Connection, user_id: int, run_started_at: datetime, now: datetime, *,
                        keys: VapidKeys | None = ..., client: httpx.Client | None = None) -> str | None:
     try:
@@ -48,35 +80,40 @@ def notify_new_matches(conn: sqlite3.Connection, user_id: int, run_started_at: d
             return None
         payload = {"title": "1 new match" if n == 1 else f"{n} new matches",
                    "body": f"Top: {top} · Open Job Seeker", "url": "/?band=apply"}
-        own = client is None
-        client = client or httpx.Client()
-        delivered = 0
-        try:
-            for sub in subs:
-                try:
-                    status = send_one(client, sub["endpoint"], sub["p256dh"], sub["auth"], payload, keys, now)
-                except InvalidSubscription as e:
-                    log.warning("push subscription %s pruned: %s", sub["id"], e)
-                    conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
-                    continue
-                except Exception as e:  # one device must never cost the others their alert
-                    log.warning("push to %s failed: %s", sub["id"], e)
-                    status = 0
-                if 200 <= status < 300:
-                    delivered += 1
-                    conn.execute("UPDATE push_subscriptions SET last_success_at = ?, failures = 0 WHERE id = ?",
-                                 (iso(now), sub["id"]))
-                elif status in (404, 410) or sub["failures"] + 1 >= MAX_FAILURES:
-                    conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
-                else:
-                    conn.execute("UPDATE push_subscriptions SET failures = failures + 1 WHERE id = ?", (sub["id"],))
-            if delivered:
-                conn.execute("UPDATE users SET notified_on = ? WHERE id = ?", (today, user_id))
+        delivered = _deliver(conn, user_id, subs, payload, now, keys, client)
+        if delivered:
+            conn.execute("UPDATE users SET notified_on = ? WHERE id = ?", (today, user_id))
             conn.commit()
-        finally:
-            if own:
-                client.close()
         return None if delivered else RUN_NOTE
     except Exception:  # an alert must never fail the run
         log.exception("notify_new_matches failed for user %s", user_id)
+        return RUN_NOTE
+
+
+def notify_run_finished(conn: sqlite3.Connection, user_id: int, run_started_at: datetime, now: datetime, *,
+                        scored: int, starved: bool, keys: VapidKeys | None = ...,
+                        client: httpx.Client | None = None) -> str | None:
+    """'Your search finished' after a run the user asked for (Fetch now, or onboarding's first scores): every time,
+    whatever it found, so they aren't left waiting. Respects the alerts switch; never raises."""
+    try:
+        if keys is ...:
+            keys = vapid_from_settings(Settings())
+        if keys is None or not _wants_alerts(conn, user_id):
+            return None
+        subs = conn.execute("SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,)).fetchall()
+        if not subs:
+            return None
+        n, top = _new_matches(conn, user_id, run_started_at)
+        if n:
+            body = f"{n} new match{'' if n == 1 else 'es'} · top {top}"
+        elif scored:
+            body = f"Scored {scored} job{'' if scored == 1 else 's'}; nothing to apply to yet"
+        elif starved:
+            body = "Scores wait for tomorrow's AI allowance"
+        else:
+            body = "No new matches this time"
+        payload = {"title": "Your search finished", "body": body, "url": "/today"}
+        return None if _deliver(conn, user_id, subs, payload, now, keys, client) else RUN_NOTE
+    except Exception:  # an alert must never fail the run
+        log.exception("notify_run_finished failed for user %s", user_id)
         return RUN_NOTE

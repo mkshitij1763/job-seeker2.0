@@ -100,3 +100,17 @@ def test_crash_closes_every_run_row(tmp_path, prefs, rubric, facts, monkeypatch)
     report, _ = _run(conn, prefs, rubric, facts, users=[user_by_id(conn, 1)])
     assert report.aborted.startswith("run aborted: ZeroDivisionError")
     assert conn.execute("SELECT COUNT(*) FROM runs WHERE finished_at IS NULL").fetchone()[0] == 0
+
+
+def test_requested_runs_push_when_done_and_the_daily_run_alerts(tmp_path, prefs, rubric, facts):
+    from jobseeker.pipeline.run import run_all
+    conn = connect(tmp_path / "db")
+    for trigger in ("fetch_now", "onboarding", "schedule", "cli"):
+        daily, done = [], []
+        run_all(conn, users=[user_by_id(conn, 1)], trigger=trigger, fetch=False, plan_cap=60, client=None,
+                llm=FakeLLM(handler=handler), cfg=_cfg(prefs), rubric=rubric, now=NOW, describe=lambda s, i: "",
+                context=lambda c, uid: (prefs, facts),
+                notify=lambda c, uid, started, now: daily.append(uid),
+                notify_done=lambda c, uid, started, now, stats: done.append((uid, stats.stopped_by != "")))
+        assert (daily, [d[0] for d in done]) == {"fetch_now": ([], [1]), "onboarding": ([], [1]),
+                                                 "schedule": ([1], []), "cli": ([], [])}[trigger], trigger

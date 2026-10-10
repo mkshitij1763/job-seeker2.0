@@ -124,3 +124,32 @@ def test_one_bad_subscription_is_pruned_and_the_rest_still_get_sent(two, monkeyp
     rows = {r["endpoint"]: r["failures"] for r in conn.execute("SELECT endpoint, failures FROM push_subscriptions")}
     assert "https://web.push.apple.com/r0" not in rows  # invalid: pruned
     assert rows["https://web.push.apple.com/r9"] == 1  # unexpected error: counted as a failure, not fatal
+
+
+def test_run_finished_push_ignores_the_daily_gate(two):
+    from jobseeker.push.notify import notify_run_finished
+    conn, sent = two
+    conn.execute("UPDATE users SET notified_on = '2026-10-11' WHERE id = 2")  # the daily alert already went out
+    conn.commit()
+    assert notify_run_finished(conn, 2, RUN, NOW, scored=3, starved=False, keys=KEYS) is None
+    (_, payload), = sent
+    assert payload == {"title": "Your search finished", "body": "1 new match · top 91", "url": "/today"}
+
+
+def test_run_finished_push_with_nothing_to_apply(two):
+    from jobseeker.push.notify import notify_run_finished
+    conn, sent = two
+    notify_run_finished(conn, 2, NOW, NOW, scored=3, starved=False, keys=KEYS)  # nothing created after NOW
+    notify_run_finished(conn, 2, NOW, NOW, scored=0, starved=True, keys=KEYS)
+    notify_run_finished(conn, 2, NOW, NOW, scored=0, starved=False, keys=KEYS)
+    assert [p["body"] for _, p in sent] == ["Scored 3 jobs; nothing to apply to yet",
+                                            "Scores wait for tomorrow's AI allowance",
+                                            "No new matches this time"]
+
+
+def test_run_finished_push_respects_the_alerts_switch(two):
+    from jobseeker.push.notify import notify_run_finished
+    conn, sent = two
+    conn.execute("UPDATE user_prefs SET data = json_set(data, '$.notify_new_matches', json('false')) WHERE user_id = 2")
+    conn.commit()
+    assert notify_run_finished(conn, 2, RUN, NOW, scored=3, starved=False, keys=KEYS) is None and sent == []
