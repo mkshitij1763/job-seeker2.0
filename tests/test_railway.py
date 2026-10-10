@@ -277,8 +277,9 @@ def test_sigterm_waits_for_the_tick_to_clean_up(railway):
 
 def test_if_serve_dies_the_script_exits_nonzero_and_stops_the_loop(railway):
     start, calls, log, _ = railway
-    p = start(SERVE_SLEEP="0.5", SERVE_EXIT="1", TICK_SLEEP="30")
-    p.wait(timeout=5)
+    # serve lives 2 s so the tick loop has written its pid file even on a loaded machine (0.5 s flaked under load)
+    p = start(SERVE_SLEEP="2", SERVE_EXIT="1", TICK_SLEEP="30")
+    p.wait(timeout=10)
     assert p.returncode != 0
     tick_pid = int(log.with_name("calls.log.tickpids").read_text().split()[0])
     assert _wait_for(lambda: not _alive(tick_pid), 3)

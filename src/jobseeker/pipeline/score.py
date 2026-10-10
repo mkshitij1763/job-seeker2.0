@@ -10,7 +10,7 @@ from jobseeker.db.applications import ensure_application, get_status, transition
 from jobseeker.db.jobs import job_from_row, jobs_needing_score, save_score
 from jobseeker.db.usage import Budget, Limit
 from jobseeker.llm import LLMError, LLMQuotaExceeded, LLMUnavailable
-from jobseeker.pipeline.eligible import share_divisor
+from jobseeker.pipeline.eligible import active_users, share_divisor
 from jobseeker.scoring.scorer import score_job
 
 
@@ -42,7 +42,11 @@ class Scorer:
     budget: Budget | None = None
 
 
-def _prepare(conn, scorers: list[Scorer], cfg, now: datetime) -> None:
+def _prepare(conn, scorers: list[Scorer], cfg, now: datetime) -> int:
+    """Each user's room, and the run's pool: what's left of the global cap after holding a first-scores floor for
+    every eligible user outside this run who hasn't scored today, so one user's run never leaves a new user nothing.
+    The pool is one counter for the whole run (ruling by manager), so the users in it can't jointly eat the reserve.
+    Sorts `scorers` in place: users with no scores today go first."""
     b = cfg.budgets
     share = b.global_scores_per_day // share_divisor(conn, "score", len(scorers))
     for s in scorers:
@@ -51,11 +55,19 @@ def _prepare(conn, scorers: list[Scorer], cfg, now: datetime) -> None:
         s.room = min(b.score_per_run, left)
         s.cap_reason = "run_cap" if b.score_per_run < left else "share"
         s.stats.score_share_left = left
+    if not scorers:
+        return 0
+    scorers.sort(key=lambda s: s.budget.used("score") > 0)  # stable
+    limits, in_run = scorers[0].budget.limits, {s.user_id for s in scorers}
+    waiting = [u for u in active_users(conn)
+               if u.id not in in_run and Budget(conn, u.id, limits, app_now(now)).used("score") == 0]
+    reserved = min(b.score_per_run, share) * len(waiting)
+    return max(0, int(b.global_scores_per_day - scorers[0].budget.used_all("score")) - reserved)
 
 
 def score_round_robin(conn, scorers: list[Scorer], llm, rubric, cfg, now: datetime,
                       heartbeat: Callable[[], None] = lambda: None) -> str | None:
-    _prepare(conn, scorers, cfg, now)
+    pool = _prepare(conn, scorers, cfg, now)
     active = []
     for s in scorers:
         if s.room > 0:
@@ -73,6 +85,9 @@ def score_round_robin(conn, scorers: list[Scorer], llm, rubric, cfg, now: dateti
                 active.remove(s)
                 continue
             for row in rows:
+                if pool <= 0:  # the rest of today's cap is held for users who haven't scored yet
+                    stop = s.stats.stopped_by = "reserved"
+                    break
                 if not s.budget.take("score"):  # spent up front, refunded below when no score came back
                     stop = "global_cap" if s.budget.used_all("score") + 1 > s.budget.limits["score"].global_cap \
                         else None
@@ -102,6 +117,7 @@ def score_round_robin(conn, scorers: list[Scorer], llm, rubric, cfg, now: dateti
                 save_score(conn, s.user_id, row["id"], result, model, rubric.version, row["jd_hash"],
                            profile_hash=s.profile_hash)
                 s.room -= 1
+                pool -= 1
                 s.stats.scored += 1
                 s.stats.score_share_left -= 1
                 app_id = ensure_application(conn, s.user_id, row["id"], now)

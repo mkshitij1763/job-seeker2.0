@@ -144,3 +144,79 @@ def test_every_failed_score_gives_its_unit_back(tmp_path, prefs, facts, rubric):
     with pytest.raises(RuntimeError):
         score_round_robin(conn, _scorers(prefs, facts, users=(1,)), FakeLLM(handler=crash), rubric, _cfg(), NOW)
     assert _spent(conn, "score") == 0
+
+
+def _onboard(conn, users):
+    for u in users:
+        conn.execute("""INSERT OR REPLACE INTO user_prefs (user_id, data, version, onboarding_step, onboarded_at,
+                        updated_at) VALUES (?, '{}', 1, NULL, 't', 't')""", (u,))
+    conn.commit()
+
+
+def _use(conn, uid, amount):
+    from jobseeker.clock import app_now
+    conn.execute("INSERT INTO usage (user_id, period, service, amount) VALUES (?, ?, 'score', ?)",
+                 (uid, app_now(NOW).strftime("%Y-%m-%d"), amount))
+    conn.commit()
+
+
+def _left(conn, cap):
+    from jobseeker.clock import app_now
+    used = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM usage WHERE period = ? AND service = 'score'",
+                        (app_now(NOW).strftime("%Y-%m-%d"),)).fetchone()[0]
+    return cap - used
+
+
+def test_run_leaves_a_floor_for_users_who_have_not_scored_today(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, users=(1, 2, 3), jobs_per_user=40)
+    _onboard(conn, (1, 2, 3))
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (9, 'deleted-9@invalid', 't')")
+    _use(conn, 9, 10)  # a tombstone's spend still counts: 20 of 30 left
+    scorers = _scorers(prefs, facts, users=(1,))
+    score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=30), NOW)
+    # share 10, floor 10, reserved 10 x 2 (users 2 and 3) = 20, pool 0
+    assert scorers[0].stats.scored == 0 and scorers[0].stats.stopped_by == "reserved"
+
+
+def test_no_reservation_once_the_others_have_scored(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, jobs_per_user=40)
+    _onboard(conn, (1, 2, 3))
+    _use(conn, 2, 1)
+    _use(conn, 3, 1)
+    scorers = _scorers(prefs, facts, users=(1,))
+    score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=30), NOW)
+    assert scorers[0].stats.scored == 10  # its share, as before
+
+
+def test_two_users_in_a_run_cannot_jointly_eat_the_reserve(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, users=(1, 2, 3), jobs_per_user=40)
+    _onboard(conn, (1, 2, 3))
+    conn.execute("INSERT INTO users (id, email, created_at) VALUES (9, 'deleted-9@invalid', 't')")
+    _use(conn, 9, 12)  # 18 of 30 left; user 3 (not in the run) is owed a floor of 10, so this run may spend 8
+    scorers = _scorers(prefs, facts, users=(1, 2))
+    score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=30, batch=2), NOW)
+    assert sum(s.stats.scored for s in scorers) == 8 and _left(conn, 30) == 10
+    assert {s.stats.stopped_by for s in scorers} == {"reserved"}
+
+
+def test_whole_run_has_no_reserve(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, users=(1, 2, 3), jobs_per_user=40)
+    _onboard(conn, (1, 2, 3))
+    scorers = _scorers(prefs, facts)
+    score_round_robin(conn, scorers, FakeLLM(handler=lambda s, p: SCORE), rubric, _cfg(global_scores=30), NOW)
+    assert [s.stats.scored for s in scorers] == [10, 10, 10]
+
+
+def test_users_with_no_scores_today_go_first(tmp_path, prefs, facts, rubric):
+    conn = _setup(tmp_path, users=(1, 2), jobs_per_user=12)
+    _use(conn, 1, 1)
+    order = []
+    import jobseeker.pipeline.score as score_mod
+    real = score_mod.save_score
+    score_mod.save_score = lambda c, uid, *a, **k: order.append(uid) or real(c, uid, *a, **k)
+    try:
+        score_round_robin(conn, _scorers(prefs, facts, users=(1, 2)), FakeLLM(handler=lambda s, p: SCORE), rubric,
+                          _cfg(global_scores=30), NOW)
+    finally:
+        score_mod.save_score = real
+    assert order[0] == 2
