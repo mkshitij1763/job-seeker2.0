@@ -52,5 +52,13 @@ def test_today_page_nav_and_mark_sent(settings, seeded):
 
 
 def test_today_empty_state(settings):
+    from jobseeker.db.core import connect
+    from jobseeker.db.jobs import save_score, upsert_job
+    from jobseeker.models import ScoreResult
+    from tests.factories import make_job
+    conn = connect(settings.db_path)  # scored before but nothing to do (a never-scored user gets the first-run card)
+    job, _ = upsert_job(conn, make_job(source_job_id="e", fingerprint="e"))
+    save_score(conn, 1, job, ScoreResult(score=40, breakdown={}, matches=[], gaps=[], recommendation="hide",
+                                         role_family="x"), "m", "v1", "h")
     html = signed_in_client(settings).get("/today").text
-    assert "All caught up" in html
+    assert "All caught up" in html and "Your first matches" not in html
