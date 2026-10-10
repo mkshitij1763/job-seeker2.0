@@ -264,3 +264,11 @@ Timeline: click 05:20:2x → POST /applications/169/contacts/find 200 → booste
 - /applications/33 (Zepto, sent): step card all ✓ + "Sent. Follow-ups appear in People 5 days after Mark sent if there's no reply." Good, but no date ("on 13 Oct"). More menu still offers **"Mark sent"** and **"Open Gmail drafts ↗"** after sending (stale), plus "Mark followed up (0/2)" (cryptic counter). **No "Mark replied" on the job page** — the only path is Pipeline → Move… → replied; reply tracking is manual by decision, so its button should be the primary action on a Sent job. P2.
 - **"1d since last action" for an event on 8 Oct while today is 10 Oct IST** → day maths in UTC (consistent with Admin dates). P2.
 - Zepto PM scored 97 with Experience 25/25 again (scorer seniority). 
+
+## Pass 6: roommate run, first matches, outreach ON (fresh session, from 05:43 IST)
+- Session restarted; old tab ids gone. New tab 147722987 in Browser 1 (deviceId 4843c5f0…), Settings confirms "horizon.1763@gmail.com · from your Google account".
+- 05:43:33 roommate `/fetch-now/status` → "Queued, starts in a few minutes" (request made 05:35:26; owner run started ~05:31). The status line sits inside the **Account** card with no label (between the "Account" heading and GMAIL) — reads like an account state, not a job run.
+- **Connect Gmail (roommate), done by the user ~05:44:** user reports it worked ("Gmail connected: drafts go to horizon.1763@gmail.com"). Redirect lands on `/settings?msg=Gmail%20connected…` → green flash at the top. Account card afterwards: "GMAIL · Drafts go to horizon.1763@gmail.com · connected today · Reconnect". img c6-roommate-gmail-connected.jpg.
+  - **No Disconnect.** Only "Reconnect"; to revoke, the user must find Google Account → Security → Third-party access. For a roommate who's handing over Gmail compose access to a friend's app, a visible "Disconnect Gmail" (revoke token + delete it) is a trust feature. P2.
+  - The flash comes from a `?msg=` query string → stays in the URL; a reload or a bookmark shows "Gmail connected" again. P3 (same pattern elsewhere?).
+  - "connected today" — relative date, no time; fine.
