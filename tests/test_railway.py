@@ -40,6 +40,13 @@ def test_railway_json_pins_the_dockerfile_builder():
     assert cfg["build"] == {"builder": "DOCKERFILE", "dockerfilePath": "Dockerfile"}
 
 
+def test_railway_json_gives_a_running_tick_time_to_clean_up():
+    # Railway's default is 0 s between SIGTERM and SIGKILL, so the tick's SIGTERM handler (free the lock, fail the
+    # Fetch now request) would never run; a killed tick then blocks every tick for the 15-minute lock takeover.
+    cfg = json.loads((ROOT / "railway.json").read_text())
+    assert int(cfg["deploy"]["drainingSeconds"]) >= 10
+
+
 def test_uv_is_pinned_inside_uv_build_range():
     # pyproject's build backend is uv_build>=0.11,<0.12; the image's uv must be an exact 0.11.x.
     build_req = tomllib.loads((ROOT / "pyproject.toml").read_text())["build-system"]["requires"][0]
@@ -86,7 +93,8 @@ def test_app_user_exists_and_the_image_does_not_switch_to_it():
     # Railway mounts the volume root-owned: start.sh starts as root, chowns /data, then drops to `app` with setpriv.
     runs = " ".join(_args("RUN"))
     assert re.search(r"useradd\b.*\bapp\b", runs)
-    assert "setpriv --version" in runs and "timeout --version" in runs  # start.sh's tools, checked at build time
+    # start.sh's tools, checked at build time
+    assert "setpriv --version" in runs and "timeout --version" in runs and "nice --version" in runs
     assert _args("USER") == []
 
 
@@ -100,7 +108,7 @@ def test_dockerignore_keeps_secrets_and_local_state_out():
         assert needed not in lines and f"{needed}/" not in lines, needed
 
 
-# --- scripts/railway/start.sh, run under bash with stub `jobseeker` and `timeout` on PATH (no docker, timeout or
+# --- scripts/railway/start.sh, run under bash with stub `jobseeker`, `timeout` and `nice` on PATH (no docker, timeout or
 # setpriv on the Mac). The tests run as a normal user, so the root branch (chown + setpriv) is checked statically.
 START = ROOT / "scripts" / "railway" / "start.sh"
 
@@ -108,7 +116,14 @@ JOBSEEKER_STUB = """#!/bin/bash
 echo "$*" >> "$STUB_LOG"
 case "$1" in
   migrate) exit "${MIGRATE_EXIT:-0}" ;;
-  tick) echo $$ >> "$STUB_LOG.tickpids"; sleep "${TICK_SLEEP:-0}"; exit "${TICK_EXIT:-0}" ;;
+  tick) echo $$ >> "$STUB_LOG.tickpids"
+        if [ -n "$TICK_CLEANUP" ]; then
+          trap 'sleep "$TICK_CLEANUP"; echo cleaned >> "$STUB_LOG.cleanup"; exit 143' TERM
+          sleep "${TICK_SLEEP:-0}" & wait $!
+        else
+          sleep "${TICK_SLEEP:-0}"
+        fi
+        exit "${TICK_EXIT:-0}" ;;
   serve) echo $$ > "$STUB_LOG.servepid"; trap 'exit 0' TERM; sleep "${SERVE_SLEEP:-60}" & wait $!; exit "${SERVE_EXIT:-0}" ;;
 esac
 """
@@ -117,13 +132,18 @@ echo "$1" >> "$STUB_LOG.timeouts"
 shift
 exec "$@"
 """
+NICE_STUB = """#!/bin/bash
+echo "$1 $2" >> "$STUB_LOG.nice"
+shift 2
+exec "$@"
+"""
 
 
 @pytest.fixture
 def railway(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for name, body in (("jobseeker", JOBSEEKER_STUB), ("timeout", TIMEOUT_STUB)):
+    for name, body in (("jobseeker", JOBSEEKER_STUB), ("timeout", TIMEOUT_STUB), ("nice", NICE_STUB)):
         (bin_dir / name).write_text(body)
         (bin_dir / name).chmod(0o755)
     home = tmp_path / "data"
@@ -206,6 +226,8 @@ def test_migrates_then_serves_on_railways_port_and_ticks(railway):
     assert calls()[0] == "migrate"
     assert "serve --host 0.0.0.0 --port 8123 --proxy-headers" in calls()
     assert set(log.with_name("calls.log.timeouts").read_text().split()) == {"3h"}
+    # Each tick runs at nice 10 (the VM unit's Nice=10), so the web keeps the CPU when a tick is busy.
+    assert set(log.with_name("calls.log.nice").read_text().splitlines()) == {"-n 10"}
     code, _ = _stop(p)
     assert code == 0
 
@@ -240,6 +262,17 @@ def test_sigterm_stops_serve_and_a_running_tick(railway):
     code, _ = _stop(p)
     assert code == 0 and time.monotonic() - t0 < 4
     assert _wait_for(lambda: not _alive(tick_pid) and not _alive(serve_pid), 3)
+
+
+def test_sigterm_waits_for_the_tick_to_clean_up(railway):
+    # The tick turns SIGTERM into SystemExit and needs a moment to close its run log, fail the Fetch now request and
+    # free the lock. If start.sh (PID 1) exited first, the container would be torn down mid-cleanup.
+    start, calls, log, _ = railway
+    p = start(TICK_SLEEP="30", TICK_CLEANUP="0.5")
+    assert _wait_for(lambda: log.with_name("calls.log.tickpids").exists())
+    code, _ = _stop(p)
+    assert code == 0
+    assert log.with_name("calls.log.cleanup").read_text().split() == ["cleaned"]
 
 
 def test_if_serve_dies_the_script_exits_nonzero_and_stops_the_loop(railway):

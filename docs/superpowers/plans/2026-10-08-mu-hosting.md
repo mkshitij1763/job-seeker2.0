@@ -1102,7 +1102,7 @@ git commit -m "docs: server is live; provisioning notes and deviations"
 
 ### Railway runbook (trial host, added 2026-10-09)
 
-**Why:** GCP, Azure and AWS signups all failed or were refused (HANDOFF-devops §3 "Host history"). The user chose **Railway's trial**: no card, $5 or 30 days, 0.5 GB RAM and 2 vCPU per service, **0.5 GB volume**. After that, the app moves to a real VM through backup + restore ("Trial end" below). The VM plan above (Tasks 1–5) stays valid for that move.
+**Why:** GCP, Azure and AWS signups all failed or were refused (HANDOFF-devops §3 "Host history"). The user chose **Railway's trial**: no card, $5 or 30 days, 2 vCPU per service and **1 GB RAM** (Railway's MEMORY_LIMIT_GB metric, 2026-10-10; we first assumed 0.5 GB), **0.5 GB volume**. After that, the app moves to a real VM through backup + restore ("Trial end" below). The VM plan above (Tasks 1–5) stays valid for that move.
 
 **Code (build/devops2):** `Dockerfile`, `.dockerignore`, `scripts/railway/start.sh`, `serve --host` + `FORWARDED_ALLOW_IPS`. What start.sh does:
 - as root: `chown`s the volume, then re-runs itself as `app` (setpriv);
@@ -1237,7 +1237,7 @@ This is the proposal for ruling (f). It is plain `scp` over Railway SSH (its SFT
   - With a volume, Railway stops the old container before starting the new one, so expect a short gap.
   - A deploy failing `/healthz` is marked failed. (verify) Whether the old deployment is then restored or the service is left down; if left down, redeploy the previous commit.
   - start.sh migrates on every boot (a no-op when current).
-- **A tick in progress during a redeploy** is stopped by SIGTERM. The run lock is a heartbeat lock, so the next tick takes over once it goes stale.
+- **Applying Railway variables or deploying kills a running tick, so do it when no run is going** (check the deploy logs: the last tick line should say `idle`, not `busy`, and no Fetch now should show "Running"). What happens otherwise: Railway sends SIGTERM, then SIGKILL after `drainingSeconds` (railway.json: 15; Railway's default is 0). `jobseeker tick` turns SIGTERM into SystemExit: run_all closes its run log with "Interrupted by an app update; try again", the Fetch now request is marked failed (the user sees that text next to the button and can retry at once; interrupted runs count toward neither the 2-hour spacing nor the daily cap), and the lock is released. start.sh waits for that before exiting. Without the handler (before this change, or after a SIGKILL), the lock stays held until its heartbeat is 15 minutes stale: every tick logs `busy`, then the next one takes over and fails the stuck request. (Seen 2026-10-10: a variables apply at 05:15 IST killed the roommate's Fetch now.)
 - **Pull the latest Railway backup to the Mac (at least weekly until B2 is set up):** one command, from the Mac checkout that `railway link` points at, with the `js-railway` ssh alias from R2:
   ```
   mkdir -p ~/JobSeeker-backups/railway && f=$(railway ssh -- ls -1t /data/backups | tr -d '\r' | grep -m1 '^jobseeker-.*\.tar\.gz$') && scp "js-railway:/data/backups/$f" ~/JobSeeker-backups/railway/ && shasum -a 256 ~/JobSeeker-backups/railway/"$f"

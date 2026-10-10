@@ -118,7 +118,7 @@ You'll need: your phone, a laptop, and a second Google account for the "roommate
   `mkdir -p ~/JobSeeker-backups/railway && f=$(railway ssh -- ls -1t /data/backups | tr -d '\r' | grep -m1 '^jobseeker-.*\.tar\.gz$') && scp "js-railway:/data/backups/$f" ~/JobSeeker-backups/railway/ && shasum -a 256 ~/JobSeeker-backups/railway/"$f"`
   Expected: one `jobseeker-<date>.tar.gz` lands in `~/JobSeeker-backups/railway/` and its sha256 is printed. While B2 is off, `/admin` → **Backups** shows "Not uploaded"; that's expected.
   If it fails, tell `manager`.
-- [ ] **Uptime check.** Open `https://<sub>.duckdns.org/healthz` in a browser, and check the UptimeRobot dashboard.
+- [ ] **Uptime check.** Open `https://job-seeker20-production.up.railway.app/healthz` in a browser (Railway trial; the VM's domain later), and check the UptimeRobot dashboard if it's set up.
   Expected: the page answers (status 200), and UptimeRobot shows the site **Up**.
   If it fails, tell `manager`.
 

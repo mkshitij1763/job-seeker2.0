@@ -63,7 +63,13 @@ def tick(conn, *, settings, cfg, now: datetime, run, backup=nightly_backup, ping
                 return "fetch_now_refused"
             run_requests.mark(conn, req["id"], "running", now)
             user = user_by_id(conn, req["user_id"])
-            report = run("fetch_now", [user], cfg.search.max_searches_fetch_now)
+            try:
+                report = run("fetch_now", [user], cfg.search.max_searches_fetch_now)
+            except SystemExit:  # SIGTERM mid-run: fail the request now (the user sees why), then release the lock
+                rid = conn.execute("SELECT MAX(id) FROM runs WHERE kind = 'fetch' AND trigger = 'fetch_now' "
+                                   "AND started_at >= ?", (iso(now),)).fetchone()[0]
+                run_requests.mark(conn, req["id"], "failed", now, rid)
+                raise
             run_requests.mark(conn, req["id"], "failed" if report.aborted else "done", now, report.fetch_run_id)
             return "fetch_now"
         return "idle"

@@ -30,7 +30,8 @@ def fetch_now_state(conn, user_id: int, now: datetime, cfg) -> dict:
             return {"state": "wait", "text": f"Next possible at {app_now(nxt).strftime('%H:%M')}", "poll": False}
     if run_requests.fetch_now_count_today(conn, now) >= cfg.fetch_now.max_per_day:
         return {"state": "used_up", "text": "Fetch now is used up for today", "poll": False}
-    return {"state": "ready", "text": "", "poll": False}
+    note = run_requests.INTERRUPTED if run_requests.interrupted_since(conn, user_id, now - timedelta(days=1)) else ""
+    return {"state": "ready", "text": note, "poll": False}
 
 
 def queue_if_allowed(conn, user_id: int, now: datetime, cfg) -> dict:
