@@ -6,6 +6,9 @@ Worktree: `/Users/user/Desktop/untitled folder/js-pm-review`, branch `review/pm-
 Live app: https://job-seeker20-production.up.railway.app (Railway trial, US East). **Region move to Singapore is planned AFTER the review** — keep the perf table labelled "before region move".
 
 
+## UPDATE 19:58 IST — 11:15 run checked; review closed
+- The daily run scored 0 for BOTH users (shared AI limit spent by the owner's 05:31 Fetch now). PM-071 confirmed, E1 = FAIL. C3/D8/outreach job page are still blocked; re-test after tomorrow's 11:15 run, and only if no Fetch now runs before it.
+
 ## UPDATE 09:20 IST — waiting for the 11:15 daily run (user chose option 1)
 - 09:19: roommate still 0 jobs; status "Fetch now" (button available). No extra Fetch now (it would likely score 0; the shared AI limit ran out ~06:02).
 - After ~11:45 IST: check roommate Today/Jobs. If scored jobs exist → run C3 swipe/Skip/Snooze + Undo, D8 Mark applied, D6 match quality (seniority/unrelated titles), the job page (outreach is OFF now; re-enabling it needs the user). If still 0 → confirm PM-071 (a new user waits about a day) with the run notes. Update §2 rows, PM-071, push, one line to manager.
